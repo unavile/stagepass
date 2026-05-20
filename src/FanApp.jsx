@@ -310,7 +310,7 @@ export default function FanApp({ session, profile, onSignOut }) {
                     <div style={{ display: 'flex', gap: 16, flexWrap: 'wrap', marginBottom: 12 }}>
                         {event.venue && <div style={{ fontSize: 12, color: '#555' }}>📍 {event.venue}</div>}
                         <div style={{ fontSize: 12, color: '#555' }}>
-                        By <span style={{ color: '#888' }}>{event.profiles?.display_name || 'Creator'}</span>
+                        By <span style={{ color: '#888' }}>{event.creators?.profiles?.display_name || 'Creator'}</span>
                         </div>
                     </div>
 

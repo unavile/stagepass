@@ -22,9 +22,11 @@ export function useFanEvents(fanId) {
           stream_url,
           is_free,
           creator_id,
-          profiles (
-            display_name,
-            handle
+          creators (
+            profiles (
+              display_name,
+              handle
+            )
           )
         )
       `)
@@ -32,10 +34,12 @@ export function useFanEvents(fanId) {
       .order('created_at', { ascending: false })
 
     if (!error) {
-      const upcoming = (data || [])
+      const sorted = (data || [])
         .filter(r => r.events)
         .sort((a, b) => new Date(a.events.event_date) - new Date(b.events.event_date))
-      setEvents(upcoming)
+      setEvents(sorted)
+    } else {
+      console.error('useFanEvents error:', error.message)
     }
     setLoading(false)
   }
