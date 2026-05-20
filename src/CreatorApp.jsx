@@ -254,35 +254,58 @@ export default function CreatorApp({ session, profile, onSignOut }) {
             </div>
             ) : (
             <div style={{ display: 'flex', flexDirection: 'column', gap: 12 }}>
-                {events.map(event => (
-                <div key={event.id} style={{ background: '#0e0e0e', border: `1px solid ${creator.accentColor}22`, borderRadius: 12, padding: isMobile ? '16px' : '20px 24px' }}>
-                    <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start', marginBottom: 8 }}>
-                    <div>
-                        <div style={{ fontFamily: "'DM Serif Display', Georgia, serif", fontSize: 18, color: '#f0ebe0', marginBottom: 4 }}>{event.name}</div>
-                        <div style={{ fontFamily: "'DM Mono', monospace", fontSize: 20, color: creator.accentColor, fontWeight: 700 }}>
-                        {new Date(event.event_date).toLocaleDateString('en-US', { month: 'short', day: 'numeric', year: 'numeric' })}
-                        </div>
+            {events.map(event => (
+            <div key={event.id} style={{ background: '#0e0e0e', border: `1px solid ${creator.accentColor}22`, borderRadius: 12, padding: isMobile ? '16px' : '20px 24px' }}>
+                <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start', marginBottom: 8 }}>
+                <div>
+                    <div style={{ fontFamily: "'DM Serif Display', Georgia, serif", fontSize: 18, color: '#f0ebe0', marginBottom: 4 }}>{event.name}</div>
+                    <div style={{ fontFamily: "'DM Mono', monospace", fontSize: 20, color: creator.accentColor, fontWeight: 700 }}>
+                    {new Date(event.event_date).toLocaleDateString('en-US', { month: 'short', day: 'numeric', year: 'numeric' })}
                     </div>
-                    <div style={{ display: 'flex', gap: 6 }}>
-                        <span style={{ background: creator.accentColor + '22', color: creator.accentColor, border: `1px solid ${creator.accentColor}44`, borderRadius: 4, fontSize: 10, fontWeight: 700, padding: '2px 8px', letterSpacing: '0.12em', textTransform: 'uppercase', fontFamily: "'DM Mono', monospace" }}>
-                        {event.event_type === 'virtual' ? '💻 VIRTUAL' : '📍 IN PERSON'}
-                        </span>
-                    </div>
-                    </div>
-                    {event.description && <div style={{ fontSize: 13, color: '#666', lineHeight: 1.6, marginBottom: 8 }}>{event.description}</div>}
-                    <div style={{ display: 'flex', gap: 16, flexWrap: 'wrap' }}>
-                    {event.venue && <div style={{ fontSize: 12, color: '#555' }}>📍 {event.venue}</div>}
-                    <div style={{ fontSize: 12, color: '#555' }}>👥 {event.rsvps?.[0]?.count || 0} RSVPs {event.capacity ? `/ ${event.capacity} capacity` : ''}</div>
-                    <div style={{ fontSize: 12, color: event.is_free ? '#6dbf8a' : creator.accentColor }}>{event.is_free ? '✓ Free for subscribers' : 'Ticketed'}</div>
-                    </div>
-                    {event.stream_url && (
-                    <div style={{ marginTop: 12 }}>
-                        <a href={event.stream_url} target="_blank" rel="noreferrer" style={{ color: creator.accentColor, fontFamily: "'DM Mono', monospace", fontSize: 11, letterSpacing: '0.1em' }}>
-                        JOIN STREAM →
-                        </a>
-                    </div>
-                    )}
                 </div>
+                <span style={{ background: creator.accentColor + '22', color: creator.accentColor, border: `1px solid ${creator.accentColor}44`, borderRadius: 4, fontSize: 10, fontWeight: 700, padding: '2px 8px', letterSpacing: '0.12em', textTransform: 'uppercase', fontFamily: "'DM Mono', monospace" }}>
+                    {event.event_type === 'virtual' ? '💻 VIRTUAL' : '📍 IN PERSON'}
+                </span>
+                </div>
+
+                {event.description && (
+                <div style={{ fontSize: 13, color: '#666', lineHeight: 1.6, marginBottom: 8 }}>{event.description}</div>
+                )}
+
+                <div style={{ display: 'flex', gap: 16, flexWrap: 'wrap', marginBottom: 12 }}>
+                {event.venue && <div style={{ fontSize: 12, color: '#555' }}>📍 {event.venue}</div>}
+                <div style={{ fontSize: 12, color: '#555' }}>👥 {event.rsvps?.length || 0} RSVPs {event.capacity ? `/ ${event.capacity} capacity` : ''}</div>
+                <div style={{ fontSize: 12, color: event.is_free ? '#6dbf8a' : creator.accentColor }}>{event.is_free ? '✓ Free for subscribers' : 'Ticketed'}</div>
+                </div>
+
+                {/* Attendee list */}
+                {event.rsvps?.length > 0 && (
+                <div style={{ marginTop: 12, paddingTop: 12, borderTop: '1px solid #ffffff08' }}>
+                    <div style={{ fontFamily: "'DM Mono', monospace", fontSize: 10, color: '#444', letterSpacing: '0.15em', marginBottom: 10 }}>ATTENDEES</div>
+                    <div style={{ display: 'flex', flexWrap: 'wrap', gap: 8 }}>
+                    {event.rsvps.map(rsvp => (
+                        <div key={rsvp.id} style={{ display: 'flex', alignItems: 'center', gap: 6, background: '#161616', borderRadius: 6, padding: '6px 10px', border: '1px solid #ffffff08' }}>
+                        <div style={{ width: 22, height: 22, borderRadius: '50%', background: '#222', border: `1px solid ${creator.accentColor}44`, display: 'flex', alignItems: 'center', justifyContent: 'center', fontSize: 10, color: creator.accentColor, fontFamily: "'DM Serif Display', Georgia, serif" }}>
+                            {(rsvp.profiles?.display_name || 'F').split(' ').map(n => n[0]).join('').slice(0, 2)}
+                        </div>
+                        <div>
+                            <div style={{ fontSize: 12, color: '#e8e2d6' }}>{rsvp.profiles?.display_name || 'Fan'}</div>
+                            <div style={{ fontFamily: "'DM Mono', monospace", fontSize: 9, color: '#444' }}>@{rsvp.profiles?.handle || 'fan'}</div>
+                        </div>
+                        </div>
+                    ))}
+        </div>
+      </div>
+    )}
+
+    {event.stream_url && (
+      <div style={{ marginTop: 12 }}>
+        <a href={event.stream_url} target="_blank" rel="noreferrer" style={{ color: creator.accentColor, fontFamily: "'DM Mono', monospace", fontSize: 11, letterSpacing: '0.1em' }}>
+          JOIN STREAM →
+        </a>
+      </div>
+    )}
+  </div>
                 ))}
             </div>
             )}

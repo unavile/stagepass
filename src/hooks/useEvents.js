@@ -9,7 +9,7 @@ export function useEvents(creatorId) {
     if (!creatorId) return
     const { data, error } = await supabase
       .from('events')
-      .select('*, rsvps(count)')
+      .select('*, rsvps(id, fan_id, profiles(display_name, handle))')
       .eq('creator_id', creatorId)
       .order('event_date', { ascending: true })
 

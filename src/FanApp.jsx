@@ -198,42 +198,52 @@ export default function FanApp({ session, profile, onSignOut }) {
                 <div style={{ fontFamily: "'DM Mono', monospace", fontSize: 10, color: '#444', letterSpacing: '0.2em', marginBottom: 16 }}>UPCOMING EVENTS</div>
                 <div style={{ display: 'flex', flexDirection: 'column', gap: 10 }}>
                 {creatorEvents.map(event => (
-                    <div key={event.id} style={{ background: '#0e0e0e', border: `1px solid ${accent}22`, borderRadius: 10, padding: '18px' }}>
-                    <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start', marginBottom: 6 }}>
-                        <div>
+                <div key={event.id} style={{ background: '#0e0e0e', border: `1px solid ${accent}22`, borderRadius: 10, padding: '18px' }}>
+                    <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start', marginBottom: 8 }}>
+                    <div>
                         <div style={{ fontFamily: "'DM Serif Display', Georgia, serif", fontSize: 17, color: '#f0ebe0', marginBottom: 4 }}>{event.name}</div>
                         <div style={{ fontFamily: "'DM Mono', monospace", fontSize: 16, color: accent, fontWeight: 700 }}>
-                            {new Date(event.event_date).toLocaleDateString('en-US', { month: 'short', day: 'numeric', year: 'numeric' })}
+                        {new Date(event.event_date).toLocaleDateString('en-US', { month: 'short', day: 'numeric', year: 'numeric' })}
                         </div>
-                        </div>
-                        <span style={{ background: accent + '22', color: accent, border: `1px solid ${accent}44`, borderRadius: 4, fontSize: 10, fontWeight: 700, padding: '2px 8px', letterSpacing: '0.12em', fontFamily: "'DM Mono', monospace" }}>
+                    </div>
+                    <span style={{ background: accent + '22', color: accent, border: `1px solid ${accent}44`, borderRadius: 4, fontSize: 10, fontWeight: 700, padding: '2px 8px', letterSpacing: '0.12em', fontFamily: "'DM Mono', monospace" }}>
                         {event.event_type === 'virtual' ? '💻 VIRTUAL' : '📍 IN PERSON'}
-                        </span>
+                    </span>
                     </div>
-                    {event.description && <div style={{ fontSize: 13, color: '#666', lineHeight: 1.6, marginBottom: 10 }}>{event.description}</div>}
-                    {event.venue && <div style={{ fontSize: 12, color: '#555', marginBottom: 10 }}>📍 {event.venue}</div>}
+
+                    {/* Always show these details */}
+                    {event.description && (
+                    <div style={{ fontSize: 13, color: '#888', lineHeight: 1.6, marginBottom: 8 }}>{event.description}</div>
+                    )}
+                    <div style={{ display: 'flex', gap: 16, flexWrap: 'wrap', marginBottom: 12 }}>
+                    {event.venue && <div style={{ fontSize: 12, color: '#555' }}>📍 {event.venue}</div>}
+                    <div style={{ fontSize: 12, color: '#555' }}>👥 {event.rsvps?.[0]?.count || 0} attending</div>
+                    {event.capacity && <div style={{ fontSize: 12, color: '#555' }}>🎟 {event.capacity} capacity</div>}
+                    {event.is_free && <div style={{ fontSize: 12, color: '#6dbf8a' }}>✓ Free for subscribers</div>}
+                    </div>
+
+                    {/* RSVP actions */}
                     <div style={{ display: 'flex', gap: 10, alignItems: 'center' }}>
-                        {subscribed ? (
+                    {subscribed ? (
                         <button onClick={() => handleRsvp(event.id)} style={{
-                            background: eventRsvps[event.id] ? '#ffffff10' : accent,
-                            color: eventRsvps[event.id] ? '#888' : '#080808',
-                            border: 'none', borderRadius: 6, padding: '8px 18px',
-                            fontFamily: "'DM Mono', monospace", fontSize: 11,
-                            fontWeight: 700, cursor: 'pointer', letterSpacing: '0.1em'
+                        background: eventRsvps[event.id] ? '#ffffff10' : accent,
+                        color: eventRsvps[event.id] ? '#888' : '#080808',
+                        border: 'none', borderRadius: 6, padding: '8px 18px',
+                        fontFamily: "'DM Mono', monospace", fontSize: 11,
+                        fontWeight: 700, cursor: 'pointer', letterSpacing: '0.1em'
                         }}>
-                            {eventRsvps[event.id] ? '✓ RSVP\'d' : 'RSVP'}
+                        {eventRsvps[event.id] ? "✓ RSVP'd — Cancel" : 'RSVP Now'}
                         </button>
-                        ) : (
+                    ) : (
                         <button onClick={handleSubscribe} style={{ background: accent + '22', color: accent, border: `1px solid ${accent}44`, borderRadius: 6, padding: '8px 18px', fontFamily: "'DM Mono', monospace", fontSize: 11, cursor: 'pointer', letterSpacing: '0.1em' }}>
-                            Subscribe to RSVP
+                        Subscribe to RSVP
                         </button>
-                        )}
-                        {event.is_free && <span style={{ fontSize: 12, color: '#6dbf8a' }}>✓ Free for subscribers</span>}
-                        {event.stream_url && eventRsvps[event.id] && (
+                    )}
+                    {event.stream_url && eventRsvps[event.id] && (
                         <a href={event.stream_url} target="_blank" rel="noreferrer" style={{ color: accent, fontFamily: "'DM Mono', monospace", fontSize: 11, letterSpacing: '0.1em' }}>JOIN STREAM →</a>
-                        )}
+                    )}
                     </div>
-                    </div>
+                </div>
                 ))}
                 </div>
             </div>
