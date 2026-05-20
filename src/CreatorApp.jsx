@@ -3,6 +3,8 @@ import { supabase } from './supabaseClient'
 import { usePosts } from './hooks/usePosts'
 import { useSubscribers } from './hooks/useSubscribers'
 import NewPostModal from './NewPostModal'
+import { useEvents } from './hooks/useEvents'
+import NewEventModal from './NewEventModal'
 
 export default function CreatorApp({ session, profile, onSignOut }) {
   const [tab, setTab] = useState('overview')
@@ -10,6 +12,8 @@ export default function CreatorApp({ session, profile, onSignOut }) {
   const [isMobile, setIsMobile] = useState(window.innerWidth < 768)
   const { posts, loading: postsLoading, refetch } = usePosts(session.user.id)
   const { subscribers, loading: subsLoading } = useSubscribers(session.user.id)
+  const { events, loading: eventsLoading, refetch: refetchEvents } = useEvents(session.user.id)
+  const [showNewEvent, setShowNewEvent] = useState(false)
 
   useEffect(() => {
     const fn = () => setIsMobile(window.innerWidth < 768)
@@ -34,10 +38,11 @@ export default function CreatorApp({ session, profile, onSignOut }) {
   const platformFee = (monthlyRevenue * 0.08).toFixed(2)
 
   const TABS = [
-    { id: 'overview',     label: 'Overview',     icon: '⬡' },
-    { id: 'content',      label: 'Content',      icon: '▤' },
-    { id: 'subscribers',  label: 'Subs',         icon: '◎' },
-    { id: 'earnings',     label: 'Earnings',     icon: '◇' },
+    { id: 'overview',    label: 'Overview',   icon: '⬡' },
+    { id: 'content',     label: 'Content',    icon: '▤' },
+    { id: 'subscribers', label: 'Subs',       icon: '◎' },
+    { id: 'events',      label: 'Events',     icon: '◈' },
+    { id: 'earnings',    label: 'Earnings',   icon: '◇' },
   ]
 
   const typeLabels = { video: 'VIDEO', audio: 'AUDIO', event: 'EVENT', text: 'JOURNAL' }
@@ -224,6 +229,65 @@ export default function CreatorApp({ session, profile, onSignOut }) {
               )}
             </div>
           )}
+          {/* EVENTS */}
+        {tab === 'events' && (
+        <div style={{ padding: p }}>
+            <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 20 }}>
+            <div>
+                <div style={{ fontFamily: "'DM Serif Display', Georgia, serif", fontSize: isMobile ? 22 : 28, color: '#f0ebe0' }}>Events</div>
+                <div style={{ fontFamily: "'DM Mono', monospace", fontSize: 10, color: '#444', marginTop: 2 }}>{events.length} SCHEDULED</div>
+            </div>
+            <button onClick={() => setShowNewEvent(true)} style={{ background: creator.accentColor, color: '#080808', border: 'none', borderRadius: 6, padding: '10px 20px', fontFamily: "'DM Mono', monospace", fontSize: 11, fontWeight: 700, cursor: 'pointer', letterSpacing: '0.12em' }}>
+                + New Event
+            </button>
+            </div>
+
+            {eventsLoading ? (
+            <div style={{ color: '#444', fontFamily: "'DM Mono', monospace", fontSize: 12 }}>Loading...</div>
+            ) : events.length === 0 ? (
+            <div style={{ background: '#0e0e0e', border: '1px dashed #ffffff10', borderRadius: 10, padding: '40px', textAlign: 'center' }}>
+                <div style={{ fontSize: 28, marginBottom: 8 }}>◈</div>
+                <div style={{ fontSize: 13, color: '#555', marginBottom: 16 }}>No events scheduled yet.</div>
+                <button onClick={() => setShowNewEvent(true)} style={{ background: creator.accentColor, color: '#080808', border: 'none', borderRadius: 6, padding: '10px 20px', fontFamily: "'DM Mono', monospace", fontSize: 11, fontWeight: 700, cursor: 'pointer', letterSpacing: '0.12em' }}>
+                + SCHEDULE FIRST EVENT
+                </button>
+            </div>
+            ) : (
+            <div style={{ display: 'flex', flexDirection: 'column', gap: 12 }}>
+                {events.map(event => (
+                <div key={event.id} style={{ background: '#0e0e0e', border: `1px solid ${creator.accentColor}22`, borderRadius: 12, padding: isMobile ? '16px' : '20px 24px' }}>
+                    <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start', marginBottom: 8 }}>
+                    <div>
+                        <div style={{ fontFamily: "'DM Serif Display', Georgia, serif", fontSize: 18, color: '#f0ebe0', marginBottom: 4 }}>{event.name}</div>
+                        <div style={{ fontFamily: "'DM Mono', monospace", fontSize: 20, color: creator.accentColor, fontWeight: 700 }}>
+                        {new Date(event.event_date).toLocaleDateString('en-US', { month: 'short', day: 'numeric', year: 'numeric' })}
+                        </div>
+                    </div>
+                    <div style={{ display: 'flex', gap: 6 }}>
+                        <span style={{ background: creator.accentColor + '22', color: creator.accentColor, border: `1px solid ${creator.accentColor}44`, borderRadius: 4, fontSize: 10, fontWeight: 700, padding: '2px 8px', letterSpacing: '0.12em', textTransform: 'uppercase', fontFamily: "'DM Mono', monospace" }}>
+                        {event.event_type === 'virtual' ? '💻 VIRTUAL' : '📍 IN PERSON'}
+                        </span>
+                    </div>
+                    </div>
+                    {event.description && <div style={{ fontSize: 13, color: '#666', lineHeight: 1.6, marginBottom: 8 }}>{event.description}</div>}
+                    <div style={{ display: 'flex', gap: 16, flexWrap: 'wrap' }}>
+                    {event.venue && <div style={{ fontSize: 12, color: '#555' }}>📍 {event.venue}</div>}
+                    <div style={{ fontSize: 12, color: '#555' }}>👥 {event.rsvps?.[0]?.count || 0} RSVPs {event.capacity ? `/ ${event.capacity} capacity` : ''}</div>
+                    <div style={{ fontSize: 12, color: event.is_free ? '#6dbf8a' : creator.accentColor }}>{event.is_free ? '✓ Free for subscribers' : 'Ticketed'}</div>
+                    </div>
+                    {event.stream_url && (
+                    <div style={{ marginTop: 12 }}>
+                        <a href={event.stream_url} target="_blank" rel="noreferrer" style={{ color: creator.accentColor, fontFamily: "'DM Mono', monospace", fontSize: 11, letterSpacing: '0.1em' }}>
+                        JOIN STREAM →
+                        </a>
+                    </div>
+                    )}
+                </div>
+                ))}
+            </div>
+            )}
+        </div>
+        )}
 
             {/* EARNINGS */}
             {tab === 'earnings' && (
@@ -300,6 +364,15 @@ export default function CreatorApp({ session, profile, onSignOut }) {
           creator={creator}
           onClose={() => setShowUpload(false)}
           onPostCreated={refetch}
+        />
+      )}
+
+      {showNewEvent && (
+        <NewEventModal
+            creatorId={creator.id}
+            accentColor={creator.accentColor}
+            onClose={() => setShowNewEvent(false)}
+            onEventCreated={refetchEvents}
         />
       )}
     </div>
