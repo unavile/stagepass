@@ -21,12 +21,18 @@ export default function FanApp({ session, profile, onSignOut }) {
 
   async function selectCreator(c) {
     setSelected(c)
-    const [{ data: postsData }, { data: subData }] = await Promise.all([
-      supabase.from('posts').select('*').eq('creator_id', c.id).order('published_at', { ascending: false }),
-      supabase.from('subscriptions').select('id').eq('fan_id', session.user.id).eq('creator_id', c.id).eq('status', 'active').maybeSingle()
+    const [{ data: postsData }, { data: subData }, { data: rsvpData }] = await Promise.all([
+        supabase.from('posts').select('*').eq('creator_id', c.id).order('published_at', { ascending: false }),
+        supabase.from('subscriptions').select('id').eq('fan_id', session.user.id).eq('creator_id', c.id).eq('status', 'active').maybeSingle(),
+        supabase.from('rsvps').select('event_id').eq('fan_id', session.user.id)
     ])
     setPosts(postsData || [])
     setSubscribed(!!subData)
+
+    // Build a map of event_id -> true for existing RSVPs
+    const rsvpMap = {}
+    rsvpData?.forEach(r => { rsvpMap[r.event_id] = true })
+    setEventRsvps(rsvpMap)
   }
 
   async function handleSubscribe() {
@@ -62,15 +68,22 @@ export default function FanApp({ session, profile, onSignOut }) {
   async function handleRsvp(eventId) {
     const alreadyRsvped = eventRsvps[eventId]
     if (alreadyRsvped) {
-      await supabase.from('rsvps').delete()
-        .eq('event_id', eventId).eq('fan_id', session.user.id)
-      setEventRsvps(prev => ({ ...prev, [eventId]: false }))
+        await supabase.from('rsvps')
+        .delete()
+        .eq('event_id', eventId)
+        .eq('fan_id', session.user.id)
+        setEventRsvps(prev => ({ ...prev, [eventId]: false }))
     } else {
-      await supabase.from('rsvps').insert({ event_id: eventId, fan_id: session.user.id })
-      setEventRsvps(prev => ({ ...prev, [eventId]: true }))
+        const { error } = await supabase.from('rsvps')
+        .upsert(
+            { event_id: eventId, fan_id: session.user.id },
+            { onConflict: 'event_id,fan_id' }
+        )
+        if (!error) {
+        setEventRsvps(prev => ({ ...prev, [eventId]: true }))
+        }
     }
-}
-
+  }
   const accent = '#c9a84c'
   const typeLabels = { video: 'VIDEO', audio: 'AUDIO', event: 'EVENT', text: 'JOURNAL' }
 
