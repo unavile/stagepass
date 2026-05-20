@@ -1,6 +1,7 @@
 import { useState } from 'react'
 import { supabase } from './supabaseClient'
 
+
 export default function NewEventModal({ creatorId, accentColor, onClose, onEventCreated }) {
   const [name, setName] = useState('')
   const [description, setDescription] = useState('')
@@ -12,6 +13,8 @@ export default function NewEventModal({ creatorId, accentColor, onClose, onEvent
   const [isFree, setIsFree] = useState(true)
   const [loading, setLoading] = useState(false)
   const [error, setError] = useState(null)
+  const [startTime, setStartTime] = useState('18:00')
+  const [duration, setDuration] = useState('60')
 
   const input = {
     width: '100%', background: '#111', border: '1px solid #ffffff15',
@@ -26,26 +29,50 @@ export default function NewEventModal({ creatorId, accentColor, onClose, onEvent
     setError(null)
     setLoading(true)
 
-    const { error: insertError } = await supabase.from('events').insert({
-      creator_id: creatorId,
-      name: name.trim(),
-      description: description.trim(),
-      venue: venue.trim(),
-      event_date: eventDate,
-      event_type: eventType,
-      stream_url: streamUrl.trim() || null,
-      capacity: capacity ? parseInt(capacity) : null,
-      is_free: isFree,
-    })
+    try {
+      let dailyRoomName = null
 
-    if (insertError) {
-      setError(insertError.message)
-      setLoading(false)
-      return
+      // Create Daily room for virtual events
+      if (eventType === 'virtual') {
+        const startDateTime = `${eventDate}T${startTime || '18:00'}:00`
+        const res = await fetch('/.netlify/functions/create-daily-room', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({
+            eventId: crypto.randomUUID(),
+            eventName: name.trim(),
+            startTime: startDateTime,
+            durationMinutes: parseInt(duration) || 60,
+          })
+        })
+        const data = await res.json()
+        if (data.error) throw new Error(data.error)
+        dailyRoomName = data.roomName
+      }
+
+      const { error: insertError } = await supabase.from('events').insert({
+        creator_id: creatorId,
+        name: name.trim(),
+        description: description.trim(),
+        venue: venue.trim(),
+        event_date: eventDate,
+        event_type: eventType,
+        stream_url: streamUrl.trim() || null,
+        capacity: capacity ? parseInt(capacity) : null,
+        is_free: isFree,
+        daily_room_name: dailyRoomName,
+        duration_minutes: parseInt(duration) || 60,
+        start_time: startTime || '18:00',
+      })
+
+      if (insertError) throw new Error(insertError.message)
+
+      onEventCreated?.()
+      onClose()
+    } catch (err) {
+      setError(err.message)
     }
-
-    onEventCreated?.()
-    onClose()
+    setLoading(false)
   }
 
   return (
@@ -74,6 +101,21 @@ export default function NewEventModal({ creatorId, accentColor, onClose, onEvent
         <textarea style={{ ...input, minHeight: 70, resize: 'vertical' }} placeholder="Description (optional)" value={description} onChange={e => setDescription(e.target.value)} />
         <input style={input} placeholder={eventType === 'virtual' ? 'Platform (e.g. StagePass Live, Zoom)' : 'Venue name and address'} value={venue} onChange={e => setVenue(e.target.value)} />
         <input style={input} type="date" value={eventDate} onChange={e => setEventDate(e.target.value)} />
+
+        {eventType === 'virtual' && (
+          <>
+            <div style={{ display: 'flex', gap: 10, marginBottom: 12 }}>
+              <div style={{ flex: 1 }}>
+                <div style={{ fontFamily: "'DM Mono', monospace", fontSize: 10, color: '#555', letterSpacing: '0.12em', marginBottom: 6 }}>START TIME</div>
+                <input style={{ ...input, marginBottom: 0 }} type="time" value={startTime} onChange={e => setStartTime(e.target.value)} />
+              </div>
+              <div style={{ flex: 1 }}>
+                <div style={{ fontFamily: "'DM Mono', monospace", fontSize: 10, color: '#555', letterSpacing: '0.12em', marginBottom: 6 }}>DURATION (MINS)</div>
+                <input style={{ ...input, marginBottom: 0 }} type="number" min="15" max="480" value={duration} onChange={e => setDuration(e.target.value)} placeholder="60" />
+              </div>
+            </div>
+          </>
+        )}
 
         {eventType === 'virtual' && (
           <input style={input} placeholder="Stream URL (optional — add later)" value={streamUrl} onChange={e => setStreamUrl(e.target.value)} />

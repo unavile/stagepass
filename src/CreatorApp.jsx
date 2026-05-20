@@ -6,6 +6,7 @@ import NewPostModal from './NewPostModal'
 import { useEvents } from './hooks/useEvents'
 import NewEventModal from './NewEventModal'
 import EditProfileModal from './EditProfileModal'
+import LiveRoom from './LiveRoom'
 
 export default function CreatorApp({ session, profile, onSignOut }) {
   const [tab, setTab] = useState('overview')
@@ -16,6 +17,7 @@ export default function CreatorApp({ session, profile, onSignOut }) {
   const { events, loading: eventsLoading, refetch: refetchEvents } = useEvents(session.user.id)
   const [showNewEvent, setShowNewEvent] = useState(false)
   const [showEditProfile, setShowEditProfile] = useState(false)
+  const [liveEvent, setLiveEvent] = useState(null)
 
   useEffect(() => {
     const fn = () => setIsMobile(window.innerWidth < 768)
@@ -324,6 +326,21 @@ export default function CreatorApp({ session, profile, onSignOut }) {
                           </a>
                         </div>
                       )}
+
+                      {event.daily_room_name && (
+                        <button
+                            onClick={() => setLiveEvent(event)}
+                            style={{
+                            marginTop: 12, background: accentColor,
+                            color: '#080808', border: 'none', borderRadius: 6,
+                            padding: '10px 20px', fontFamily: "'DM Mono', monospace",
+                            fontSize: 11, fontWeight: 700, cursor: 'pointer',
+                            letterSpacing: '0.12em', width: '100%'
+                            }}
+                        >
+                            🎙 GO LIVE
+                        </button>
+                      )}
                     </div>
                   ))}
                 </div>
@@ -424,6 +441,15 @@ export default function CreatorApp({ session, profile, onSignOut }) {
           creator={creator}
           onClose={() => setShowEditProfile(false)}
           onSaved={() => window.location.reload()}
+        />
+      )}
+
+      {liveEvent && (
+        <LiveRoom
+            event={liveEvent}
+            profile={profile}
+            isCreator={true}
+            onLeave={() => setLiveEvent(null)}
         />
       )}
     </div>
