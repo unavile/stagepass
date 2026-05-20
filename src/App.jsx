@@ -5,94 +5,75 @@ import CreatorApp from './CreatorApp'
 import FanApp from './FanApp'
 
 export default function App() {
-  const [session, setSession] = useState(null)
+  const [session, setSession] = useState(undefined) // undefined = not yet checked
   const [profile, setProfile] = useState(null)
-  const [loading, setLoading] = useState(true)
+  const [profileLoading, setProfileLoading] = useState(false)
 
-async function fetchProfile(userId) {
-  console.log('fetchProfile called for:', userId)
+  // Step 1: just get the session, nothing else
+  useEffect(() => {
+    supabase.auth.getSession().then(({ data: { session } }) => {
+      console.log('Initial session:', session?.user?.id ?? 'none')
+      setSession(session ?? null)
+    })
 
-  // Temporary connection test
-  const test = await supabase.from('profiles').select('count').limit(1)
-  console.log('Connection test:', JSON.stringify(test))
+    const { data: { subscription } } = supabase.auth.onAuthStateChange((event, session) => {
+      console.log('Auth event:', event, session?.user?.id ?? 'none')
+      setSession(session ?? null)
+    })
 
-  try {
-    // Race the query against a 5 second timeout
-    const result = await Promise.race([
-      supabase
-        .from('profiles')
-        .select('*, creators(*)')
-        .eq('id', userId)
-        .maybeSingle(),
-      new Promise((_, reject) =>
-        setTimeout(() => reject(new Error('Query timed out after 5s')), 5000)
-      )
-    ])
+    return () => subscription.unsubscribe()
+  }, [])
 
-    const { data, error } = result
-    console.log('Profile result:', data, 'Error:', error)
+  // Step 2: when session changes, fetch profile separately
+  useEffect(() => {
+    if (session === undefined) return // still initializing
+    if (!session) { setProfile(null); return } // logged out
 
-    if (error || !data) {
-      console.log('No profile or error:', error?.message)
-      await supabase.auth.signOut()
-      setSession(null)
-      setProfile(null)
-    } else {
-      console.log('Profile loaded:', data.role)
-      setProfile(data)
-    }
-  } catch (err) {
-    console.log('fetchProfile failed:', err.message)
-    await supabase.auth.signOut()
-    setSession(null)
-    setProfile(null)
-  } finally {
-    setLoading(false)
+    console.log('Fetching profile for:', session.user.id)
+    setProfileLoading(true)
+
+    supabase
+      .from('profiles')
+      .select('*, creators(*)')
+      .eq('id', session.user.id)
+      .maybeSingle()
+      .then(({ data, error }) => {
+        console.log('Profile fetch done:', data?.role, error?.message)
+        if (data) {
+          setProfile(data)
+        } else {
+          console.log('No profile found, signing out')
+          supabase.auth.signOut()
+        }
+        setProfileLoading(false)
+      })
+  }, [session])
+
+  // Still checking session
+  if (session === undefined) return <Loading />
+
+  // Session checked, no session = show login
+  if (!session) return <Auth onAuth={() => {}} />
+
+  // Session exists but profile still loading
+  if (profileLoading || !profile) return <Loading />
+
+  // Route by role
+  if (profile.role === 'creator') {
+    return <CreatorApp session={session} profile={profile} onSignOut={() => supabase.auth.signOut()} />
   }
+
+  return <FanApp session={session} profile={profile} onSignOut={() => supabase.auth.signOut()} />
 }
 
-useEffect(() => {
-  console.log('App mounted, checking session...')
-  
-  supabase.auth.getSession().then(async ({ data: { session }, error }) => {
-    console.log('Session result:', session, 'Error:', error)
-    
-    if (session) {
-      console.log('Session found, fetching profile for:', session.user.id)
-      await fetchProfile(session.user.id)
-    } else {
-      console.log('No session found, going to login')
-      setLoading(false)
-    }
-  })
-
-  const { data: { subscription } } = supabase.auth.onAuthStateChange(async (_event, session) => {
-    console.log('Auth state changed:', _event, session?.user?.id)
-    setSession(session)
-    if (session) await fetchProfile(session.user.id)
-    else { setProfile(null); setLoading(false) }
-  })
-
-  return () => subscription.unsubscribe()
-}, [])
-
-  if (loading) return (
-    <div style={{ minHeight: '100vh', background: '#080808', display: 'flex', alignItems: 'center', justifyContent: 'center', fontFamily: "'DM Mono', monospace", color: '#444', letterSpacing: '0.2em' }}>
+function Loading() {
+  return (
+    <div style={{
+      minHeight: '100vh', background: '#080808',
+      display: 'flex', alignItems: 'center', justifyContent: 'center',
+      fontFamily: "'DM Mono', monospace", color: '#444', letterSpacing: '0.2em'
+    }}>
       LOADING...
     </div>
-  )
-
-  if (!session || !profile) return <Auth onAuth={() => {}} />
-
-  if (profile.role === 'creator') return (
-    <CreatorApp session={session} profile={profile} onSignOut={async () => {
-      await supabase.auth.signOut()
-    }} />
-  )
-
-  return (
-    <FanApp session={session} profile={profile} onSignOut={async () => {
-      await supabase.auth.signOut()
-    }} />
   )
 }
