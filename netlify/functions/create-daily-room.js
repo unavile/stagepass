@@ -43,7 +43,7 @@ exports.handler = async (event) => {
     console.log('Creating Daily room for event:', eventName)
     console.log('DAILY_API_KEY exists:', !!process.env.DAILY_API_KEY)
 
-    const expiry = Math.floor(new Date(startTime).getTime() / 1000) + (durationMinutes * 60) + 3600
+    const expiry = Math.floor(Date.now() / 1000) + (durationMinutes * 60) + (7 * 24 * 60 * 60) // expires 7 days from now
 
     const result = await dailyRequest('/v1/rooms', {
       name: `stagepass-${eventId}`,
