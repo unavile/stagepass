@@ -225,52 +225,53 @@ export default function CreatorApp({ session, profile, onSignOut }) {
             </div>
           )}
 
-          {/* EARNINGS */}
-          {tab === 'earnings' && (
+            {/* EARNINGS */}
+            {tab === 'earnings' && (
             <div style={{ padding: p }}>
-              <div style={{ fontFamily: "'DM Serif Display', Georgia, serif", fontSize: isMobile ? 22 : 28, color: '#f0ebe0', marginBottom: 20 }}>Earnings</div>
+                <div style={{ fontFamily: "'DM Serif Display', Georgia, serif", fontSize: isMobile ? 22 : 28, color: '#f0ebe0', marginBottom: 20 }}>Earnings</div>
 
-              <div style={{ display: 'grid', gridTemplateColumns: 'repeat(3, 1fr)', gap: 10, marginBottom: 28 }}>
+                <div style={{ display: 'grid', gridTemplateColumns: 'repeat(3, 1fr)', gap: 10, marginBottom: 28 }}>
                 <StatCard label="Gross (Monthly)" value={`$${monthlyRevenue}`} accent={creator.accentColor} />
                 <StatCard label="Net (Monthly)" value={`$${netRevenue}`} sub="After 8% fee" />
                 <StatCard label="Active Subs" value={subscribers.length} />
-              </div>
+                </div>
 
-              <div style={{ fontFamily: "'DM Mono', monospace", fontSize: 10, color: '#444', letterSpacing: '0.2em', textTransform: 'uppercase', marginBottom: 12 }}>Subscription Breakdown</div>
-              <div style={{ background: '#0e0e0e', border: '1px solid #ffffff08', borderRadius: 10, padding: isMobile ? '16px' : '24px 32px', marginBottom: 20 }}>
+                <div style={{ fontFamily: "'DM Mono', monospace", fontSize: 10, color: '#444', letterSpacing: '0.2em', textTransform: 'uppercase', marginBottom: 12 }}>Subscription Breakdown</div>
+                <div style={{ background: '#0e0e0e', border: '1px solid #ffffff08', borderRadius: 10, padding: isMobile ? '16px' : '24px 32px', marginBottom: 20 }}>
                 <div style={{ display: 'flex', justifyContent: 'space-between', padding: '10px 0', borderBottom: '1px solid #ffffff08' }}>
-                  <span style={{ fontSize: 13, color: '#888' }}>Subscribers</span>
-                  <span style={{ fontFamily: "'DM Mono', monospace", fontSize: 13, color: '#e8e2d6' }}>{subscribers.length}</span>
+                    <span style={{ fontSize: 13, color: '#888' }}>Subscribers</span>
+                    <span style={{ fontFamily: "'DM Mono', monospace", fontSize: 13, color: '#e8e2d6' }}>{subscribers.length}</span>
                 </div>
                 <div style={{ display: 'flex', justifyContent: 'space-between', padding: '10px 0', borderBottom: '1px solid #ffffff08' }}>
-                  <span style={{ fontSize: 13, color: '#888' }}>Price per subscriber</span>
-                  <span style={{ fontFamily: "'DM Mono', monospace", fontSize: 13, color: '#e8e2d6' }}>${creator.monthlyPrice}/mo</span>
+                    <span style={{ fontSize: 13, color: '#888' }}>Price per subscriber</span>
+                    <span style={{ fontFamily: "'DM Mono', monospace", fontSize: 13, color: '#e8e2d6' }}>${creator.monthlyPrice}/mo</span>
                 </div>
                 <div style={{ display: 'flex', justifyContent: 'space-between', padding: '10px 0', borderBottom: '1px solid #ffffff08' }}>
-                  <span style={{ fontSize: 13, color: '#888' }}>Gross revenue</span>
-                  <span style={{ fontFamily: "'DM Mono', monospace", fontSize: 13, color: '#e8e2d6' }}>${monthlyRevenue}</span>
+                    <span style={{ fontSize: 13, color: '#888' }}>Gross revenue</span>
+                    <span style={{ fontFamily: "'DM Mono', monospace", fontSize: 13, color: '#e8e2d6' }}>${monthlyRevenue}</span>
                 </div>
                 <div style={{ display: 'flex', justifyContent: 'space-between', padding: '10px 0', borderBottom: '1px solid #ffffff08' }}>
-                  <span style={{ fontSize: 13, color: '#888' }}>Platform fee (8%)</span>
-                  <span style={{ fontFamily: "'DM Mono', monospace", fontSize: 13, color: '#e84545' }}>-${platformFee}</span>
+                    <span style={{ fontSize: 13, color: '#888' }}>Platform fee (8%)</span>
+                    <span style={{ fontFamily: "'DM Mono', monospace", fontSize: 13, color: '#e84545' }}>-${platformFee}</span>
                 </div>
                 <div style={{ display: 'flex', justifyContent: 'space-between', padding: '12px 0 0' }}>
-                  <span style={{ fontSize: 14, color: '#f0ebe0', fontWeight: 600 }}>Net revenue</span>
-                  <span style={{ fontFamily: "'DM Mono', monospace", fontSize: 16, color: creator.accentColor, fontWeight: 700 }}>${netRevenue}</span>
+                    <span style={{ fontSize: 14, color: '#f0ebe0', fontWeight: 600 }}>Net revenue</span>
+                    <span style={{ fontFamily: "'DM Mono', monospace", fontSize: 16, color: creator.accentColor, fontWeight: 700 }}>${netRevenue}</span>
+                </div>
                 </div>
 
-              <div style={{ background: '#0e0e0e', border: `1px solid ${creator.accentColor}22`, borderRadius: 10, padding: '16px 20px', display: 'flex', gap: 12, alignItems: 'center' }}>
+                <div style={{ background: '#0e0e0e', border: `1px solid ${creator.accentColor}22`, borderRadius: 10, padding: '16px 20px', display: 'flex', gap: 12, alignItems: 'center' }}>
                 <span style={{ fontSize: 20 }}>💳</span>
                 <div>
-                  <div style={{ fontSize: 13, color: '#e8e2d6', marginBottom: 2 }}>Stripe payouts</div>
-                  <div style={{ fontSize: 12, color: '#555' }}>Connect your Stripe account to receive payouts directly to your bank.</div>
+                    <div style={{ fontSize: 13, color: '#e8e2d6', marginBottom: 2 }}>Stripe payouts</div>
+                    <div style={{ fontSize: 12, color: '#555' }}>Connect your Stripe account to receive payouts directly to your bank.</div>
                 </div>
                 <button style={{ marginLeft: 'auto', background: creator.accentColor, color: '#080808', border: 'none', borderRadius: 6, padding: '8px 16px', fontFamily: "'DM Mono', monospace", fontSize: 11, fontWeight: 700, cursor: 'pointer', flexShrink: 0, letterSpacing: '0.1em' }}>
-                  CONNECT
+                    CONNECT
                 </button>
-              </div>
+                </div>
             </div>
-          )}
+            )}
         </div>
       </div>
 
