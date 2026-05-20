@@ -12,32 +12,66 @@ export default function Auth({ onAuth }) {
   const [error, setError] = useState(null)
   const [message, setMessage] = useState(null)
 
-  async function handleSubmit() {
-    setLoading(true)
-    setError(null)
+async function handleSubmit() {
+  setLoading(true)
+  setError(null)
 
-    if (mode === 'signup') {
-      const { data, error: signUpError } = await supabase.auth.signUp({ email, password })
-      if (signUpError) { setError(signUpError.message); setLoading(false); return }
-
-      const user = data.user
-      const { error: profileError } = await supabase.from('profiles').insert({
-        id: user.id, role, display_name: displayName, handle: handle.toLowerCase()
-      })
-      if (profileError) { setError(profileError.message); setLoading(false); return }
-
-      if (role === 'creator') {
-        await supabase.from('creators').insert({ id: user.id, monthly_price: 5 })
+  if (mode === 'signup') {
+    const { data, error: signUpError } = await supabase.auth.signUp({ 
+      email, 
+      password,
+      options: {
+        data: {
+          display_name: displayName,
+          handle: handle.toLowerCase(),
+          role: role,
+        }
       }
+    })
 
-      setMessage('Check your email to confirm your account, then log in.')
-    } else {
-      const { error: loginError } = await supabase.auth.signInWithPassword({ email, password })
-      if (loginError) { setError(loginError.message); setLoading(false); return }
-      onAuth()
+    if (signUpError) { 
+      setError(signUpError.message)
+      setLoading(false)
+      return 
     }
-    setLoading(false)
+
+    // Insert profile if user is immediately available (email confirmation disabled)
+    // If email confirmation is on, this is handled after confirmation via onAuthStateChange
+    if (data?.user?.id) {
+      const { error: profileError } = await supabase
+        .from('profiles')
+        .insert({
+          id: data.user.id,
+          role,
+          display_name: displayName,
+          handle: handle.toLowerCase()
+        })
+
+      if (profileError && profileError.code !== '23505') {
+        // 23505 = duplicate, means profile already exists, safe to ignore
+        setError(profileError.message)
+        setLoading(false)
+        return
+      }
+    }
+
+    setMessage('Account created! Check your email to confirm, then log in.')
+
+  } else {
+    const { error: loginError } = await supabase.auth.signInWithPassword({ 
+      email, 
+      password 
+    })
+    if (loginError) { 
+      setError(loginError.message)
+      setLoading(false)
+      return 
+    }
+    onAuth()
   }
+
+  setLoading(false)
+}
 
   const input = {
     width: '100%', background: '#111', border: '1px solid #ffffff15',
