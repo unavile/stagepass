@@ -1,4 +1,4 @@
-import { useState, useEffect, useRef } from 'react'
+import { useState, useEffect } from 'react'
 import { supabase } from './supabaseClient'
 import Auth from './Auth'
 import CreatorApp from './CreatorApp'
@@ -8,32 +8,18 @@ export default function App() {
   const [session, setSession] = useState(undefined)
   const [profile, setProfile] = useState(null)
   const [profileLoading, setProfileLoading] = useState(false)
-  const currentUserId = useRef(null)
 
   useEffect(() => {
-    // Get initial session
-    supabase.auth.getSession().then(({ data: { session } }) => {
-      console.log('Initial session:', session?.user?.id ?? 'none')
-      setSession(session ?? null)
-    })
-
-    // Listen for auth changes but ignore if same user
     const { data: { subscription } } = supabase.auth.onAuthStateChange((event, session) => {
       console.log('Auth event:', event, session?.user?.id ?? 'none')
-      const incomingId = session?.user?.id ?? null
-      if (incomingId !== currentUserId.current) {
-        currentUserId.current = incomingId
-        setSession(session ?? null)
-      }
+      setSession(session ?? null)
     })
-
     return () => subscription.unsubscribe()
   }, [])
 
-  // Fetch profile only when session changes to a new user
   useEffect(() => {
     if (session === undefined) return
-    if (!session) { setProfile(null); return }
+    if (!session) { setProfile(null); setProfileLoading(false); return }
 
     console.log('Fetching profile for:', session.user.id)
     setProfileLoading(true)
@@ -45,12 +31,8 @@ export default function App() {
       .maybeSingle()
       .then(({ data, error }) => {
         console.log('Profile fetch done:', data?.role, error?.message)
-        if (data) {
-          setProfile(data)
-        } else {
-          console.log('No profile found, signing out')
-          supabase.auth.signOut()
-        }
+        if (data) setProfile(data)
+        else supabase.auth.signOut()
         setProfileLoading(false)
       })
   }, [session])
