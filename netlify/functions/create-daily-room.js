@@ -1,3 +1,32 @@
+const https = require('https')
+
+function dailyRequest(path, body) {
+  return new Promise((resolve, reject) => {
+    const data = JSON.stringify(body)
+    const options = {
+      hostname: 'api.daily.co',
+      path,
+      method: 'POST',
+      headers: {
+        'Content-Type': 'application/json',
+        'Authorization': `Bearer ${process.env.DAILY_API_KEY}`,
+        'Content-Length': Buffer.byteLength(data),
+      }
+    }
+    const req = https.request(options, res => {
+      let body = ''
+      res.on('data', chunk => body += chunk)
+      res.on('end', () => {
+        try { resolve({ status: res.statusCode, data: JSON.parse(body) }) }
+        catch (e) { reject(e) }
+      })
+    })
+    req.on('error', reject)
+    req.write(data)
+    req.end()
+  })
+}
+
 exports.handler = async (event) => {
   if (event.httpMethod !== 'POST') {
     return { statusCode: 405, body: 'Method not allowed' }
@@ -11,41 +40,42 @@ exports.handler = async (event) => {
   try {
     const { eventId, eventName, startTime, durationMinutes } = JSON.parse(event.body)
 
-    // Create a Daily room for this event
-    const response = await fetch('https://api.daily.co/v1/rooms', {
-      method: 'POST',
-      headers: {
-        'Content-Type': 'application/json',
-        'Authorization': `Bearer ${process.env.DAILY_API_KEY}`,
-      },
-      body: JSON.stringify({
-        name: `stagepass-${eventId}`,
-        privacy: 'private',
-        properties: {
-          start_audio_off: false,
-          start_video_off: false,
-          enable_chat: true,
-          enable_screenshare: true,
-          max_participants: 200,
-          exp: Math.floor(new Date(startTime).getTime() / 1000) + (durationMinutes * 60) + 3600, // expires 1hr after event ends
-          eject_at_room_exp: true,
-        }
-      })
+    console.log('Creating Daily room for event:', eventName)
+    console.log('DAILY_API_KEY exists:', !!process.env.DAILY_API_KEY)
+
+    const expiry = Math.floor(new Date(startTime).getTime() / 1000) + (durationMinutes * 60) + 3600
+
+    const result = await dailyRequest('/v1/rooms', {
+      name: `stagepass-${eventId}`,
+      privacy: 'private',
+      properties: {
+        start_audio_off: false,
+        start_video_off: false,
+        enable_chat: true,
+        enable_screenshare: true,
+        max_participants: 200,
+        exp: expiry,
+        eject_at_room_exp: true,
+      }
     })
 
-    const room = await response.json()
+    console.log('Daily API response status:', result.status)
+    console.log('Daily API response:', JSON.stringify(result.data))
 
-    if (!response.ok) {
-      throw new Error(room.error || 'Failed to create Daily room')
+    if (result.status !== 200) {
+      throw new Error(result.data.error || `Daily API error: ${result.status}`)
     }
 
     return {
       statusCode: 200,
       headers,
-      body: JSON.stringify({ roomUrl: room.url, roomName: room.name })
+      body: JSON.stringify({
+        roomUrl: result.data.url,
+        roomName: result.data.name
+      })
     }
   } catch (err) {
-    console.error('Create room error:', err)
+    console.error('Create room error:', err.message)
     return {
       statusCode: 500,
       headers,
