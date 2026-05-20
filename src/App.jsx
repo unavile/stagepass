@@ -10,21 +10,38 @@ export default function App() {
   const [loading, setLoading] = useState(true)
 
 async function fetchProfile(userId) {
-  const { data, error } = await supabase
-    .from('profiles')
-    .select('*, creators(*)')
-    .eq('id', userId)
-    .single()
+  console.log('fetchProfile called for:', userId)
+  try {
+    const { data, error } = await supabase
+      .from('profiles')
+      .select('*, creators(*)')
+      .eq('id', userId)
+      .maybeSingle()  // won't throw if row is missing
 
-  if (error || !data) {
-    // Profile missing — sign out and return to login
+    console.log('Profile result:', data, 'Error:', error)
+
+    if (error) {
+      console.log('Profile error, signing out:', error.message)
+      await supabase.auth.signOut()
+      setSession(null)
+      setProfile(null)
+    } else if (!data) {
+      console.log('No profile found, signing out')
+      await supabase.auth.signOut()
+      setSession(null)
+      setProfile(null)
+    } else {
+      console.log('Profile loaded successfully:', data.role)
+      setProfile(data)
+    }
+  } catch (err) {
+    console.log('Unexpected error in fetchProfile:', err.message)
     await supabase.auth.signOut()
     setSession(null)
     setProfile(null)
-  } else {
-    setProfile(data)
+  } finally {
+    setLoading(false)
   }
-  setLoading(false)
 }
 
 useEffect(() => {
