@@ -29,6 +29,9 @@ export default function App() {
     if (session === undefined) return // still initializing
     if (!session) { setProfile(null); return } // logged out
 
+  // Avoid duplicate fetches if profile already loaded for this user
+  if (profile?.id === session.user.id) return
+
     console.log('Fetching profile for:', session.user.id)
     setProfileLoading(true)
 
