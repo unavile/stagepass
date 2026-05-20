@@ -29,7 +29,7 @@ export default function CreatorApp({ session, profile, onSignOut }) {
     id: session.user.id,
     name: profile.display_name || 'Your Name',
     handle: '@' + (profile.handle || 'creator'),
-    accentColor: profile.creators?.accent_color || '#c9a84c',
+    creator.accentColor: profile.creators?.accent_color || '#c9a84c',
     monthlyPrice: profile.creators?.monthly_price || 5,
   }
 
@@ -331,7 +331,7 @@ export default function CreatorApp({ session, profile, onSignOut }) {
                         <button
                             onClick={() => setLiveEvent(event)}
                             style={{
-                            marginTop: 12, background: accentColor,
+                            marginTop: 12, background: creator.accentColor,
                             color: '#080808', border: 'none', borderRadius: 6,
                             padding: '10px 20px', fontFamily: "'DM Mono', monospace",
                             fontSize: 11, fontWeight: 700, cursor: 'pointer',
