@@ -1,13 +1,15 @@
 import { useState, useEffect } from 'react'
 import { supabase } from './supabaseClient'
 import { usePosts } from './hooks/usePosts'
+import { useSubscribers } from './hooks/useSubscribers'
 import NewPostModal from './NewPostModal'
 
 export default function CreatorApp({ session, profile, onSignOut }) {
   const [tab, setTab] = useState('overview')
   const [showUpload, setShowUpload] = useState(false)
   const [isMobile, setIsMobile] = useState(window.innerWidth < 768)
-  const { posts, loading, refetch } = usePosts(session.user.id)
+  const { posts, loading: postsLoading, refetch } = usePosts(session.user.id)
+  const { subscribers, loading: subsLoading } = useSubscribers(session.user.id)
 
   useEffect(() => {
     const fn = () => setIsMobile(window.innerWidth < 768)
@@ -23,10 +25,14 @@ export default function CreatorApp({ session, profile, onSignOut }) {
     monthlyPrice: profile.creators?.monthly_price || 5,
   }
 
+  const monthlyRevenue = subscribers.length * creator.monthlyPrice
+  const netRevenue = Math.round(monthlyRevenue * 0.92)
+
   const TABS = [
-    { id: 'overview',    label: 'Overview',    icon: '⬡' },
-    { id: 'content',     label: 'Content',     icon: '▤' },
-    { id: 'earnings',    label: 'Earnings',    icon: '◇' },
+    { id: 'overview',     label: 'Overview',     icon: '⬡' },
+    { id: 'content',      label: 'Content',      icon: '▤' },
+    { id: 'subscribers',  label: 'Subs',         icon: '◎' },
+    { id: 'earnings',     label: 'Earnings',     icon: '◇' },
   ]
 
   const typeLabels = { video: 'VIDEO', audio: 'AUDIO', event: 'EVENT', text: 'JOURNAL' }
@@ -34,13 +40,27 @@ export default function CreatorApp({ session, profile, onSignOut }) {
   function Pill({ color, children }) {
     return (
       <span style={{
-        background: color + '22', color, border: `1px solid ${color}44`,
+        background: color + '22', color,
+        border: `1px solid ${color}44`,
         borderRadius: 4, fontSize: 10, fontWeight: 700,
         padding: '2px 8px', letterSpacing: '0.12em',
-        textTransform: 'uppercase', fontFamily: "'DM Mono', monospace"
+        textTransform: 'uppercase',
+        fontFamily: "'DM Mono', monospace"
       }}>{children}</span>
     )
   }
+
+  function StatCard({ label, value, sub, accent }) {
+    return (
+      <div style={{ background: '#0e0e0e', border: '1px solid #ffffff0a', borderRadius: 10, padding: '20px' }}>
+        <div style={{ fontFamily: "'DM Mono', monospace", fontSize: 10, color: '#555', letterSpacing: '0.2em', textTransform: 'uppercase', marginBottom: 8 }}>{label}</div>
+        <div style={{ fontFamily: "'DM Serif Display', Georgia, serif", fontSize: 28, color: accent || '#f0ebe0' }}>{value}</div>
+        {sub && <div style={{ fontSize: 11, color: '#444', marginTop: 4 }}>{sub}</div>}
+      </div>
+    )
+  }
+
+  const p = isMobile ? '20px 16px' : '40px 48px'
 
   return (
     <div style={{ minHeight: '100vh', background: '#080808', color: '#e8e2d6', display: 'flex', flexDirection: 'column' }}>
@@ -85,75 +105,73 @@ export default function CreatorApp({ session, profile, onSignOut }) {
         )}
 
         {/* Main content */}
-        <div style={{ flex: 1, overflowY: 'auto', padding: isMobile ? '20px 16px' : '40px 48px', paddingBottom: isMobile ? 80 : 40 }}>
+        <div style={{ flex: 1, overflowY: 'auto', paddingBottom: isMobile ? 80 : 0 }}>
 
+          {/* OVERVIEW */}
           {tab === 'overview' && (
-            <div>
+            <div style={{ padding: p }}>
               <div style={{ fontFamily: "'DM Serif Display', Georgia, serif", fontSize: isMobile ? 22 : 28, color: '#f0ebe0', marginBottom: 4 }}>
                 Welcome, {creator.name.split(' ')[0]}.
               </div>
               <div style={{ fontFamily: "'DM Mono', monospace", fontSize: 10, color: '#444', letterSpacing: '0.15em', marginBottom: 24 }}>YOUR DASHBOARD</div>
 
               <div style={{ display: 'grid', gridTemplateColumns: 'repeat(2, 1fr)', gap: 12, marginBottom: 28 }}>
-                {[
-                  { label: 'Posts', value: posts.length },
-                  { label: 'Monthly Price', value: `$${creator.monthlyPrice}/mo` },
-                ].map((s, i) => (
-                  <div key={i} style={{ background: '#0e0e0e', border: '1px solid #ffffff0a', borderRadius: 10, padding: '20px' }}>
-                    <div style={{ fontFamily: "'DM Mono', monospace", fontSize: 10, color: '#555', letterSpacing: '0.2em', textTransform: 'uppercase', marginBottom: 8 }}>{s.label}</div>
-                    <div style={{ fontFamily: "'DM Serif Display', Georgia, serif", fontSize: 28, color: creator.accentColor }}>{s.value}</div>
-                  </div>
-                ))}
+                <StatCard label="Subscribers" value={subscribers.length} sub="Active" accent={creator.accentColor} />
+                <StatCard label="Monthly Revenue" value={`$${monthlyRevenue}`} sub="Gross" />
+                <StatCard label="Posts" value={posts.length} sub="Published" />
+                <StatCard label="Net Revenue" value={`$${netRevenue}`} sub="After 8% fee" />
               </div>
 
               <div style={{ fontFamily: "'DM Mono', monospace", fontSize: 10, color: '#444', letterSpacing: '0.2em', textTransform: 'uppercase', marginBottom: 12 }}>Recent Posts</div>
-              {loading ? (
+              {postsLoading ? (
                 <div style={{ color: '#444', fontFamily: "'DM Mono', monospace", fontSize: 12 }}>Loading...</div>
               ) : posts.length === 0 ? (
                 <div style={{ background: '#0e0e0e', border: '1px dashed #ffffff10', borderRadius: 10, padding: '32px', textAlign: 'center' }}>
-                  <div style={{ fontSize: 28, marginBottom: 8 }}>✦</div>
                   <div style={{ fontSize: 13, color: '#555', marginBottom: 16 }}>No posts yet. Share your first piece of content.</div>
                   <button onClick={() => setShowUpload(true)} style={{ background: creator.accentColor, color: '#080808', border: 'none', borderRadius: 6, padding: '10px 20px', fontFamily: "'DM Mono', monospace", fontSize: 11, fontWeight: 700, cursor: 'pointer', letterSpacing: '0.12em' }}>+ CREATE FIRST POST</button>
                 </div>
-              ) : posts.slice(0, 5).map(p => (
-                <div key={p.id} style={{ display: 'flex', alignItems: 'center', gap: 12, background: '#0e0e0e', border: '1px solid #ffffff08', borderRadius: 8, padding: '12px 16px', marginBottom: 8 }}>
-                  <div style={{ fontSize: 20, width: 28, textAlign: 'center' }}>{p.thumbnail_emoji}</div>
+              ) : posts.slice(0, 5).map(post => (
+                <div key={post.id} style={{ display: 'flex', alignItems: 'center', gap: 12, background: '#0e0e0e', border: '1px solid #ffffff08', borderRadius: 8, padding: '12px 16px', marginBottom: 8 }}>
+                  <div style={{ fontSize: 20, width: 28, textAlign: 'center' }}>{post.thumbnail_emoji}</div>
                   <div style={{ flex: 1, minWidth: 0 }}>
-                    <div style={{ fontSize: 13, color: '#e8e2d6', whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' }}>{p.title}</div>
-                    <div style={{ fontFamily: "'DM Mono', monospace", fontSize: 10, color: '#555' }}>{typeLabels[p.type]} · {new Date(p.published_at).toLocaleDateString()}</div>
+                    <div style={{ fontSize: 13, color: '#e8e2d6', whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' }}>{post.title}</div>
+                    <div style={{ fontFamily: "'DM Mono', monospace", fontSize: 10, color: '#555' }}>{typeLabels[post.type]} · {new Date(post.published_at).toLocaleDateString()}</div>
                   </div>
-                  {p.is_locked && <Pill color={creator.accentColor}>EXCL.</Pill>}
+                  {post.is_locked && <Pill color={creator.accentColor}>EXCL.</Pill>}
                 </div>
               ))}
             </div>
           )}
 
+          {/* CONTENT */}
           {tab === 'content' && (
-            <div>
+            <div style={{ padding: p }}>
               <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 20 }}>
                 <div>
                   <div style={{ fontFamily: "'DM Serif Display', Georgia, serif", fontSize: isMobile ? 22 : 28, color: '#f0ebe0' }}>Content</div>
                   <div style={{ fontFamily: "'DM Mono', monospace", fontSize: 10, color: '#444', marginTop: 2 }}>{posts.length} POSTS</div>
                 </div>
-                {!isMobile && <button onClick={() => setShowUpload(true)} style={{ background: creator.accentColor, color: '#080808', border: 'none', borderRadius: 6, padding: '10px 20px', fontFamily: "'DM Mono', monospace", fontSize: 11, fontWeight: 700, cursor: 'pointer', letterSpacing: '0.12em' }}>+ New Post</button>}
+                {!isMobile && (
+                  <button onClick={() => setShowUpload(true)} style={{ background: creator.accentColor, color: '#080808', border: 'none', borderRadius: 6, padding: '10px 20px', fontFamily: "'DM Mono', monospace", fontSize: 11, fontWeight: 700, cursor: 'pointer', letterSpacing: '0.12em' }}>+ New Post</button>
+                )}
               </div>
-              {loading ? (
+              {postsLoading ? (
                 <div style={{ color: '#444', fontFamily: "'DM Mono', monospace", fontSize: 12 }}>Loading...</div>
               ) : posts.length === 0 ? (
                 <div style={{ background: '#0e0e0e', border: '1px dashed #ffffff10', borderRadius: 10, padding: '32px', textAlign: 'center' }}>
                   <div style={{ fontSize: 13, color: '#555' }}>No posts yet.</div>
                 </div>
-              ) : posts.map(p => (
-                <div key={p.id} style={{ background: '#0e0e0e', border: '1px solid #ffffff08', borderRadius: 10, padding: '16px', marginBottom: 10 }}>
+              ) : posts.map(post => (
+                <div key={post.id} style={{ background: '#0e0e0e', border: '1px solid #ffffff08', borderRadius: 10, padding: '16px', marginBottom: 10 }}>
                   <div style={{ display: 'flex', gap: 12, alignItems: 'flex-start' }}>
-                    <div style={{ width: 40, height: 40, background: '#161616', borderRadius: 8, display: 'flex', alignItems: 'center', justifyContent: 'center', fontSize: 18, flexShrink: 0 }}>{p.thumbnail_emoji}</div>
+                    <div style={{ width: 40, height: 40, background: '#161616', borderRadius: 8, display: 'flex', alignItems: 'center', justifyContent: 'center', fontSize: 18, flexShrink: 0 }}>{post.thumbnail_emoji}</div>
                     <div style={{ flex: 1, minWidth: 0 }}>
-                      <div style={{ fontSize: 14, color: '#f0ebe0', marginBottom: 4 }}>{p.title}</div>
-                      {p.description && <div style={{ fontSize: 12, color: '#555', marginBottom: 6 }}>{p.description}</div>}
+                      <div style={{ fontSize: 14, color: '#f0ebe0', marginBottom: 4 }}>{post.title}</div>
+                      {post.description && <div style={{ fontSize: 12, color: '#555', marginBottom: 6 }}>{post.description}</div>}
                       <div style={{ display: 'flex', gap: 6, flexWrap: 'wrap' }}>
-                        <Pill color="#888">{typeLabels[p.type]}</Pill>
-                        {p.is_locked && <Pill color={creator.accentColor}>EXCLUSIVE</Pill>}
-                        <span style={{ fontFamily: "'DM Mono', monospace", fontSize: 10, color: '#444', paddingTop: 2 }}>{new Date(p.published_at).toLocaleDateString()}</span>
+                        <Pill color="#888">{typeLabels[post.type]}</Pill>
+                        {post.is_locked && <Pill color={creator.accentColor}>EXCLUSIVE</Pill>}
+                        <span style={{ fontFamily: "'DM Mono', monospace", fontSize: 10, color: '#444', paddingTop: 2 }}>{new Date(post.published_at).toLocaleDateString()}</span>
                       </div>
                     </div>
                   </div>
@@ -162,12 +180,90 @@ export default function CreatorApp({ session, profile, onSignOut }) {
             </div>
           )}
 
+          {/* SUBSCRIBERS */}
+          {tab === 'subscribers' && (
+            <div style={{ padding: p }}>
+              <div style={{ fontFamily: "'DM Serif Display', Georgia, serif", fontSize: isMobile ? 22 : 28, color: '#f0ebe0', marginBottom: 4 }}>Subscribers</div>
+              <div style={{ fontFamily: "'DM Mono', monospace", fontSize: 10, color: '#444', letterSpacing: '0.1em', marginBottom: 20 }}>{subscribers.length} ACTIVE</div>
+
+              <div style={{ display: 'grid', gridTemplateColumns: 'repeat(3, 1fr)', gap: 10, marginBottom: 24 }}>
+                <StatCard label="Active" value={subscribers.length} accent={creator.accentColor} />
+                <StatCard label="Monthly Gross" value={`$${monthlyRevenue}`} />
+                <StatCard label="Monthly Net" value={`$${netRevenue}`} sub="After 8% fee" />
+              </div>
+
+              {subsLoading ? (
+                <div style={{ color: '#444', fontFamily: "'DM Mono', monospace", fontSize: 12 }}>Loading...</div>
+              ) : subscribers.length === 0 ? (
+                <div style={{ background: '#0e0e0e', border: '1px dashed #ffffff10', borderRadius: 10, padding: '40px', textAlign: 'center' }}>
+                  <div style={{ fontSize: 13, color: '#555' }}>No subscribers yet. Share your page to get started.</div>
+                </div>
+              ) : (
+                <div style={{ border: '1px solid #ffffff08', borderRadius: 10, overflow: 'hidden' }}>
+                  {subscribers.map((s, i) => (
+                    <div key={s.id} style={{ display: 'flex', alignItems: 'center', gap: 12, padding: '12px 16px', borderBottom: i < subscribers.length - 1 ? '1px solid #ffffff06' : 'none' }}>
+                      <div style={{ width: 32, height: 32, borderRadius: '50%', background: '#161616', border: '1px solid #ffffff10', display: 'flex', alignItems: 'center', justifyContent: 'center', fontSize: 12, color: creator.accentColor, flexShrink: 0, fontFamily: "'DM Serif Display', Georgia, serif" }}>
+                        {(s.profiles?.display_name || 'F').split(' ').map(n => n[0]).join('').slice(0, 2)}
+                      </div>
+                      <div style={{ flex: 1, minWidth: 0 }}>
+                        <div style={{ fontSize: 13, color: '#e8e2d6' }}>{s.profiles?.display_name || 'Fan'}</div>
+                        <div style={{ fontFamily: "'DM Mono', monospace", fontSize: 10, color: '#444' }}>
+                          @{s.profiles?.handle || 'fan'} · Since {new Date(s.started_at).toLocaleDateString()}
+                        </div>
+                      </div>
+                      {!isMobile && <Pill color={creator.accentColor}>ACTIVE</Pill>}
+                      <div style={{ fontFamily: "'DM Mono', monospace", fontSize: 11, color: '#444', flexShrink: 0 }}>${creator.monthlyPrice}/mo</div>
+                    </div>
+                  ))}
+                </div>
+              )}
+            </div>
+          )}
+
+          {/* EARNINGS */}
           {tab === 'earnings' && (
-            <div>
+            <div style={{ padding: p }}>
               <div style={{ fontFamily: "'DM Serif Display', Georgia, serif", fontSize: isMobile ? 22 : 28, color: '#f0ebe0', marginBottom: 20 }}>Earnings</div>
-              <div style={{ background: '#0e0e0e', border: `1px solid ${creator.accentColor}22`, borderRadius: 12, padding: '28px', textAlign: 'center' }}>
-                <div style={{ fontFamily: "'DM Mono', monospace", fontSize: 11, color: '#444', letterSpacing: '0.2em', marginBottom: 12 }}>STRIPE PAYMENTS</div>
-                <div style={{ fontSize: 14, color: '#666', lineHeight: 1.7 }}>Stripe integration coming in Phase 4.<br />Your earnings dashboard will appear here.</div>
+
+              <div style={{ display: 'grid', gridTemplateColumns: 'repeat(3, 1fr)', gap: 10, marginBottom: 28 }}>
+                <StatCard label="Gross (Monthly)" value={`$${monthlyRevenue}`} accent={creator.accentColor} />
+                <StatCard label="Net (Monthly)" value={`$${netRevenue}`} sub="After 8% fee" />
+                <StatCard label="Active Subs" value={subscribers.length} />
+              </div>
+
+              <div style={{ fontFamily: "'DM Mono', monospace", fontSize: 10, color: '#444', letterSpacing: '0.2em', textTransform: 'uppercase', marginBottom: 12 }}>Subscription Breakdown</div>
+              <div style={{ background: '#0e0e0e', border: '1px solid #ffffff08', borderRadius: 10, padding: isMobile ? '16px' : '24px 32px', marginBottom: 20 }}>
+                <div style={{ display: 'flex', justifyContent: 'space-between', padding: '10px 0', borderBottom: '1px solid #ffffff08' }}>
+                  <span style={{ fontSize: 13, color: '#888' }}>Subscribers</span>
+                  <span style={{ fontFamily: "'DM Mono', monospace", fontSize: 13, color: '#e8e2d6' }}>{subscribers.length}</span>
+                </div>
+                <div style={{ display: 'flex', justifyContent: 'space-between', padding: '10px 0', borderBottom: '1px solid #ffffff08' }}>
+                  <span style={{ fontSize: 13, color: '#888' }}>Price per subscriber</span>
+                  <span style={{ fontFamily: "'DM Mono', monospace", fontSize: 13, color: '#e8e2d6' }}>${creator.monthlyPrice}/mo</span>
+                </div>
+                <div style={{ display: 'flex', justifyContent: 'space-between', padding: '10px 0', borderBottom: '1px solid #ffffff08' }}>
+                  <span style={{ fontSize: 13, color: '#888' }}>Gross revenue</span>
+                  <span style={{ fontFamily: "'DM Mono', monospace", fontSize: 13, color: '#e8e2d6' }}>${monthlyRevenue}</span>
+                </div>
+                <div style={{ display: 'flex', justifyContent: 'space-between', padding: '10px 0', borderBottom: '1px solid #ffffff08' }}>
+                  <span style={{ fontSize: 13, color: '#888' }}>Platform fee (8%)</span>
+                  <span style={{ fontFamily: "'DM Mono', monospace", fontSize: 13, color: '#e84545' }}>-${monthlyRevenue - netRevenue}</span>
+                </div>
+                <div style={{ display: 'flex', justifyContent: 'space-between', padding: '12px 0 0' }}>
+                  <span style={{ fontSize: 14, color: '#f0ebe0', fontWeight: 600 }}>Net revenue</span>
+                  <span style={{ fontFamily: "'DM Mono', monospace", fontSize: 16, color: creator.accentColor, fontWeight: 700 }}>${netRevenue}</span>
+                </div>
+              </div>
+
+              <div style={{ background: '#0e0e0e', border: `1px solid ${creator.accentColor}22`, borderRadius: 10, padding: '16px 20px', display: 'flex', gap: 12, alignItems: 'center' }}>
+                <span style={{ fontSize: 20 }}>💳</span>
+                <div>
+                  <div style={{ fontSize: 13, color: '#e8e2d6', marginBottom: 2 }}>Stripe payouts</div>
+                  <div style={{ fontSize: 12, color: '#555' }}>Connect your Stripe account to receive payouts directly to your bank.</div>
+                </div>
+                <button style={{ marginLeft: 'auto', background: creator.accentColor, color: '#080808', border: 'none', borderRadius: 6, padding: '8px 16px', fontFamily: "'DM Mono', monospace", fontSize: 11, fontWeight: 700, cursor: 'pointer', flexShrink: 0, letterSpacing: '0.1em' }}>
+                  CONNECT
+                </button>
               </div>
             </div>
           )}
