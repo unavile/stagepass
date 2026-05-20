@@ -12,30 +12,32 @@ export default function App() {
 async function fetchProfile(userId) {
   console.log('fetchProfile called for:', userId)
   try {
-    const { data, error } = await supabase
-      .from('profiles')
-      .select('*, creators(*)')
-      .eq('id', userId)
-      .maybeSingle()  // won't throw if row is missing
+    // Race the query against a 5 second timeout
+    const result = await Promise.race([
+      supabase
+        .from('profiles')
+        .select('*, creators(*)')
+        .eq('id', userId)
+        .maybeSingle(),
+      new Promise((_, reject) =>
+        setTimeout(() => reject(new Error('Query timed out after 5s')), 5000)
+      )
+    ])
 
+    const { data, error } = result
     console.log('Profile result:', data, 'Error:', error)
 
-    if (error) {
-      console.log('Profile error, signing out:', error.message)
-      await supabase.auth.signOut()
-      setSession(null)
-      setProfile(null)
-    } else if (!data) {
-      console.log('No profile found, signing out')
+    if (error || !data) {
+      console.log('No profile or error:', error?.message)
       await supabase.auth.signOut()
       setSession(null)
       setProfile(null)
     } else {
-      console.log('Profile loaded successfully:', data.role)
+      console.log('Profile loaded:', data.role)
       setProfile(data)
     }
   } catch (err) {
-    console.log('Unexpected error in fetchProfile:', err.message)
+    console.log('fetchProfile failed:', err.message)
     await supabase.auth.signOut()
     setSession(null)
     setProfile(null)
