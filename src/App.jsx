@@ -12,19 +12,12 @@ export default function App() {
 async function fetchProfile(userId) {
   console.log('fetchProfile called for:', userId)
   try {
-    // Race the query against a 5 second timeout
-    const result = await Promise.race([
-      supabase
-        .from('profiles')
-        .select('*, creators(*)')
-        .eq('id', userId)
-        .maybeSingle(),
-      new Promise((_, reject) =>
-        setTimeout(() => reject(new Error('Query timed out after 5s')), 5000)
-      )
-    ])
+    const { data, error } = await supabase
+      .from('profiles')
+      .select('*, creators(*)')
+      .eq('id', userId)
+      .maybeSingle()
 
-    const { data, error } = result
     console.log('Profile result:', data, 'Error:', error)
 
     if (error || !data) {
@@ -37,7 +30,7 @@ async function fetchProfile(userId) {
       setProfile(data)
     }
   } catch (err) {
-    console.log('fetchProfile failed:', err.message)
+    console.log('Unexpected error:', err.message)
     await supabase.auth.signOut()
     setSession(null)
     setProfile(null)

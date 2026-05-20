@@ -16,24 +16,26 @@ async function handleSubmit() {
   setLoading(true)
   setError(null)
 
-  if (mode === 'signup') {
-    const { data, error: signUpError } = await supabase.auth.signUp({ 
-      email, 
-      password,
-      options: {
-        data: {
-          display_name: displayName,
-          handle: handle.toLowerCase(),
-          role: role,
-        }
+if (mode === 'signup') {
+  const { data, error: signUpError } = await supabase.auth.signUp({ 
+    email, 
+    password,
+    options: {
+      data: {
+        display_name: displayName,
+        handle: handle.toLowerCase(),
+        role: role,
       }
-    })
-
-    if (signUpError) { 
-      setError(signUpError.message)
-      setLoading(false)
-      return 
     }
+  })
+
+  if (signUpError) { 
+    setError(signUpError.message)
+    setLoading(false)
+    return 
+  }
+
+  setMessage('Account created! Logging you in...')
 
     // Insert profile if user is immediately available (email confirmation disabled)
     // If email confirmation is on, this is handled after confirmation via onAuthStateChange
