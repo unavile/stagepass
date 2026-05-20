@@ -29,7 +29,7 @@ export default function CreatorApp({ session, profile, onSignOut }) {
     id: session.user.id,
     name: profile.display_name || 'Your Name',
     handle: '@' + (profile.handle || 'creator'),
-    creator.accentColor: profile.creators?.accent_color || '#c9a84c',
+    accentColor: profile.creators?.accent_color || '#c9a84c',
     monthlyPrice: profile.creators?.monthly_price || 5,
   }
 
