@@ -10,15 +10,13 @@ export default function App() {
   const [profileLoading, setProfileLoading] = useState(false)
 
   useEffect(() => {
-    // Get current session once on mount
     supabase.auth.getSession().then(({ data: { session } }) => {
       setSession(session ?? null)
     })
 
-    // Only listen for explicit user-driven changes
     const { data: { subscription } } = supabase.auth.onAuthStateChange((event, session) => {
-      if (event === 'SIGNED_IN')     setSession(session)
-      if (event === 'SIGNED_OUT')    { setSession(null); setProfile(null) }
+      if (event === 'SIGNED_IN')       setSession(session)
+      if (event === 'SIGNED_OUT')      { setSession(null); setProfile(null) }
       if (event === 'TOKEN_REFRESHED') setSession(session)
     })
 
