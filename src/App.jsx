@@ -9,13 +9,24 @@ export default function App() {
   const [profile, setProfile] = useState(null)
   const [profileLoading, setProfileLoading] = useState(false)
 
-  useEffect(() => {
-    const { data: { subscription } } = supabase.auth.onAuthStateChange((event, session) => {
-      console.log('Auth event:', event, session?.user?.id ?? 'none')
+useEffect(() => {
+  const { data: { subscription } } = supabase.auth.onAuthStateChange((event, session) => {
+    console.log('Auth event:', event, session?.user?.id ?? 'none')
+    
+    // Only update session on these specific events
+    if (event === 'INITIAL_SESSION' || event === 'SIGNED_OUT') {
       setSession(session ?? null)
-    })
-    return () => subscription.unsubscribe()
-  }, [])
+    } else if (event === 'SIGNED_IN' && session?.user?.id !== undefined) {
+      // Only set on SIGNED_IN if we don't already have a session
+      setSession(prev => {
+        if (prev === undefined) return session
+        if (prev?.user?.id === session?.user?.id) return prev // same user, no change
+        return session // different user, update
+      })
+    }
+  })
+  return () => subscription.unsubscribe()
+}, [])
 
   useEffect(() => {
     if (session === undefined) return
