@@ -5,6 +5,8 @@ import { useSubscribers } from './hooks/useSubscribers'
 import NewPostModal from './NewPostModal'
 import { useEvents } from './hooks/useEvents'
 import NewEventModal from './NewEventModal'
+import EditProfileModal from './EditProfileModal'
+
 
 export default function CreatorApp({ session, profile, onSignOut }) {
   const [tab, setTab] = useState('overview')
@@ -14,6 +16,8 @@ export default function CreatorApp({ session, profile, onSignOut }) {
   const { subscribers, loading: subsLoading } = useSubscribers(session.user.id)
   const { events, loading: eventsLoading, refetch: refetchEvents } = useEvents(session.user.id)
   const [showNewEvent, setShowNewEvent] = useState(false)
+  const [showEditProfile, setShowEditProfile] = useState(false)
+
 
   useEffect(() => {
     const fn = () => setIsMobile(window.innerWidth < 768)
@@ -109,6 +113,7 @@ export default function CreatorApp({ session, profile, onSignOut }) {
             ))}
             <div style={{ marginTop: 'auto', padding: '20px', display: 'flex', flexDirection: 'column', gap: 8 }}>
               <button onClick={() => setShowUpload(true)} style={{ width: '100%', background: creator.accentColor, color: '#080808', border: 'none', borderRadius: 6, padding: '10px 0', fontFamily: "'DM Mono', monospace", fontSize: 11, fontWeight: 700, letterSpacing: '0.15em', cursor: 'pointer' }}>+ New Post</button>
+              <button onClick={() => setShowEditProfile(true)} style={{ width: '100%', background: 'none', color: '#555', border: '1px solid #ffffff10', borderRadius: 6, padding: '8px 0', fontFamily: "'DM Mono', monospace", fontSize: 11, cursor: 'pointer', letterSpacing: '0.1em' }}>Edit Profile</button>
               <button onClick={onSignOut} style={{ width: '100%', background: 'none', color: '#444', border: '1px solid #ffffff10', borderRadius: 6, padding: '8px 0', fontFamily: "'DM Mono', monospace", fontSize: 11, cursor: 'pointer', letterSpacing: '0.1em' }}>Sign Out</button>
             </div>
           </div>
@@ -120,8 +125,13 @@ export default function CreatorApp({ session, profile, onSignOut }) {
           {/* OVERVIEW */}
           {tab === 'overview' && (
             <div style={{ padding: p }}>
-              <div style={{ fontFamily: "'DM Serif Display', Georgia, serif", fontSize: isMobile ? 22 : 28, color: '#f0ebe0', marginBottom: 4 }}>
-                Welcome, {creator.name.split(' ')[0]}.
+              <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-end', marginBottom: 4 }}>
+                <div style={{ fontFamily: "'DM Serif Display', Georgia, serif", fontSize: isMobile ? 22 : 28, color: '#f0ebe0' }}>
+                    Welcome, {creator.name.split(' ')[0]}.
+                </div>
+                <button onClick={() => setShowEditProfile(true)} style={{ background: 'none', color: '#555', border: '1px solid #ffffff10', borderRadius: 6, padding: '6px 14px', fontFamily: "'DM Mono', monospace", fontSize: 11, cursor: 'pointer', letterSpacing: '0.1em', flexShrink: 0 }}>
+                    Edit Profile
+                </button>
               </div>
               <div style={{ fontFamily: "'DM Mono', monospace", fontSize: 10, color: '#444', letterSpacing: '0.15em', marginBottom: 24 }}>YOUR DASHBOARD</div>
 
@@ -398,6 +408,16 @@ export default function CreatorApp({ session, profile, onSignOut }) {
             onEventCreated={refetchEvents}
         />
       )}
+
+      {showEditProfile && (
+        <EditProfileModal
+            profile={profile}
+            creator={creator}
+            onClose={() => setShowEditProfile(false)}
+            onSaved={() => window.location.reload()}
+        />
+      )}
+      
     </div>
   )
 }
