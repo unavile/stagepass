@@ -1,4 +1,4 @@
-import { useState, useEffect } from 'react'
+import { useState, useEffect, useRef } from 'react'
 import { supabase } from './supabaseClient'
 import Auth from './Auth'
 import CreatorApp from './CreatorApp'
@@ -8,33 +8,46 @@ export default function App() {
   const [session, setSession] = useState(undefined)
   const [profile, setProfile] = useState(null)
   const [profileLoading, setProfileLoading] = useState(false)
+  const initialSessionReceived = useRef(false)
+  const profileFetchedFor = useRef(null)
 
-useEffect(() => {
-  const { data: { subscription } } = supabase.auth.onAuthStateChange((event, session) => {
-    console.log('Auth event:', event, session?.user?.id ?? 'none')
+  useEffect(() => {
+    const { data: { subscription } } = supabase.auth.onAuthStateChange((event, session) => {
+      console.log('Auth event:', event, session?.user?.id ?? 'none')
 
-    if (event === 'INITIAL_SESSION') {
-      // Always trust the initial session check on page load
-      setSession(session ?? null)
-    } else if (event === 'SIGNED_IN') {
-      // Only trust SIGNED_IN if INITIAL_SESSION gave us nothing (fresh login)
-      setSession(prev => {
-        if (prev === undefined || prev === null) return session
-        return prev // already have a session from INITIAL_SESSION, ignore
-      })
-    } else if (event === 'SIGNED_OUT') {
-      setSession(null)
-      setProfile(null)
-    } else if (event === 'TOKEN_REFRESHED') {
-      setSession(session ?? null)
-    }
-  })
-  return () => subscription.unsubscribe()
-}, [])
+      if (event === 'INITIAL_SESSION') {
+        // Page load — this is always the truth
+        initialSessionReceived.current = true
+        setSession(session ?? null)
+
+      } else if (event === 'SIGNED_IN') {
+        if (!initialSessionReceived.current) {
+          // INITIAL_SESSION hasn't fired yet, hold off
+          return
+        }
+        // Fresh login (INITIAL_SESSION already fired with null)
+        setSession(session ?? null)
+
+      } else if (event === 'SIGNED_OUT') {
+        initialSessionReceived.current = false
+        profileFetchedFor.current = null
+        setSession(null)
+        setProfile(null)
+
+      } else if (event === 'TOKEN_REFRESHED') {
+        setSession(session ?? null)
+      }
+    })
+    return () => subscription.unsubscribe()
+  }, [])
 
   useEffect(() => {
     if (session === undefined) return
     if (!session) { setProfile(null); setProfileLoading(false); return }
+
+    // Skip if we already fetched for this user
+    if (profileFetchedFor.current === session.user.id) return
+    profileFetchedFor.current = session.user.id
 
     console.log('Fetching profile for:', session.user.id)
     setProfileLoading(true)
