@@ -1,4 +1,4 @@
-import { useState, useEffect } from 'react'
+import { useState, useEffect, useRef } from 'react'
 import { supabase } from './supabaseClient'
 import Auth from './Auth'
 import CreatorApp from './CreatorApp'
@@ -24,33 +24,35 @@ export default function App() {
     return () => subscription.unsubscribe()
   }, [])
 
-  // Step 2: when session changes, fetch profile separately
-  useEffect(() => {
-    if (session === undefined) return // still initializing
-    if (!session) { setProfile(null); return } // logged out
+const fetchingRef = useRef(false)
 
-  // Avoid duplicate fetches if profile already loaded for this user
-  if (profile?.id === session.user.id) return
+// Step 2: when session changes, fetch profile separately
+useEffect(() => {
+  if (session === undefined) return
+  if (!session) { setProfile(null); return }
+  if (fetchingRef.current) return // already fetching, skip
 
-    console.log('Fetching profile for:', session.user.id)
-    setProfileLoading(true)
+  fetchingRef.current = true
+  console.log('Fetching profile for:', session.user.id)
+  setProfileLoading(true)
 
-    supabase
-      .from('profiles')
-      .select('*, creators(*)')
-      .eq('id', session.user.id)
-      .maybeSingle()
-      .then(({ data, error }) => {
-        console.log('Profile fetch done:', data?.role, error?.message)
-        if (data) {
-          setProfile(data)
-        } else {
-          console.log('No profile found, signing out')
-          supabase.auth.signOut()
-        }
-        setProfileLoading(false)
-      })
-  }, [session])
+  supabase
+    .from('profiles')
+    .select('*, creators(*)')
+    .eq('id', session.user.id)
+    .maybeSingle()
+    .then(({ data, error }) => {
+      console.log('Profile fetch done:', data?.role, error?.message)
+      if (data) {
+        setProfile(data)
+      } else {
+        console.log('No profile found, signing out')
+        supabase.auth.signOut()
+      }
+      setProfileLoading(false)
+      fetchingRef.current = false
+    })
+}, [session])
 
   // Still checking session
   if (session === undefined) return <Loading />
