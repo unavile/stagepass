@@ -1,39 +1,34 @@
 import { useState, useEffect } from 'react'
 import { supabase } from './supabaseClient'
 import Auth from './Auth'
-import StagePass from './stagepass-demo'
+import CreatorApp from './CreatorApp'
+import FanApp from './FanApp'
 
 export default function App() {
   const [session, setSession] = useState(null)
   const [profile, setProfile] = useState(null)
   const [loading, setLoading] = useState(true)
 
+  async function fetchProfile(userId) {
+    const { data } = await supabase
+      .from('profiles')
+      .select('*, creators(*)')
+      .eq('id', userId)
+      .single()
+    setProfile(data)
+  }
+
   useEffect(() => {
     supabase.auth.getSession().then(async ({ data: { session } }) => {
       setSession(session)
-      if (session) {
-        const { data } = await supabase
-          .from('profiles')
-          .select('*, creators(*)')
-          .eq('id', session.user.id)
-          .single()
-        setProfile(data)
-      }
+      if (session) await fetchProfile(session.user.id)
       setLoading(false)
     })
 
     const { data: { subscription } } = supabase.auth.onAuthStateChange(async (_event, session) => {
       setSession(session)
-      if (session) {
-        const { data } = await supabase
-          .from('profiles')
-          .select('*, creators(*)')
-          .eq('id', session.user.id)
-          .single()
-        setProfile(data)
-      } else {
-        setProfile(null)
-      }
+      if (session) await fetchProfile(session.user.id)
+      else { setProfile(null) }
     })
 
     return () => subscription.unsubscribe()
@@ -45,7 +40,17 @@ export default function App() {
     </div>
   )
 
-  if (!session) return <Auth onAuth={() => {}} />
+  if (!session || !profile) return <Auth onAuth={() => {}} />
 
-  return <StagePass session={session} profile={profile} />
+  if (profile.role === 'creator') return (
+    <CreatorApp session={session} profile={profile} onSignOut={async () => {
+      await supabase.auth.signOut()
+    }} />
+  )
+
+  return (
+    <FanApp session={session} profile={profile} onSignOut={async () => {
+      await supabase.auth.signOut()
+    }} />
+  )
 }
