@@ -53,7 +53,6 @@ exports.handler = async (event) => {
         start_video_off: false,
         enable_chat: true,
         enable_screenshare: true,
-        max_participants: 200,
         exp: expiry,
         eject_at_room_exp: true,
       }
