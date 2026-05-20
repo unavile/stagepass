@@ -25,8 +25,13 @@ export default function CreatorApp({ session, profile, onSignOut }) {
     monthlyPrice: profile.creators?.monthly_price || 5,
   }
 
+ /*
   const monthlyRevenue = subscribers.length * creator.monthlyPrice
   const netRevenue = Math.round(monthlyRevenue * 0.92)
+  */
+  const monthlyRevenue = subscribers.length * creator.monthlyPrice
+  const netRevenue = (monthlyRevenue * 0.92).toFixed(2)
+  const platformFee = (monthlyRevenue * 0.08).toFixed(2)
 
   const TABS = [
     { id: 'overview',     label: 'Overview',     icon: '⬡' },
@@ -188,8 +193,8 @@ export default function CreatorApp({ session, profile, onSignOut }) {
 
               <div style={{ display: 'grid', gridTemplateColumns: 'repeat(3, 1fr)', gap: 10, marginBottom: 24 }}>
                 <StatCard label="Active" value={subscribers.length} accent={creator.accentColor} />
-                <StatCard label="Monthly Gross" value={`$${monthlyRevenue}`} />
-                <StatCard label="Monthly Net" value={`$${netRevenue}`} sub="After 8% fee" />
+                <StatCard label="Gross (Monthly)" value={`$${monthlyRevenue}`} accent={creator.accentColor} />
+                <StatCard label="Net (Monthly)" value={`$${netRevenue}`} sub="After 8% fee" />
               </div>
 
               {subsLoading ? (
@@ -247,13 +252,12 @@ export default function CreatorApp({ session, profile, onSignOut }) {
                 </div>
                 <div style={{ display: 'flex', justifyContent: 'space-between', padding: '10px 0', borderBottom: '1px solid #ffffff08' }}>
                   <span style={{ fontSize: 13, color: '#888' }}>Platform fee (8%)</span>
-                  <span style={{ fontFamily: "'DM Mono', monospace", fontSize: 13, color: '#e84545' }}>-${monthlyRevenue - netRevenue}</span>
+                  <span style={{ fontFamily: "'DM Mono', monospace", fontSize: 13, color: '#e84545' }}>-${platformFee}</span>
                 </div>
                 <div style={{ display: 'flex', justifyContent: 'space-between', padding: '12px 0 0' }}>
                   <span style={{ fontSize: 14, color: '#f0ebe0', fontWeight: 600 }}>Net revenue</span>
                   <span style={{ fontFamily: "'DM Mono', monospace", fontSize: 16, color: creator.accentColor, fontWeight: 700 }}>${netRevenue}</span>
                 </div>
-              </div>
 
               <div style={{ background: '#0e0e0e', border: `1px solid ${creator.accentColor}22`, borderRadius: 10, padding: '16px 20px', display: 'flex', gap: 12, alignItems: 'center' }}>
                 <span style={{ fontSize: 20 }}>💳</span>
