@@ -7,7 +7,6 @@ import { useEvents } from './hooks/useEvents'
 import NewEventModal from './NewEventModal'
 import EditProfileModal from './EditProfileModal'
 
-
 export default function CreatorApp({ session, profile, onSignOut }) {
   const [tab, setTab] = useState('overview')
   const [showUpload, setShowUpload] = useState(false)
@@ -17,7 +16,6 @@ export default function CreatorApp({ session, profile, onSignOut }) {
   const { events, loading: eventsLoading, refetch: refetchEvents } = useEvents(session.user.id)
   const [showNewEvent, setShowNewEvent] = useState(false)
   const [showEditProfile, setShowEditProfile] = useState(false)
-
 
   useEffect(() => {
     const fn = () => setIsMobile(window.innerWidth < 768)
@@ -33,10 +31,6 @@ export default function CreatorApp({ session, profile, onSignOut }) {
     monthlyPrice: profile.creators?.monthly_price || 5,
   }
 
- /*
-  const monthlyRevenue = subscribers.length * creator.monthlyPrice
-  const netRevenue = Math.round(monthlyRevenue * 0.92)
-  */
   const monthlyRevenue = subscribers.length * creator.monthlyPrice
   const netRevenue = (monthlyRevenue * 0.92).toFixed(2)
   const platformFee = (monthlyRevenue * 0.08).toFixed(2)
@@ -96,8 +90,22 @@ export default function CreatorApp({ session, profile, onSignOut }) {
           <div style={{ width: 220, background: '#0a0a0a', borderRight: '1px solid #ffffff0a', padding: '0 0 32px', display: 'flex', flexDirection: 'column', flexShrink: 0 }}>
             <div style={{ padding: '24px 20px 20px', borderBottom: '1px solid #ffffff08', marginBottom: 8 }}>
               <div style={{ fontFamily: "'DM Serif Display', Georgia, serif", fontSize: 20, color: creator.accentColor, marginBottom: 16 }}>StagePass</div>
-              <div style={{ fontSize: 13, color: '#f0ebe0' }}>{creator.name}</div>
-              <div style={{ fontFamily: "'DM Mono', monospace", fontSize: 10, color: creator.accentColor, marginTop: 2 }}>{creator.handle}</div>
+              {/* AVATAR in sidebar */}
+              <div style={{ display: 'flex', alignItems: 'center', gap: 12 }}>
+                <div style={{ width: 40, height: 40, borderRadius: '50%', background: '#161616', border: `2px solid ${creator.accentColor}`, overflow: 'hidden', flexShrink: 0, display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
+                  {profile.avatar_url ? (
+                    <img src={profile.avatar_url} alt={creator.name} style={{ width: '100%', height: '100%', objectFit: 'cover' }} />
+                  ) : (
+                    <span style={{ fontFamily: "'DM Serif Display', Georgia, serif", fontSize: 14, color: creator.accentColor }}>
+                      {creator.name.split(' ').map(n => n[0]).join('').slice(0, 2)}
+                    </span>
+                  )}
+                </div>
+                <div>
+                  <div style={{ fontSize: 13, color: '#f0ebe0' }}>{creator.name}</div>
+                  <div style={{ fontFamily: "'DM Mono', monospace", fontSize: 10, color: creator.accentColor, marginTop: 2 }}>{creator.handle}</div>
+                </div>
+              </div>
             </div>
             {TABS.map(t => (
               <button key={t.id} onClick={() => setTab(t.id)} style={{
@@ -127,10 +135,10 @@ export default function CreatorApp({ session, profile, onSignOut }) {
             <div style={{ padding: p }}>
               <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-end', marginBottom: 4 }}>
                 <div style={{ fontFamily: "'DM Serif Display', Georgia, serif", fontSize: isMobile ? 22 : 28, color: '#f0ebe0' }}>
-                    Welcome, {creator.name.split(' ')[0]}.
+                  Welcome, {creator.name.split(' ')[0]}.
                 </div>
                 <button onClick={() => setShowEditProfile(true)} style={{ background: 'none', color: '#555', border: '1px solid #ffffff10', borderRadius: 6, padding: '6px 14px', fontFamily: "'DM Mono', monospace", fontSize: 11, cursor: 'pointer', letterSpacing: '0.1em', flexShrink: 0 }}>
-                    Edit Profile
+                  Edit Profile
                 </button>
               </div>
               <div style={{ fontFamily: "'DM Mono', monospace", fontSize: 10, color: '#444', letterSpacing: '0.15em', marginBottom: 24 }}>YOUR DASHBOARD</div>
@@ -208,7 +216,7 @@ export default function CreatorApp({ session, profile, onSignOut }) {
 
               <div style={{ display: 'grid', gridTemplateColumns: 'repeat(3, 1fr)', gap: 10, marginBottom: 24 }}>
                 <StatCard label="Active" value={subscribers.length} accent={creator.accentColor} />
-                <StatCard label="Gross (Monthly)" value={`$${monthlyRevenue}`} accent={creator.accentColor} />
+                <StatCard label="Gross (Monthly)" value={`$${monthlyRevenue}`} />
                 <StatCard label="Net (Monthly)" value={`$${netRevenue}`} sub="After 8% fee" />
               </div>
 
@@ -239,136 +247,137 @@ export default function CreatorApp({ session, profile, onSignOut }) {
               )}
             </div>
           )}
+
           {/* EVENTS */}
-        {tab === 'events' && (
-        <div style={{ padding: p }}>
-            <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 20 }}>
-            <div>
-                <div style={{ fontFamily: "'DM Serif Display', Georgia, serif", fontSize: isMobile ? 22 : 28, color: '#f0ebe0' }}>Events</div>
-                <div style={{ fontFamily: "'DM Mono', monospace", fontSize: 10, color: '#444', marginTop: 2 }}>{events.length} SCHEDULED</div>
-            </div>
-            <button onClick={() => setShowNewEvent(true)} style={{ background: creator.accentColor, color: '#080808', border: 'none', borderRadius: 6, padding: '10px 20px', fontFamily: "'DM Mono', monospace", fontSize: 11, fontWeight: 700, cursor: 'pointer', letterSpacing: '0.12em' }}>
-                + New Event
-            </button>
-            </div>
-
-            {eventsLoading ? (
-            <div style={{ color: '#444', fontFamily: "'DM Mono', monospace", fontSize: 12 }}>Loading...</div>
-            ) : events.length === 0 ? (
-            <div style={{ background: '#0e0e0e', border: '1px dashed #ffffff10', borderRadius: 10, padding: '40px', textAlign: 'center' }}>
-                <div style={{ fontSize: 28, marginBottom: 8 }}>◈</div>
-                <div style={{ fontSize: 13, color: '#555', marginBottom: 16 }}>No events scheduled yet.</div>
-                <button onClick={() => setShowNewEvent(true)} style={{ background: creator.accentColor, color: '#080808', border: 'none', borderRadius: 6, padding: '10px 20px', fontFamily: "'DM Mono', monospace", fontSize: 11, fontWeight: 700, cursor: 'pointer', letterSpacing: '0.12em' }}>
-                + SCHEDULE FIRST EVENT
-                </button>
-            </div>
-            ) : (
-            <div style={{ display: 'flex', flexDirection: 'column', gap: 12 }}>
-            {events.map(event => (
-            <div key={event.id} style={{ background: '#0e0e0e', border: `1px solid ${creator.accentColor}22`, borderRadius: 12, padding: isMobile ? '16px' : '20px 24px' }}>
-                <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start', marginBottom: 8 }}>
-                <div>
-                    <div style={{ fontFamily: "'DM Serif Display', Georgia, serif", fontSize: 18, color: '#f0ebe0', marginBottom: 4 }}>{event.name}</div>
-                    <div style={{ fontFamily: "'DM Mono', monospace", fontSize: 20, color: creator.accentColor, fontWeight: 700 }}>
-                    {new Date(event.event_date).toLocaleDateString('en-US', { month: 'short', day: 'numeric', year: 'numeric' })}
-                    </div>
-                </div>
-                <span style={{ background: creator.accentColor + '22', color: creator.accentColor, border: `1px solid ${creator.accentColor}44`, borderRadius: 4, fontSize: 10, fontWeight: 700, padding: '2px 8px', letterSpacing: '0.12em', textTransform: 'uppercase', fontFamily: "'DM Mono', monospace" }}>
-                    {event.event_type === 'virtual' ? '💻 VIRTUAL' : '📍 IN PERSON'}
-                </span>
-                </div>
-
-                {event.description && (
-                <div style={{ fontSize: 13, color: '#666', lineHeight: 1.6, marginBottom: 8 }}>{event.description}</div>
-                )}
-
-                <div style={{ display: 'flex', gap: 16, flexWrap: 'wrap', marginBottom: 12 }}>
-                {event.venue && <div style={{ fontSize: 12, color: '#555' }}>📍 {event.venue}</div>}
-                <div style={{ fontSize: 12, color: '#555' }}>👥 {event.rsvps?.length || 0} RSVPs {event.capacity ? `/ ${event.capacity} capacity` : ''}</div>
-                <div style={{ fontSize: 12, color: event.is_free ? '#6dbf8a' : creator.accentColor }}>{event.is_free ? '✓ Free for subscribers' : 'Ticketed'}</div>
-                </div>
-
-                {/* Attendee list */}
-                {event.rsvps?.length > 0 && (
-                <div style={{ marginTop: 12, paddingTop: 12, borderTop: '1px solid #ffffff08' }}>
-                    <div style={{ fontFamily: "'DM Mono', monospace", fontSize: 10, color: '#444', letterSpacing: '0.15em', marginBottom: 10 }}>ATTENDEES</div>
-                    <div style={{ display: 'flex', flexWrap: 'wrap', gap: 8 }}>
-                    {event.rsvps.map(rsvp => (
-                        <div key={rsvp.id} style={{ display: 'flex', alignItems: 'center', gap: 6, background: '#161616', borderRadius: 6, padding: '6px 10px', border: '1px solid #ffffff08' }}>
-                        <div style={{ width: 22, height: 22, borderRadius: '50%', background: '#222', border: `1px solid ${creator.accentColor}44`, display: 'flex', alignItems: 'center', justifyContent: 'center', fontSize: 10, color: creator.accentColor, fontFamily: "'DM Serif Display', Georgia, serif" }}>
-                            {(rsvp.profiles?.display_name || 'F').split(' ').map(n => n[0]).join('').slice(0, 2)}
-                        </div>
-                        <div>
-                            <div style={{ fontSize: 12, color: '#e8e2d6' }}>{rsvp.profiles?.display_name || 'Fan'}</div>
-                            <div style={{ fontFamily: "'DM Mono', monospace", fontSize: 9, color: '#444' }}>@{rsvp.profiles?.handle || 'fan'}</div>
-                        </div>
-                        </div>
-                    ))}
-        </div>
-      </div>
-    )}
-
-    {event.stream_url && (
-      <div style={{ marginTop: 12 }}>
-        <a href={event.stream_url} target="_blank" rel="noreferrer" style={{ color: creator.accentColor, fontFamily: "'DM Mono', monospace", fontSize: 11, letterSpacing: '0.1em' }}>
-          JOIN STREAM →
-        </a>
-      </div>
-    )}
-  </div>
-                ))}
-            </div>
-            )}
-        </div>
-        )}
-
-            {/* EARNINGS */}
-            {tab === 'earnings' && (
+          {tab === 'events' && (
             <div style={{ padding: p }}>
-                <div style={{ fontFamily: "'DM Serif Display', Georgia, serif", fontSize: isMobile ? 22 : 28, color: '#f0ebe0', marginBottom: 20 }}>Earnings</div>
+              <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 20 }}>
+                <div>
+                  <div style={{ fontFamily: "'DM Serif Display', Georgia, serif", fontSize: isMobile ? 22 : 28, color: '#f0ebe0' }}>Events</div>
+                  <div style={{ fontFamily: "'DM Mono', monospace", fontSize: 10, color: '#444', marginTop: 2 }}>{events.length} SCHEDULED</div>
+                </div>
+                <button onClick={() => setShowNewEvent(true)} style={{ background: creator.accentColor, color: '#080808', border: 'none', borderRadius: 6, padding: '10px 20px', fontFamily: "'DM Mono', monospace", fontSize: 11, fontWeight: 700, cursor: 'pointer', letterSpacing: '0.12em' }}>
+                  + New Event
+                </button>
+              </div>
 
-                <div style={{ display: 'grid', gridTemplateColumns: 'repeat(3, 1fr)', gap: 10, marginBottom: 28 }}>
+              {eventsLoading ? (
+                <div style={{ color: '#444', fontFamily: "'DM Mono', monospace", fontSize: 12 }}>Loading...</div>
+              ) : events.length === 0 ? (
+                <div style={{ background: '#0e0e0e', border: '1px dashed #ffffff10', borderRadius: 10, padding: '40px', textAlign: 'center' }}>
+                  <div style={{ fontSize: 28, marginBottom: 8 }}>◈</div>
+                  <div style={{ fontSize: 13, color: '#555', marginBottom: 16 }}>No events scheduled yet.</div>
+                  <button onClick={() => setShowNewEvent(true)} style={{ background: creator.accentColor, color: '#080808', border: 'none', borderRadius: 6, padding: '10px 20px', fontFamily: "'DM Mono', monospace", fontSize: 11, fontWeight: 700, cursor: 'pointer', letterSpacing: '0.12em' }}>
+                    + SCHEDULE FIRST EVENT
+                  </button>
+                </div>
+              ) : (
+                <div style={{ display: 'flex', flexDirection: 'column', gap: 12 }}>
+                  {events.map(event => (
+                    <div key={event.id} style={{ background: '#0e0e0e', border: `1px solid ${creator.accentColor}22`, borderRadius: 12, padding: isMobile ? '16px' : '20px 24px' }}>
+                      <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start', marginBottom: 8 }}>
+                        <div>
+                          <div style={{ fontFamily: "'DM Serif Display', Georgia, serif", fontSize: 18, color: '#f0ebe0', marginBottom: 4 }}>{event.name}</div>
+                          <div style={{ fontFamily: "'DM Mono', monospace", fontSize: 20, color: creator.accentColor, fontWeight: 700 }}>
+                            {new Date(event.event_date).toLocaleDateString('en-US', { month: 'short', day: 'numeric', year: 'numeric' })}
+                          </div>
+                        </div>
+                        <span style={{ background: creator.accentColor + '22', color: creator.accentColor, border: `1px solid ${creator.accentColor}44`, borderRadius: 4, fontSize: 10, fontWeight: 700, padding: '2px 8px', letterSpacing: '0.12em', textTransform: 'uppercase', fontFamily: "'DM Mono', monospace" }}>
+                          {event.event_type === 'virtual' ? '💻 VIRTUAL' : '📍 IN PERSON'}
+                        </span>
+                      </div>
+
+                      {event.description && (
+                        <div style={{ fontSize: 13, color: '#666', lineHeight: 1.6, marginBottom: 8 }}>{event.description}</div>
+                      )}
+
+                      <div style={{ display: 'flex', gap: 16, flexWrap: 'wrap', marginBottom: 12 }}>
+                        {event.venue && <div style={{ fontSize: 12, color: '#555' }}>📍 {event.venue}</div>}
+                        <div style={{ fontSize: 12, color: '#555' }}>👥 {event.rsvps?.length || 0} RSVPs {event.capacity ? `/ ${event.capacity} capacity` : ''}</div>
+                        <div style={{ fontSize: 12, color: event.is_free ? '#6dbf8a' : creator.accentColor }}>{event.is_free ? '✓ Free for subscribers' : 'Ticketed'}</div>
+                      </div>
+
+                      {/* Attendee list */}
+                      {event.rsvps?.length > 0 && (
+                        <div style={{ marginTop: 12, paddingTop: 12, borderTop: '1px solid #ffffff08' }}>
+                          <div style={{ fontFamily: "'DM Mono', monospace", fontSize: 10, color: '#444', letterSpacing: '0.15em', marginBottom: 10 }}>ATTENDEES</div>
+                          <div style={{ display: 'flex', flexWrap: 'wrap', gap: 8 }}>
+                            {event.rsvps.map(rsvp => (
+                              <div key={rsvp.id} style={{ display: 'flex', alignItems: 'center', gap: 6, background: '#161616', borderRadius: 6, padding: '6px 10px', border: '1px solid #ffffff08' }}>
+                                <div style={{ width: 22, height: 22, borderRadius: '50%', background: '#222', border: `1px solid ${creator.accentColor}44`, display: 'flex', alignItems: 'center', justifyContent: 'center', fontSize: 10, color: creator.accentColor, fontFamily: "'DM Serif Display', Georgia, serif" }}>
+                                  {(rsvp.profiles?.display_name || 'F').split(' ').map(n => n[0]).join('').slice(0, 2)}
+                                </div>
+                                <div>
+                                  <div style={{ fontSize: 12, color: '#e8e2d6' }}>{rsvp.profiles?.display_name || 'Fan'}</div>
+                                  <div style={{ fontFamily: "'DM Mono', monospace", fontSize: 9, color: '#444' }}>@{rsvp.profiles?.handle || 'fan'}</div>
+                                </div>
+                              </div>
+                            ))}
+                          </div>
+                        </div>
+                      )}
+
+                      {event.stream_url && (
+                        <div style={{ marginTop: 12 }}>
+                          <a href={event.stream_url} target="_blank" rel="noreferrer" style={{ color: creator.accentColor, fontFamily: "'DM Mono', monospace", fontSize: 11, letterSpacing: '0.1em' }}>
+                            JOIN STREAM →
+                          </a>
+                        </div>
+                      )}
+                    </div>
+                  ))}
+                </div>
+              )}
+            </div>
+          )}
+
+          {/* EARNINGS */}
+          {tab === 'earnings' && (
+            <div style={{ padding: p }}>
+              <div style={{ fontFamily: "'DM Serif Display', Georgia, serif", fontSize: isMobile ? 22 : 28, color: '#f0ebe0', marginBottom: 20 }}>Earnings</div>
+
+              <div style={{ display: 'grid', gridTemplateColumns: 'repeat(3, 1fr)', gap: 10, marginBottom: 28 }}>
                 <StatCard label="Gross (Monthly)" value={`$${monthlyRevenue}`} accent={creator.accentColor} />
                 <StatCard label="Net (Monthly)" value={`$${netRevenue}`} sub="After 8% fee" />
                 <StatCard label="Active Subs" value={subscribers.length} />
-                </div>
+              </div>
 
-                <div style={{ fontFamily: "'DM Mono', monospace", fontSize: 10, color: '#444', letterSpacing: '0.2em', textTransform: 'uppercase', marginBottom: 12 }}>Subscription Breakdown</div>
-                <div style={{ background: '#0e0e0e', border: '1px solid #ffffff08', borderRadius: 10, padding: isMobile ? '16px' : '24px 32px', marginBottom: 20 }}>
+              <div style={{ fontFamily: "'DM Mono', monospace", fontSize: 10, color: '#444', letterSpacing: '0.2em', textTransform: 'uppercase', marginBottom: 12 }}>Subscription Breakdown</div>
+              <div style={{ background: '#0e0e0e', border: '1px solid #ffffff08', borderRadius: 10, padding: isMobile ? '16px' : '24px 32px', marginBottom: 20 }}>
                 <div style={{ display: 'flex', justifyContent: 'space-between', padding: '10px 0', borderBottom: '1px solid #ffffff08' }}>
-                    <span style={{ fontSize: 13, color: '#888' }}>Subscribers</span>
-                    <span style={{ fontFamily: "'DM Mono', monospace", fontSize: 13, color: '#e8e2d6' }}>{subscribers.length}</span>
+                  <span style={{ fontSize: 13, color: '#888' }}>Subscribers</span>
+                  <span style={{ fontFamily: "'DM Mono', monospace", fontSize: 13, color: '#e8e2d6' }}>{subscribers.length}</span>
                 </div>
                 <div style={{ display: 'flex', justifyContent: 'space-between', padding: '10px 0', borderBottom: '1px solid #ffffff08' }}>
-                    <span style={{ fontSize: 13, color: '#888' }}>Price per subscriber</span>
-                    <span style={{ fontFamily: "'DM Mono', monospace", fontSize: 13, color: '#e8e2d6' }}>${creator.monthlyPrice}/mo</span>
+                  <span style={{ fontSize: 13, color: '#888' }}>Price per subscriber</span>
+                  <span style={{ fontFamily: "'DM Mono', monospace", fontSize: 13, color: '#e8e2d6' }}>${creator.monthlyPrice}/mo</span>
                 </div>
                 <div style={{ display: 'flex', justifyContent: 'space-between', padding: '10px 0', borderBottom: '1px solid #ffffff08' }}>
-                    <span style={{ fontSize: 13, color: '#888' }}>Gross revenue</span>
-                    <span style={{ fontFamily: "'DM Mono', monospace", fontSize: 13, color: '#e8e2d6' }}>${monthlyRevenue}</span>
+                  <span style={{ fontSize: 13, color: '#888' }}>Gross revenue</span>
+                  <span style={{ fontFamily: "'DM Mono', monospace", fontSize: 13, color: '#e8e2d6' }}>${monthlyRevenue}</span>
                 </div>
                 <div style={{ display: 'flex', justifyContent: 'space-between', padding: '10px 0', borderBottom: '1px solid #ffffff08' }}>
-                    <span style={{ fontSize: 13, color: '#888' }}>Platform fee (8%)</span>
-                    <span style={{ fontFamily: "'DM Mono', monospace", fontSize: 13, color: '#e84545' }}>-${platformFee}</span>
+                  <span style={{ fontSize: 13, color: '#888' }}>Platform fee (8%)</span>
+                  <span style={{ fontFamily: "'DM Mono', monospace", fontSize: 13, color: '#e84545' }}>-${platformFee}</span>
                 </div>
                 <div style={{ display: 'flex', justifyContent: 'space-between', padding: '12px 0 0' }}>
-                    <span style={{ fontSize: 14, color: '#f0ebe0', fontWeight: 600 }}>Net revenue</span>
-                    <span style={{ fontFamily: "'DM Mono', monospace", fontSize: 16, color: creator.accentColor, fontWeight: 700 }}>${netRevenue}</span>
+                  <span style={{ fontSize: 14, color: '#f0ebe0', fontWeight: 600 }}>Net revenue</span>
+                  <span style={{ fontFamily: "'DM Mono', monospace", fontSize: 16, color: creator.accentColor, fontWeight: 700 }}>${netRevenue}</span>
                 </div>
-                </div>
+              </div>
 
-                <div style={{ background: '#0e0e0e', border: `1px solid ${creator.accentColor}22`, borderRadius: 10, padding: '16px 20px', display: 'flex', gap: 12, alignItems: 'center' }}>
+              <div style={{ background: '#0e0e0e', border: `1px solid ${creator.accentColor}22`, borderRadius: 10, padding: '16px 20px', display: 'flex', gap: 12, alignItems: 'center' }}>
                 <span style={{ fontSize: 20 }}>💳</span>
                 <div>
-                    <div style={{ fontSize: 13, color: '#e8e2d6', marginBottom: 2 }}>Stripe payouts</div>
-                    <div style={{ fontSize: 12, color: '#555' }}>Connect your Stripe account to receive payouts directly to your bank.</div>
+                  <div style={{ fontSize: 13, color: '#e8e2d6', marginBottom: 2 }}>Stripe payouts</div>
+                  <div style={{ fontSize: 12, color: '#555' }}>Connect your Stripe account to receive payouts directly to your bank.</div>
                 </div>
                 <button style={{ marginLeft: 'auto', background: creator.accentColor, color: '#080808', border: 'none', borderRadius: 6, padding: '8px 16px', fontFamily: "'DM Mono', monospace", fontSize: 11, fontWeight: 700, cursor: 'pointer', flexShrink: 0, letterSpacing: '0.1em' }}>
-                    CONNECT
+                  CONNECT
                 </button>
-                </div>
+              </div>
             </div>
-            )}
+          )}
         </div>
       </div>
 
@@ -402,22 +411,21 @@ export default function CreatorApp({ session, profile, onSignOut }) {
 
       {showNewEvent && (
         <NewEventModal
-            creatorId={creator.id}
-            accentColor={creator.accentColor}
-            onClose={() => setShowNewEvent(false)}
-            onEventCreated={refetchEvents}
+          creatorId={creator.id}
+          accentColor={creator.accentColor}
+          onClose={() => setShowNewEvent(false)}
+          onEventCreated={refetchEvents}
         />
       )}
 
       {showEditProfile && (
         <EditProfileModal
-            profile={profile}
-            creator={creator}
-            onClose={() => setShowEditProfile(false)}
-            onSaved={() => window.location.reload()}
+          profile={profile}
+          creator={creator}
+          onClose={() => setShowEditProfile(false)}
+          onSaved={() => window.location.reload()}
         />
       )}
-      
     </div>
   )
 }
