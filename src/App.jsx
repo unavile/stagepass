@@ -9,14 +9,23 @@ export default function App() {
   const [profile, setProfile] = useState(null)
   const [loading, setLoading] = useState(true)
 
-  async function fetchProfile(userId) {
-    const { data } = await supabase
-      .from('profiles')
-      .select('*, creators(*)')
-      .eq('id', userId)
-      .single()
+async function fetchProfile(userId) {
+  const { data, error } = await supabase
+    .from('profiles')
+    .select('*, creators(*)')
+    .eq('id', userId)
+    .single()
+
+  if (error || !data) {
+    // Profile missing — sign out and return to login
+    await supabase.auth.signOut()
+    setSession(null)
+    setProfile(null)
+  } else {
     setProfile(data)
   }
+  setLoading(false)
+}
 
   useEffect(() => {
     supabase.auth.getSession().then(async ({ data: { session } }) => {
