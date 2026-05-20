@@ -10,10 +10,12 @@
     "preview": "vite preview"
   },
   "dependencies": {
+    "@stripe/stripe-js": "^9.6.0",
     "@supabase/supabase-js": "^2.106.0",
     "react": "^19.2.6",
     "react-dom": "^19.2.6",
-    "react-dropzone": "^15.0.0"
+    "react-dropzone": "^15.0.0",
+    "react-router-dom": "^7.15.1"
   },
   "devDependencies": {
     "@eslint/js": "^10.0.1",
@@ -24,6 +26,7 @@
     "eslint-plugin-react-hooks": "^7.1.1",
     "eslint-plugin-react-refresh": "^0.5.2",
     "globals": "^17.6.0",
+    "netlify-cli": "^26.0.2",
     "vite": "^8.0.12"
   }
 }
