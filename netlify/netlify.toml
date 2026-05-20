@@ -1,27 +1,8 @@
-plugins = []
-headers = []
-redirects = []
-
-[functions]
-
-[functions."*"]
-
 [build]
-publish = "C:\\Users\\udayn\\OneDrive\\Documents\\Important Docs\\Stage pass\\stagepass-demo\\dist"
-publishOrigin = "ui"
-commandOrigin = "ui"
-command = "npm run build"
+  command = "npm run build"
+  publish = "dist"
 
-[build.environment]
-
-[build.processing]
-
-[build.processing.css]
-
-[build.processing.html]
-
-[build.processing.images]
-
-[build.processing.js]
-
-[build.services]
+[[redirects]]
+  from = "/*"
+  to = "/index.html"
+  status = 200
