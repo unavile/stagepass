@@ -23,6 +23,7 @@ export default function FanApp({ session, profile, onSignOut }) {
   const [posts, setPosts] = useState([])
   const [subscribed, setSubscribed] = useState(false)
   const [loading, setLoading] = useState(true)
+  const [subscribeLoading, setSubscribeLoading] = useState(false)
 
   useEffect(() => {
     supabase
