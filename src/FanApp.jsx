@@ -1,21 +1,5 @@
-const [subscribeLoading, setSubscribeLoading] = useState(false)
 import { useState, useEffect } from 'react'
 import { supabase } from './supabaseClient'
-
-<button
-  onClick={handleSubscribe}
-  disabled={subscribeLoading}
-  style={{
-    background: accent, color: '#080808', border: 'none',
-    borderRadius: 8, padding: '12px 24px',
-    fontFamily: "'DM Mono', monospace", fontSize: 12,
-    fontWeight: 700, letterSpacing: '0.12em',
-    cursor: subscribeLoading ? 'not-allowed' : 'pointer',
-    opacity: subscribeLoading ? 0.7 : 1
-  }}
->
-  {subscribeLoading ? 'Redirecting...' : `Subscribe · $${selected.monthly_price}/mo`}
-</button>
 
 export default function FanApp({ session, profile, onSignOut }) {
   const [creators, setCreators] = useState([])
@@ -42,31 +26,33 @@ export default function FanApp({ session, profile, onSignOut }) {
     setSubscribed(!!subData)
   }
 
-async function handleSubscribe() {
-  setSubscribeLoading(true)
-  try {
-    const res = await fetch('/.netlify/functions/create-checkout', {
-      method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({
-        creatorId: selected.id,
-        creatorName: selected.profiles?.display_name,
-        monthlyPrice: selected.monthly_price,
-        fanId: session.user.id,
-        fanEmail: session.user.email,
+  async function handleSubscribe() {
+    setSubscribeLoading(true)
+    try {
+      const res = await fetch('/.netlify/functions/create-checkout', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          creatorId: selected.id,
+          creatorName: selected.profiles?.display_name,
+          monthlyPrice: selected.monthly_price,
+          fanId: session.user.id,
+          fanEmail: session.user.email,
+        })
       })
-    })
-    const { url, error } = await res.json()
-    if (error) throw new Error(error)
-    window.location.href = url // redirect to Stripe Checkout
-  } catch (err) {
-    console.error('Checkout error:', err)
+      const { url, error } = await res.json()
+      if (error) throw new Error(error)
+      window.location.href = url
+    } catch (err) {
+      console.error('Checkout error:', err)
+    }
+    setSubscribeLoading(false)
   }
-  setSubscribeLoading(false)
-}
 
   async function handleUnsubscribe() {
-    await supabase.from('subscriptions').update({ status: 'cancelled' }).eq('fan_id', session.user.id).eq('creator_id', selected.id)
+    await supabase.from('subscriptions').update({ status: 'cancelled' })
+      .eq('fan_id', session.user.id)
+      .eq('creator_id', selected.id)
     setSubscribed(false)
   }
 
@@ -104,7 +90,8 @@ async function handleSubscribe() {
           ) : (
             <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fill, minmax(280px, 1fr))', gap: 20 }}>
               {creators.map(c => (
-                <div key={c.id} onClick={() => selectCreator(c)} style={{ background: '#0e0e0e', border: '1px solid #ffffff10', borderRadius: 12, padding: '24px', cursor: 'pointer', transition: 'border-color 0.15s' }}
+                <div key={c.id} onClick={() => selectCreator(c)}
+                  style={{ background: '#0e0e0e', border: '1px solid #ffffff10', borderRadius: 12, padding: '24px', cursor: 'pointer', transition: 'border-color 0.15s' }}
                   onMouseEnter={e => e.currentTarget.style.borderColor = accent + '55'}
                   onMouseLeave={e => e.currentTarget.style.borderColor = '#ffffff10'}
                 >
@@ -138,8 +125,19 @@ async function handleSubscribe() {
                   <button onClick={handleUnsubscribe} style={{ background: 'none', border: '1px solid #ffffff10', borderRadius: 6, padding: '6px 14px', color: '#555', fontFamily: "'DM Mono', monospace", fontSize: 11, cursor: 'pointer' }}>Cancel</button>
                 </div>
               ) : (
-                <button onClick={handleSubscribe} style={{ background: accent, color: '#080808', border: 'none', borderRadius: 8, padding: '12px 24px', fontFamily: "'DM Mono', monospace", fontSize: 12, fontWeight: 700, letterSpacing: '0.12em', cursor: 'pointer' }}>
-                  Subscribe · ${selected.monthly_price}/mo
+                <button
+                  onClick={handleSubscribe}
+                  disabled={subscribeLoading}
+                  style={{
+                    background: accent, color: '#080808', border: 'none',
+                    borderRadius: 8, padding: '12px 24px',
+                    fontFamily: "'DM Mono', monospace", fontSize: 12,
+                    fontWeight: 700, letterSpacing: '0.12em',
+                    cursor: subscribeLoading ? 'not-allowed' : 'pointer',
+                    opacity: subscribeLoading ? 0.7 : 1
+                  }}
+                >
+                  {subscribeLoading ? 'Redirecting...' : `Subscribe · $${selected.monthly_price}/mo`}
                 </button>
               )}
             </div>
