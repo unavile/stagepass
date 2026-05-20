@@ -27,21 +27,30 @@ async function fetchProfile(userId) {
   setLoading(false)
 }
 
-  useEffect(() => {
-    supabase.auth.getSession().then(async ({ data: { session } }) => {
-      setSession(session)
-      if (session) await fetchProfile(session.user.id)
+useEffect(() => {
+  console.log('App mounted, checking session...')
+  
+  supabase.auth.getSession().then(async ({ data: { session }, error }) => {
+    console.log('Session result:', session, 'Error:', error)
+    
+    if (session) {
+      console.log('Session found, fetching profile for:', session.user.id)
+      await fetchProfile(session.user.id)
+    } else {
+      console.log('No session found, going to login')
       setLoading(false)
-    })
+    }
+  })
 
-    const { data: { subscription } } = supabase.auth.onAuthStateChange(async (_event, session) => {
-      setSession(session)
-      if (session) await fetchProfile(session.user.id)
-      else { setProfile(null) }
-    })
+  const { data: { subscription } } = supabase.auth.onAuthStateChange(async (_event, session) => {
+    console.log('Auth state changed:', _event, session?.user?.id)
+    setSession(session)
+    if (session) await fetchProfile(session.user.id)
+    else { setProfile(null); setLoading(false) }
+  })
 
-    return () => subscription.unsubscribe()
-  }, [])
+  return () => subscription.unsubscribe()
+}, [])
 
   if (loading) return (
     <div style={{ minHeight: '100vh', background: '#080808', display: 'flex', alignItems: 'center', justifyContent: 'center', fontFamily: "'DM Mono', monospace", color: '#444', letterSpacing: '0.2em' }}>
