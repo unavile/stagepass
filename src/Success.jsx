@@ -1,9 +1,4 @@
-import { useEffect } from 'react'
-import { useSearchParams } from 'react-router-dom'
-
 export default function Success() {
-  const [params] = useSearchParams()
-
   return (
     <div style={{
       minHeight: '100vh', background: '#080808',
