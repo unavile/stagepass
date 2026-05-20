@@ -14,14 +14,20 @@ useEffect(() => {
     console.log('Auth event:', event, session?.user?.id ?? 'none')
 
     if (event === 'INITIAL_SESSION') {
+      // Always trust the initial session check on page load
       setSession(session ?? null)
+    } else if (event === 'SIGNED_IN') {
+      // Only trust SIGNED_IN if INITIAL_SESSION gave us nothing (fresh login)
+      setSession(prev => {
+        if (prev === undefined || prev === null) return session
+        return prev // already have a session from INITIAL_SESSION, ignore
+      })
     } else if (event === 'SIGNED_OUT') {
       setSession(null)
       setProfile(null)
     } else if (event === 'TOKEN_REFRESHED') {
       setSession(session ?? null)
     }
-    // Deliberately ignore SIGNED_IN on page load — INITIAL_SESSION handles it
   })
   return () => subscription.unsubscribe()
 }, [])
