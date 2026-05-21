@@ -22,7 +22,6 @@ const TEXT3   = '#8c8883'
 
 // Background images
 // const IMG_STUDIO = 'https://images.unsplash.com/photo-1598488035139-bdbb2231ce04?w=1920&q=80'
-const IMG_STUDIO = 'images/Creator_bg.jpg'
 
 
 const card = (extra = {}) => ({
