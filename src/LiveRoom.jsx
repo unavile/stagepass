@@ -56,12 +56,12 @@ export default function LiveRoom({ event, profile, isCreator, onLeave }) {
           showFullscreenButton: true,
           theme: {
             colors: {
-              accent: ACCENT,
+              accent: '#c9a84c',
               accentText: '#080808',
               background: '#0e0e0e',
               backgroundAccent: '#161616',
               baseText: '#f4f0e8',
-              border: 'rgba(255,255,255,0.08)',
+              border: '#2a2a2a',
               mainAreaBg: '#09090b',
               mainAreaBgAccent: '#111114',
               mainAreaText: '#f4f0e8',
