@@ -54,7 +54,7 @@ exports.handler = async (event) => {
         enable_chat: true,
         enable_screenshare: true,
         exp: expiry,
-        eject_at_room_exp: true,
+        // eject_at_room_exp: true,
       }
     })
 

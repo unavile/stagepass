@@ -96,9 +96,18 @@ export default function LiveRoom({ event, profile, isCreator, onLeave }) {
 
         // Fallback: if joined-meeting never fires, detect join via local participant tracks becoming playable
         frame.on('participant-updated', (e) => {
-          if (e.participant?.local && e.participant?.tracks?.video?.state === 'playable') {
-            console.log('Daily: local tracks playable, marking as joined')
-            setJoining(false)
+          if (e.participant?.local) {
+            const tracks = e.participant.tracks
+            const videoPlayable = tracks?.video?.state === 'playable'
+            const audioPlayable = tracks?.audio?.state === 'playable'
+            const videoOff = tracks?.video?.state === 'off'
+            const audioOff = tracks?.audio?.state === 'off'
+
+            // Join is confirmed when tracks are either playable or deliberately off
+            if ((videoPlayable || videoOff) && (audioPlayable || audioOff)) {
+              console.log('Daily: tracks settled, marking as joined')
+              setJoining(false)
+            }
           }
         })
 
