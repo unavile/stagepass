@@ -22,7 +22,13 @@ export default function LiveRoom({ event, profile, isCreator, onLeave }) {
 
     async function join() {
       try {
-        // Get meeting token
+        // Small delay to ensure container div is fully painted
+        await new Promise(r => setTimeout(r, 100))
+
+        if (!containerRef.current) {
+          throw new Error('Video container not found')
+        }
+
         const tokenRes = await fetch('/.netlify/functions/create-daily-token', {
           method: 'POST',
           headers: { 'Content-Type': 'application/json' },
@@ -35,14 +41,13 @@ export default function LiveRoom({ event, profile, isCreator, onLeave }) {
 
         const tokenData = await tokenRes.json()
         if (tokenData.error) throw new Error(tokenData.error)
+        console.log('Token received, creating frame...')
 
-        // Destroy any existing frame first
         if (frameRef.current) {
           frameRef.current.destroy()
           frameRef.current = null
         }
 
-        // Create Daily iframe attached to the ref'd div
         frame = DailyIframe.createFrame(containerRef.current, {
           iframeStyle: {
             position: 'absolute',
@@ -71,48 +76,38 @@ export default function LiveRoom({ event, profile, isCreator, onLeave }) {
         })
 
         frameRef.current = frame
+        console.log('Frame created, attaching listeners...')
 
-        // Event listeners
-        frame.on('joined-meeting', (e) => {
-          console.log('Daily: joined-meeting', e)
-          setJoining(false)
+        // Log every Daily event to find where it stalls
+        const allEvents = [
+          'joining-meeting', 'joined-meeting', 'left-meeting',
+          'participant-joined', 'participant-updated', 'participant-left',
+          'camera-error', 'error', 'network-connection',
+          'loading', 'loaded', 'started-camera', 'access-state-updated'
+        ]
+        allEvents.forEach(evt => {
+          frame.on(evt, (e) => console.log(`Daily event [${evt}]:`, JSON.stringify(e)))
         })
 
-        frame.on('participant-counts-updated', (e) => {
-          setParticipants(e.participants?.present || 0)
-        })
-
-        frame.on('left-meeting', () => {
-          console.log('Daily: left-meeting')
-          onLeave()
-        })
-
+        frame.on('joined-meeting', () => setJoining(false))
+        frame.on('participant-counts-updated', (e) => setParticipants(e.participants?.present || 0))
+        frame.on('left-meeting', () => onLeave())
         frame.on('error', (e) => {
-          console.error('Daily error:', e)
-          setError(e.errorMsg || e.error?.message || 'Failed to connect to live room')
+          setError(e.errorMsg || e.error?.message || 'Failed to connect')
           setJoining(false)
         })
 
-        frame.on('camera-error', (e) => {
-          console.error('Daily camera error:', e)
-          // Camera error doesn't stop joining — audio only is fine
-        })
-
-        // Join the room
         const dailyDomain = import.meta.env.VITE_DAILY_DOMAIN
-        if (!dailyDomain) {
-          throw new Error('VITE_DAILY_DOMAIN is not set. Check your environment variables.')
-        }
+        if (!dailyDomain) throw new Error('VITE_DAILY_DOMAIN is not set')
 
-        console.log('Daily: joining room', event.daily_room_name, 'on domain', dailyDomain)
-
+        console.log('Joining room...')
         await frame.join({
           url: `https://${dailyDomain}/${event.daily_room_name}`,
           token: tokenData.token,
-          // Start with video/audio based on role
           startVideoOff: false,
           startAudioOff: !isCreator,
         })
+        console.log('frame.join() resolved')
 
       } catch (err) {
         console.error('LiveRoom join error:', err)
