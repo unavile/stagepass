@@ -89,8 +89,23 @@ export default function LiveRoom({ event, profile, isCreator, onLeave }) {
           frame.on(evt, (e) => console.log(`Daily event [${evt}]:`, JSON.stringify(e)))
         })
 
-        frame.on('joined-meeting', () => setJoining(false))
-        frame.on('participant-counts-updated', (e) => setParticipants(e.participants?.present || 0))
+        frame.on('joined-meeting', () => {
+          console.log('Daily: joined-meeting fired')
+          setJoining(false)
+        })
+
+        // Fallback: if joined-meeting never fires, detect join via local participant tracks becoming playable
+        frame.on('participant-updated', (e) => {
+          if (e.participant?.local && e.participant?.tracks?.video?.state === 'playable') {
+            console.log('Daily: local tracks playable, marking as joined')
+            setJoining(false)
+          }
+        })
+
+        frame.on('participant-counts-updated', (e) => {
+          setParticipants(e.participants?.present || 0)
+        })
+
         frame.on('left-meeting', () => onLeave())
         frame.on('error', (e) => {
           setError(e.errorMsg || e.error?.message || 'Failed to connect')
