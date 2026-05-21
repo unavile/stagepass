@@ -16,11 +16,13 @@ const BORDER  = 'rgba(255,255,255,0.08)'
 const BORDER2 = 'rgba(255,255,255,0.04)'
 const TEXT1   = '#f4f0e8'
 const TEXT2   = '#9a9690'
-const TEXT3   = '#555250'
+const TEXT3   = '#8c8883'
+
+// const TEXT3   = '#555250'
 
 // Background images
-const IMG_STUDIO = 'https://images.unsplash.com/photo-1598488035139-bdbb2231ce04?w=1920&q=80'
-// const IMG_STUDIO = 'images/Creator_bg.jpg'
+// const IMG_STUDIO = 'https://images.unsplash.com/photo-1598488035139-bdbb2231ce04?w=1920&q=80'
+const IMG_STUDIO = 'images/Creator_bg.jpg'
 
 
 const card = (extra = {}) => ({

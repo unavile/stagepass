@@ -12,7 +12,8 @@ const BORDER  = 'rgba(255,255,255,0.08)'
 const BORDER2 = 'rgba(255,255,255,0.04)'
 const TEXT1   = '#f4f0e8'
 const TEXT2   = '#9a9690'
-const TEXT3   = '#555250'
+// const TEXT3   = '#555250'
+const TEXT3   = '#8c8883'
 const ACCENT  = '#c9a84c'
 
 // Background images
