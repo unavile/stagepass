@@ -10,3 +10,5 @@ console.log('Supabase Key length:', supabaseAnonKey?.length)
 */
 
 export const supabase = createClient(supabaseUrl, supabaseAnonKey)
+
+window.__supabase = supabase
