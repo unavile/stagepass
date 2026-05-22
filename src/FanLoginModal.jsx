@@ -7,8 +7,62 @@ const TEXT2   = '#9a9690'
 const TEXT3   = '#8c8883'
 const BORDER  = 'rgba(255,255,255,0.08)'
 
+// Use native fetch for auth calls to avoid Supabase JS client hang on Netlify
+async function nativeSignIn(email, password) {
+  const url = `${import.meta.env.VITE_SUPABASE_URL}/auth/v1/token?grant_type=password`
+  const res = await fetch(url, {
+    method: 'POST',
+    headers: {
+      'Content-Type': 'application/json',
+      'apikey': import.meta.env.VITE_SUPABASE_ANON_KEY,
+    },
+    body: JSON.stringify({ email, password }),
+  })
+  const data = await res.json()
+  if (data.error || data.error_description) {
+    throw new Error(data.error_description || data.error || 'Sign in failed')
+  }
+  return data
+}
+
+async function nativeSignUp(email, password, metadata) {
+  const url = `${import.meta.env.VITE_SUPABASE_URL}/auth/v1/signup`
+  const res = await fetch(url, {
+    method: 'POST',
+    headers: {
+      'Content-Type': 'application/json',
+      'apikey': import.meta.env.VITE_SUPABASE_ANON_KEY,
+    },
+    body: JSON.stringify({ email, password, data: metadata }),
+  })
+  const data = await res.json()
+  if (data.error || data.error_description) {
+    throw new Error(data.error_description || data.error || 'Sign up failed')
+  }
+  return data
+}
+
+async function nativeResetPassword(email) {
+  const url = `${import.meta.env.VITE_SUPABASE_URL}/auth/v1/recover`
+  const res = await fetch(url, {
+    method: 'POST',
+    headers: {
+      'Content-Type': 'application/json',
+      'apikey': import.meta.env.VITE_SUPABASE_ANON_KEY,
+    },
+    body: JSON.stringify({
+      email,
+      gotrue_meta_security: {},
+    }),
+  })
+  if (!res.ok) {
+    const data = await res.json()
+    throw new Error(data.error_description || data.error || 'Reset failed')
+  }
+}
+
 export default function FanLoginModal({ onSuccess, onClose, initialMessage }) {
-  const [mode, setMode] = useState('login') // 'login' | 'signup' | 'forgot'
+  const [mode, setMode] = useState('login')
   const [email, setEmail] = useState('')
   const [password, setPassword] = useState('')
   const [displayName, setDisplayName] = useState('')
@@ -35,60 +89,74 @@ export default function FanLoginModal({ onSuccess, onClose, initialMessage }) {
     setError(null)
     setMessage(null)
 
-    if (mode === 'forgot') {
-      const { error } = await supabase.auth.resetPasswordForEmail(email, {
-        redirectTo: 'https://myaudience.netlify.app/reset-password',
-      })
-      if (error) setError(error.message)
-      else setMessage('Check your email for a reset link.')
-      setLoading(false)
-      return
-    }
-
-    if (mode === 'signup') {
-      if (!displayName.trim()) { setError('Please enter your name.'); setLoading(false); return }
-      if (!email.trim()) { setError('Please enter your email.'); setLoading(false); return }
-      if (password.length < 6) { setError('Password must be at least 6 characters.'); setLoading(false); return }
-
-      // Generate a handle from display name
-      const handle = displayName.toLowerCase().replace(/\s+/g, '_').replace(/[^a-z0-9_]/g, '') + '_' + Math.random().toString(36).slice(2, 6)
-
-      const { data, error: signUpError } = await supabase.auth.signUp({
-        email,
-        password,
-        options: {
-          data: { display_name: displayName.trim(), handle, role: 'fan' }
-        }
-      })
-      if (signUpError) { setError(signUpError.message); setLoading(false); return }
-
-      if (data?.user?.id) {
-        const { error: profileError } = await supabase
-          .from('profiles')
-          .insert({ id: data.user.id, role: 'fan', display_name: displayName.trim(), handle })
-        if (profileError && profileError.code !== '23505') {
-          setError(profileError.message); setLoading(false); return
-        }
-      }
-      // Sign in immediately after signup
-      const { error: loginError } = await supabase.auth.signInWithPassword({ email, password })
-      if (loginError) {
-        setMessage('Account created! Please sign in.')
-        setMode('login')
+    try {
+      // ── Forgot password ────────────────────────────────────────────────
+      if (mode === 'forgot') {
+        await nativeResetPassword(email.trim())
+        setMessage('Check your email for a reset link.')
         setLoading(false)
         return
       }
+
+      // ── Sign up ────────────────────────────────────────────────────────
+      if (mode === 'signup') {
+        if (!displayName.trim()) { setError('Please enter your name.'); setLoading(false); return }
+        if (!email.trim()) { setError('Please enter your email.'); setLoading(false); return }
+        if (password.length < 6) { setError('Password must be at least 6 characters.'); setLoading(false); return }
+
+        const handle = displayName.toLowerCase().replace(/\s+/g, '_').replace(/[^a-z0-9_]/g, '') + '_' + Math.random().toString(36).slice(2, 6)
+
+        const signUpData = await nativeSignUp(email.trim(), password, {
+          display_name: displayName.trim(),
+          handle,
+          role: 'fan',
+        })
+
+        if (signUpData.access_token) {
+          // Email confirmation OFF — signed in immediately
+          await supabase.auth.setSession({
+            access_token: signUpData.access_token,
+            refresh_token: signUpData.refresh_token,
+          })
+          onSuccess()
+        } else {
+          // Email confirmation ON — ask them to confirm then sign in
+          setEmail(email.trim())
+          setPassword('')
+          setMode('login')
+          setMessage('Account created! Check your email to confirm, then sign in below.')
+        }
+        setLoading(false)
+        return
+      }
+
+      // ── Sign in ────────────────────────────────────────────────────────
+      const signInData = await nativeSignIn(email.trim(), password)
+      await supabase.auth.setSession({
+        access_token: signInData.access_token,
+        refresh_token: signInData.refresh_token,
+      })
       onSuccess()
-    } else {
-      const { error: loginError } = await supabase.auth.signInWithPassword({ email, password })
-      if (loginError) { setError(loginError.message); setLoading(false); return }
-      onSuccess()
+
+    } catch (err) {
+      // Make error messages friendlier
+      const msg = err.message.toLowerCase()
+      if (msg.includes('invalid login') || msg.includes('invalid credentials')) {
+        setError('Incorrect email or password.')
+      } else if (msg.includes('email not confirmed')) {
+        setError('Please confirm your email address before signing in. Check your inbox.')
+      } else if (msg.includes('already registered') || msg.includes('already exists')) {
+        setError('An account with this email already exists.')
+        setMode('login')
+      } else {
+        setError(err.message)
+      }
     }
+
     setLoading(false)
   }
 
   return (
-    // Faux overlay — normal flow div so iframe renders correctly
     <div style={{
       position: 'fixed', inset: 0, zIndex: 500,
       background: 'rgba(0,0,0,0.72)',
@@ -149,7 +217,8 @@ export default function FanLoginModal({ onSuccess, onClose, initialMessage }) {
         ) : (
           <>
             <input style={input} placeholder="Email" type="email" value={email} onChange={e => setEmail(e.target.value)} />
-            <input style={input} placeholder="Password" type="password" value={password} onChange={e => setPassword(e.target.value)} />
+            <input style={input} placeholder="Password" type="password" value={password} onChange={e => setPassword(e.target.value)}
+              onKeyDown={e => e.key === 'Enter' && handleSubmit()} />
           </>
         )}
 
