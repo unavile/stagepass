@@ -127,19 +127,46 @@ export default function FanApp() {
 
   // ── Check for existing fan session on mount ──────────────────────────────
   useEffect(() => {
-    supabase.auth.getSession().then(async ({ data: { session } }) => {
-      if (session) {
-        setFanSession(session)
-        const { data } = await supabase.from('profiles').select('*').eq('id', session.user.id).maybeSingle()
-        if (data) setFanProfile(data)
+    // Read session directly from localStorage — bypasses Supabase JS hang
+    async function loadSession() {
+      const projectRef = import.meta.env.VITE_SUPABASE_URL.split('//')[1].split('.')[0]
+      const storageKey = `sb-${projectRef}-auth-token`
+      const stored = localStorage.getItem(storageKey)
+      if (stored) {
+        try {
+          const tokenData = JSON.parse(stored)
+          if (tokenData?.user?.id) {
+            // Fetch profile using native fetch with the stored access token
+            const url = `${import.meta.env.VITE_SUPABASE_URL}/rest/v1/profiles?select=*&id=eq.${tokenData.user.id}&limit=1`
+            const res = await fetch(url, {
+              headers: {
+                'apikey': import.meta.env.VITE_SUPABASE_ANON_KEY,
+                'Authorization': `Bearer ${tokenData.access_token}`,
+              }
+            })
+            const profiles = await res.json()
+            setFanSession({ user: tokenData.user, access_token: tokenData.access_token })
+            if (profiles?.[0]) setFanProfile(profiles[0])
+          }
+        } catch (e) {
+          console.error('Session parse error:', e)
+        }
       }
-    })
+    }
+    loadSession()
 
     const { data: { subscription } } = supabase.auth.onAuthStateChange(async (event, session) => {
       if (event === 'SIGNED_IN' && session) {
         setFanSession(session)
-        const { data } = await supabase.from('profiles').select('*').eq('id', session.user.id).maybeSingle()
-        if (data) setFanProfile(data)
+        const url = `${import.meta.env.VITE_SUPABASE_URL}/rest/v1/profiles?select=*&id=eq.${session.user.id}&limit=1`
+        const res = await fetch(url, {
+          headers: {
+            'apikey': import.meta.env.VITE_SUPABASE_ANON_KEY,
+            'Authorization': `Bearer ${session.access_token}`,
+          }
+        })
+        const profiles = await res.json()
+        if (profiles?.[0]) setFanProfile(profiles[0])
       }
       if (event === 'SIGNED_OUT') {
         setFanSession(null)
@@ -184,15 +211,19 @@ export default function FanApp() {
       })
   }, [])
 
-  // ── Load subscriptions when fan logs in ──────────────────────────────────
+  // ── Load subscriptions when fan logs in ─────────────────────────────────
   useEffect(() => {
     if (!fanSession) { setSubscribedIds(new Set()); return }
-    supabase
-      .from('subscriptions')
-      .select('creator_id')
-      .eq('fan_id', fanSession.user.id)
-      .eq('status', 'active')
-      .then(({ data }) => setSubscribedIds(new Set((data || []).map(s => s.creator_id))))
+    const url = `${import.meta.env.VITE_SUPABASE_URL}/rest/v1/subscriptions?select=creator_id&fan_id=eq.${fanSession.user.id}&status=eq.active`
+    fetch(url, {
+      headers: {
+        'apikey': import.meta.env.VITE_SUPABASE_ANON_KEY,
+        'Authorization': `Bearer ${fanSession.access_token}`,
+      }
+    })
+      .then(r => r.json())
+      .then(data => setSubscribedIds(new Set((Array.isArray(data) ? data : []).map(s => s.creator_id))))
+      .catch(() => setSubscribedIds(new Set()))
   }, [fanSession])
 
   // ── Select a creator to view their page ─────────────────────────────────
