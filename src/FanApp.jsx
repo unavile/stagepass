@@ -80,7 +80,6 @@ function Avatar({ c, size = 50 }) {
   )
 }
 
-// ─── Bottom nav tabs ─────────────────────────────────────────────────────────
 const TABS = [
   { id: 'search',   icon: '⊕', label: 'Discover' },
   { id: 'artists',  icon: '♪',  label: 'Artists'  },
@@ -88,41 +87,45 @@ const TABS = [
   { id: 'profile',  icon: '◉',  label: 'Me'       },
 ]
 
-// ─── Main component ──────────────────────────────────────────────────────────
+const CATEGORIES = ['All', 'Music', 'Dance', 'Comedy']
+const typeLabels = { video: 'VIDEO', audio: 'AUDIO', event: 'EVENT', text: 'JOURNAL' }
+
+// ─── Main component (no props required — public page) ────────────────────────
 export default function FanApp() {
-  // Optional fan session (not required to browse)
+  // Optional fan session — fans can browse without logging in
   const [fanSession, setFanSession] = useState(null)
   const [fanProfile, setFanProfile] = useState(null)
-  const [sessionChecked, setSessionChecked] = useState(false)
-
-  const [showLoginModal, setShowLoginModal] = useState(false)
-  const [loginModalMessage, setLoginModalMessage] = useState('')
 
   // Navigation
   const [activeTab, setActiveTab] = useState('search')
   const [selected, setSelected] = useState(null)
 
-  // Data
+  // Creator data
   const [allCreators, setAllCreators] = useState([])
   const [subscribedIds, setSubscribedIds] = useState(new Set())
   const [creatorLoading, setCreatorLoading] = useState(true)
+
+  // Creator page state
   const [posts, setPosts] = useState([])
   const [subscribed, setSubscribed] = useState(false)
   const [subscribeLoading, setSubscribeLoading] = useState(false)
   const [eventRsvps, setEventRsvps] = useState({})
-  const [liveEvent, setLiveEvent] = useState(null)
 
   // Search / filter
   const [searchQuery, setSearchQuery] = useState('')
   const [searchCategory, setSearchCategory] = useState('All')
 
-  const CATEGORIES = ['All', 'Music', 'Dance', 'Comedy']
-  const typeLabels = { video: 'VIDEO', audio: 'AUDIO', event: 'EVENT', text: 'JOURNAL' }
+  // Login modal
+  const [showLoginModal, setShowLoginModal] = useState(false)
+  const [loginModalMessage, setLoginModalMessage] = useState('')
+
+  // Live room
+  const [liveEvent, setLiveEvent] = useState(null)
 
   const { events: creatorEvents } = usePublicEvents(selected?.id)
   const { events: fanEvents, loading: fanEventsLoading, refetch: refetchFanEvents } = useFanEvents(fanSession?.user?.id)
 
-  // Check for existing fan session (optional)
+  // ── Check for existing fan session on mount ──────────────────────────────
   useEffect(() => {
     supabase.auth.getSession().then(async ({ data: { session } }) => {
       if (session) {
@@ -130,7 +133,6 @@ export default function FanApp() {
         const { data } = await supabase.from('profiles').select('*').eq('id', session.user.id).maybeSingle()
         if (data) setFanProfile(data)
       }
-      setSessionChecked(true)
     })
 
     const { data: { subscription } } = supabase.auth.onAuthStateChange(async (event, session) => {
@@ -139,24 +141,28 @@ export default function FanApp() {
         const { data } = await supabase.from('profiles').select('*').eq('id', session.user.id).maybeSingle()
         if (data) setFanProfile(data)
       }
-      if (event === 'SIGNED_OUT') { setFanSession(null); setFanProfile(null) }
+      if (event === 'SIGNED_OUT') {
+        setFanSession(null)
+        setFanProfile(null)
+        setSubscribedIds(new Set())
+      }
     })
     return () => subscription.unsubscribe()
   }, [])
 
-  // Load all creators
+  // ── Load all creators (public, no auth needed) ───────────────────────────
   useEffect(() => {
     supabase
       .from('creators')
       .select('*, profiles(display_name, handle, bio, avatar_url)')
       .then(({ data, error }) => {
-        console.log('creators query - data:', data, 'error:', JSON.stringify(error))
+        if (error) console.error('creators error:', error.message)
         setAllCreators(data || [])
         setCreatorLoading(false)
       })
   }, [])
 
-  // Load subscriptions if fan is logged in
+  // ── Load subscriptions when fan logs in ──────────────────────────────────
   useEffect(() => {
     if (!fanSession) { setSubscribedIds(new Set()); return }
     supabase
@@ -167,8 +173,13 @@ export default function FanApp() {
       .then(({ data }) => setSubscribedIds(new Set((data || []).map(s => s.creator_id))))
   }, [fanSession])
 
+  // ── Select a creator to view their page ─────────────────────────────────
   async function selectCreator(c) {
     setSelected(c)
+    setPosts([])
+    setSubscribed(false)
+    setEventRsvps({})
+
     const queries = [
       supabase.from('posts').select('*').eq('creator_id', c.id).order('published_at', { ascending: false }),
     ]
@@ -180,17 +191,15 @@ export default function FanApp() {
     }
     const results = await Promise.all(queries)
     setPosts(results[0].data || [])
-    setSubscribed(fanSession ? !!results[1]?.data : false)
-    if (fanSession && results[2]?.data) {
+    if (fanSession) {
+      setSubscribed(!!results[1]?.data)
       const rsvpMap = {}
-      results[2].data.forEach(r => { rsvpMap[r.event_id] = true })
+      results[2]?.data?.forEach(r => { rsvpMap[r.event_id] = true })
       setEventRsvps(rsvpMap)
     }
   }
 
   async function handleSubscribe() {
-    // If not logged in, redirect to fan sign-in (future: inline modal)
-    // For now redirect to creator portal with a note — or handle inline
     if (!fanSession) {
       setLoginModalMessage('Sign in to subscribe to this creator.')
       setShowLoginModal(true)
@@ -233,7 +242,6 @@ export default function FanApp() {
       setShowLoginModal(true)
       return
     }
-
     const already = eventRsvps[eventId]
     if (already) {
       await supabase.from('rsvps').delete().eq('event_id', eventId).eq('fan_id', fanSession.user.id)
@@ -261,16 +269,14 @@ export default function FanApp() {
       )
     })
 
-  // ─── Creator page ────────────────────────────────────────────────────────
+  // ─── Creator page ─────────────────────────────────────────────────────────
   function CreatorPage() {
-    if (!selected) return null
     return (
       <div style={{ maxWidth: 820, margin: '0 auto', padding: '16px 16px 80px' }}>
         {/* Header */}
         <div style={{
           background: 'rgba(17,17,20,0.82)', backdropFilter: 'blur(20px)',
-          border: `1px solid ${ACCENT}22`, borderRadius: 16, padding: '20px',
-          marginBottom: 20,
+          border: `1px solid ${ACCENT}22`, borderRadius: 16, padding: '20px', marginBottom: 20,
         }}>
           <div style={{ display: 'flex', gap: 14, alignItems: 'flex-start', marginBottom: 16 }}>
             <Avatar c={selected} size={56} />
@@ -389,7 +395,7 @@ export default function FanApp() {
     )
   }
 
-  // ─── Render ──────────────────────────────────────────────────────────────
+  // ─── Page render ──────────────────────────────────────────────────────────
   return (
     <div style={{
       minHeight: '100vh', color: TEXT1,
@@ -411,7 +417,7 @@ export default function FanApp() {
       {/* Accent glow */}
       <div style={{ position: 'fixed', top: 0, left: 0, width: '100vw', height: 400, background: `radial-gradient(ellipse at 20% 0%, ${ACCENT}08 0%, transparent 60%)`, pointerEvents: 'none', zIndex: 0 }} />
 
-      {/* ── Top bar ── */}
+      {/* ── Top nav ── */}
       <nav style={{
         display: 'flex', alignItems: 'center', justifyContent: 'space-between',
         padding: '0 16px', height: 56,
@@ -427,32 +433,25 @@ export default function FanApp() {
           <span style={{ fontFamily: "'DM Serif Display', Georgia, serif", fontSize: 20, color: ACCENT }}>StagePass</span>
         </div>
 
-        {/* Creator login link + optional fan sign out */}
         <div style={{ display: 'flex', gap: 8, alignItems: 'center' }}>
           {fanSession && fanProfile && (
             <span style={{ fontFamily: "'DM Mono', monospace", fontSize: 10, color: TEXT3 }}>@{fanProfile.handle}</span>
           )}
-          {fanSession ? (
-            <button onClick={() => supabase.auth.signOut()} style={{
-              background: 'transparent', border: `1px solid ${BORDER}`,
-              borderRadius: 7, padding: '5px 10px', color: TEXT3,
-              fontFamily: "'DM Mono', monospace", fontSize: 9,
-              letterSpacing: '0.08em', cursor: 'pointer',
-            }}>SIGN OUT</button>
-          ) : null}
-          <a href="/creator" style={{
-            background: ACCENT + '14', color: ACCENT,
-            border: `1px solid ${ACCENT}35`, borderRadius: 7,
-            padding: '5px 12px', fontFamily: "'DM Mono', monospace",
-            fontSize: 9, letterSpacing: '0.1em', cursor: 'pointer',
-            textDecoration: 'none', whiteSpace: 'nowrap',
-          }}>🎤 CREATOR</a>
+          {fanSession && (
+            <button onClick={() => supabase.auth.signOut()} style={{ background: 'transparent', border: `1px solid ${BORDER}`, borderRadius: 7, padding: '5px 10px', color: TEXT3, fontFamily: "'DM Mono', monospace", fontSize: 9, letterSpacing: '0.08em', cursor: 'pointer' }}>
+              SIGN OUT
+            </button>
+          )}
+          <a href="/creator" style={{ background: ACCENT + '14', color: ACCENT, border: `1px solid ${ACCENT}35`, borderRadius: 7, padding: '5px 12px', fontFamily: "'DM Mono', monospace", fontSize: 9, letterSpacing: '0.1em', cursor: 'pointer', textDecoration: 'none', whiteSpace: 'nowrap' }}>
+            🎤 CREATOR
+          </a>
         </div>
       </nav>
 
       {/* ── Content ── */}
       <div style={{ position: 'relative', zIndex: 1, paddingBottom: 70 }}>
 
+        {/* Creator page overlay */}
         {selected ? <CreatorPage /> : (
           <>
 
@@ -498,10 +497,10 @@ export default function FanApp() {
               </div>
 
               {creatorLoading ? (
-                <div style={{ color: TEXT3, fontFamily: "'DM Mono', monospace", fontSize: 11 }}>Loading...</div>
+                <div style={{ color: TEXT3, fontFamily: "'DM Mono', monospace", fontSize: 11 }}>Loading artists...</div>
               ) : unsubscribedCreators.length === 0 ? (
                 <div style={{ textAlign: 'center', padding: '40px 0', color: TEXT3, fontFamily: "'DM Mono', monospace", fontSize: 11 }}>
-                  No artists found.
+                  {allCreators.length === 0 ? 'No artists yet. Check back soon.' : 'No artists found for this filter.'}
                 </div>
               ) : (
                 <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fill, minmax(260px, 1fr))', gap: 16 }}>
@@ -513,7 +512,7 @@ export default function FanApp() {
                     >
                       <Avatar c={c} size={50} />
                       <div style={{ fontFamily: "'DM Serif Display', Georgia, serif", fontSize: 17, color: TEXT1, marginBottom: 2, marginTop: 14 }}>{c.profiles?.display_name || 'Creator'}</div>
-                      <div style={{ fontFamily: "'DM Mono', monospace", fontSize: 10, color: ACCENT, marginBottom: 6, letterSpacing: '0.08em' }}>@{c.profiles?.handle || 'creator'}</div>
+                      <div style={{ fontFamily: "'DM Mono', monospace", fontSize: 10, color: ACCENT, marginBottom: 4, letterSpacing: '0.08em' }}>@{c.profiles?.handle || 'creator'}</div>
                       {c.category && <div style={{ fontFamily: "'DM Mono', monospace", fontSize: 9, color: TEXT3, marginBottom: 8, letterSpacing: '0.1em' }}>{c.category.toUpperCase()}</div>}
                       {c.profiles?.bio && <div style={{ fontSize: 11, color: TEXT3, lineHeight: 1.6, marginBottom: 14 }}>{c.profiles.bio}</div>}
                       <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', paddingTop: 12, borderTop: `1px solid ${BORDER2}` }}>
@@ -531,7 +530,7 @@ export default function FanApp() {
           {activeTab === 'artists' && (
             <div style={{ padding: '20px 16px', maxWidth: 960, margin: '0 auto' }}>
               <div style={{ marginBottom: 20 }}>
-                <div style={{ fontFamily: "'DM Serif Display', Georgia, serif", fontSize: 28, color: TEXT1, lineHeight: 1.2 }}>
+                <div style={{ fontFamily: "'DM Serif Display', Georgia, serif", fontSize: 28, color: TEXT1 }}>
                   My <span style={{ color: ACCENT }}>Artists</span>
                 </div>
                 <div style={{ fontFamily: "'DM Mono', monospace", fontSize: 10, color: TEXT3, letterSpacing: '0.18em', marginTop: 4 }}>
@@ -542,6 +541,7 @@ export default function FanApp() {
                 <div style={{ textAlign: 'center', padding: '48px 0' }}>
                   <div style={{ fontSize: 32, marginBottom: 12, color: TEXT3 }}>♪</div>
                   <div style={{ color: TEXT3, fontFamily: "'DM Mono', monospace", fontSize: 11, marginBottom: 20 }}>Sign in to see your subscriptions.</div>
+                  <button onClick={() => { setLoginModalMessage('Sign in to see your subscribed artists.'); setShowLoginModal(true) }} style={{ background: ACCENT, color: '#080808', border: 'none', borderRadius: 7, padding: '10px 20px', fontFamily: "'DM Mono', monospace", fontSize: 11, fontWeight: 700, cursor: 'pointer', letterSpacing: '0.12em', boxShadow: `0 4px 16px ${ACCENT}40` }}>SIGN IN</button>
                 </div>
               ) : subscribedCreators.length === 0 ? (
                 <div style={{ textAlign: 'center', padding: '48px 0' }}>
@@ -575,16 +575,16 @@ export default function FanApp() {
           {activeTab === 'myevents' && (
             <div style={{ padding: '20px 16px', maxWidth: 820, margin: '0 auto' }}>
               <div style={{ marginBottom: 20 }}>
-                <div style={{ fontFamily: "'DM Serif Display', Georgia, serif", fontSize: 28, color: TEXT1, lineHeight: 1.2 }}>
+                <div style={{ fontFamily: "'DM Serif Display', Georgia, serif", fontSize: 28, color: TEXT1 }}>
                   My <span style={{ color: ACCENT }}>Events</span>
                 </div>
                 <div style={{ fontFamily: "'DM Mono', monospace", fontSize: 10, color: TEXT3, letterSpacing: '0.18em', marginTop: 4 }}>YOUR RSVPS</div>
               </div>
-
               {!fanSession ? (
                 <div style={{ textAlign: 'center', padding: '48px 0' }}>
                   <div style={{ fontSize: 32, marginBottom: 12, color: TEXT3 }}>◈</div>
-                  <div style={{ color: TEXT3, fontFamily: "'DM Mono', monospace", fontSize: 11 }}>Sign in to see your events.</div>
+                  <div style={{ color: TEXT3, fontFamily: "'DM Mono', monospace", fontSize: 11, marginBottom: 20 }}>Sign in to see your events.</div>
+                  <button onClick={() => { setLoginModalMessage('Sign in to see your RSVPd events.'); setShowLoginModal(true) }} style={{ background: ACCENT, color: '#080808', border: 'none', borderRadius: 7, padding: '10px 20px', fontFamily: "'DM Mono', monospace", fontSize: 11, fontWeight: 700, cursor: 'pointer', letterSpacing: '0.12em', boxShadow: `0 4px 16px ${ACCENT}40` }}>SIGN IN</button>
                 </div>
               ) : fanEventsLoading ? (
                 <div style={{ color: TEXT3, fontFamily: "'DM Mono', monospace", fontSize: 11 }}>Loading...</div>
@@ -601,12 +601,7 @@ export default function FanApp() {
                     if (!event) return null
                     const active = isEventActive(event)
                     return (
-                      <div key={rsvp.id} style={{
-                        background: 'rgba(17,17,20,0.75)', backdropFilter: 'blur(16px)',
-                        border: `1px solid ${active ? ACCENT + '55' : ACCENT + '22'}`,
-                        borderRadius: 14, padding: '18px 20px',
-                        boxShadow: active ? `0 4px 24px ${ACCENT}18` : 'none',
-                      }}>
+                      <div key={rsvp.id} style={{ background: 'rgba(17,17,20,0.75)', backdropFilter: 'blur(16px)', border: `1px solid ${active ? ACCENT + '55' : ACCENT + '22'}`, borderRadius: 14, padding: '18px 20px', boxShadow: active ? `0 4px 24px ${ACCENT}18` : 'none' }}>
                         <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start', marginBottom: 8 }}>
                           <div style={{ flex: 1, minWidth: 0, marginRight: 10 }}>
                             <div style={{ fontFamily: "'DM Serif Display', Georgia, serif", fontSize: 17, color: TEXT1, marginBottom: 3 }}>{event.name}</div>
@@ -649,11 +644,10 @@ export default function FanApp() {
           {activeTab === 'profile' && (
             <div style={{ padding: '20px 16px', maxWidth: 820, margin: '0 auto' }}>
               <div style={{ marginBottom: 20 }}>
-                <div style={{ fontFamily: "'DM Serif Display', Georgia, serif", fontSize: 28, color: TEXT1, lineHeight: 1.2 }}>
+                <div style={{ fontFamily: "'DM Serif Display', Georgia, serif", fontSize: 28, color: TEXT1 }}>
                   My <span style={{ color: ACCENT }}>Profile</span>
                 </div>
               </div>
-
               {fanSession && fanProfile ? (
                 <div>
                   <div style={{ background: 'rgba(17,17,20,0.82)', backdropFilter: 'blur(20px)', border: `1px solid ${BORDER}`, borderRadius: 16, padding: '24px', marginBottom: 16 }}>
@@ -683,20 +677,16 @@ export default function FanApp() {
               ) : (
                 <div style={{ background: 'rgba(17,17,20,0.82)', backdropFilter: 'blur(20px)', border: `1px solid ${BORDER}`, borderRadius: 16, padding: '32px', textAlign: 'center' }}>
                   <div style={{ fontSize: 36, marginBottom: 14, color: TEXT3 }}>◉</div>
-                  <div style={{ fontFamily: "'DM Serif Display', Georgia, serif", fontSize: 20, color: TEXT1, marginBottom: 8 }}>You're browsing as a guest</div>
+                  <div style={{ fontFamily: "'DM Serif Display', Georgia, serif", fontSize: 20, color: TEXT1, marginBottom: 8 }}>Browsing as guest</div>
                   <div style={{ fontFamily: "'DM Mono', monospace", fontSize: 11, color: TEXT3, marginBottom: 24, lineHeight: 1.7 }}>
                     Sign in to subscribe to artists,<br />RSVP to events, and access exclusive content.
                   </div>
-                  <a href="/creator" style={{
-                    display: 'block', background: ACCENT, color: '#080808',
-                    border: 'none', borderRadius: 8, padding: '12px',
-                    fontFamily: "'DM Mono', monospace", fontSize: 12, fontWeight: 700,
-                    letterSpacing: '0.12em', cursor: 'pointer', textDecoration: 'none',
-                    boxShadow: `0 4px 24px ${ACCENT}40`, marginBottom: 12, textAlign: 'center',
-                  }}>🎤 I'M A CREATOR</a>
-                  <div style={{ fontFamily: "'DM Mono', monospace", fontSize: 10, color: TEXT3, letterSpacing: '0.08em' }}>
-                    Fan login coming soon
-                  </div>
+                  <button onClick={() => { setLoginModalMessage('Sign in to your fan account.'); setShowLoginModal(true) }} style={{ display: 'block', width: '100%', background: ACCENT, color: '#080808', border: 'none', borderRadius: 8, padding: '12px', fontFamily: "'DM Mono', monospace", fontSize: 12, fontWeight: 700, letterSpacing: '0.12em', cursor: 'pointer', boxShadow: `0 4px 24px ${ACCENT}40`, marginBottom: 12 }}>
+                    SIGN IN
+                  </button>
+                  <a href="/creator" style={{ display: 'block', textAlign: 'center', fontFamily: "'DM Mono', monospace", fontSize: 10, color: TEXT3, letterSpacing: '0.1em', textDecoration: 'none', marginTop: 8 }}>
+                    🎤 I'm a creator — <span style={{ color: ACCENT }}>go to creator portal</span>
+                  </a>
                 </div>
               )}
             </div>
@@ -729,18 +719,19 @@ export default function FanApp() {
         ))}
       </div>
 
+      {/* ── Login modal ── */}
       {showLoginModal && (
         <FanLoginModal
           initialMessage={loginModalMessage}
           onSuccess={() => {
             setShowLoginModal(false)
-            // Reload subscriptions and profile after login
             window.location.reload()
           }}
           onClose={() => setShowLoginModal(false)}
         />
       )}
 
+      {/* ── Live room ── */}
       {liveEvent && (
         <LiveRoom
           event={liveEvent}
