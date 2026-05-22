@@ -150,7 +150,7 @@ export default function FanApp() {
     return () => subscription.unsubscribe()
   }, [])
 
-  // ── Load all creators (public, no auth needed) ───────────────────────────
+  /* ── Load all creators (public, no auth needed) ───────────────────────────
   useEffect(() => {
     supabase
       .from('creators')
@@ -158,6 +158,27 @@ export default function FanApp() {
       .then(({ data, error }) => {
         if (error) console.error('creators error:', error.message)
         setAllCreators(data || [])
+        setCreatorLoading(false)
+      })
+  }, []) */
+  useEffect(() => {
+    const url = `${import.meta.env.VITE_SUPABASE_URL}/rest/v1/creators?select=*,profiles(display_name,handle,bio,avatar_url)`
+    const key = import.meta.env.VITE_SUPABASE_ANON_KEY
+    fetch(url, {
+      headers: {
+        'apikey': key,
+        'Authorization': `Bearer ${key}`,
+        'Content-Type': 'application/json',
+      }
+    })
+      .then(r => r.json())
+      .then(data => {
+        console.log('creators loaded:', data?.length)
+        setAllCreators(Array.isArray(data) ? data : [])
+        setCreatorLoading(false)
+      })
+      .catch(err => {
+        console.error('creators fetch error:', err)
         setCreatorLoading(false)
       })
   }, [])
