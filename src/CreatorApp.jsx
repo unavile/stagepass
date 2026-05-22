@@ -142,7 +142,7 @@ export default function CreatorApp({ session, profile, onSignOut }) {
       `,
       backgroundSize: 'cover',
       backgroundPosition: 'center top',
-      backgroundAttachment: 'fixed',
+      backgroundAttachment: 'scroll',
     }}>
       <link href="https://fonts.googleapis.com/css2?family=DM+Serif+Display&family=DM+Mono:wght@400;500&display=swap" rel="stylesheet" />
 
