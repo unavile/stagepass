@@ -113,11 +113,17 @@ export default function FanLoginModal({ onSuccess, onClose, initialMessage }) {
         })
 
         if (signUpData.access_token) {
-          // Email confirmation OFF — signed in immediately
-          await supabase.auth.setSession({
-            access_token: signUpData.access_token,
-            refresh_token: signUpData.refresh_token,
-          })
+
+          // Store tokens directly in localStorage so Supabase picks them up on reload
+          const storageKey = `sb-${import.meta.env.VITE_SUPABASE_URL.split('//')[1].split('.')[0]}-auth-token`
+          localStorage.setItem(storageKey, JSON.stringify({
+            access_token: signInData.access_token,
+            refresh_token: signInData.refresh_token,
+            expires_at: signInData.expires_at,
+            expires_in: signInData.expires_in,
+            token_type: 'bearer',
+            user: signInData.user,
+          }))
           onSuccess()
         } else {
           // Email confirmation ON — ask them to confirm then sign in
@@ -131,11 +137,16 @@ export default function FanLoginModal({ onSuccess, onClose, initialMessage }) {
       }
 
       // ── Sign in ────────────────────────────────────────────────────────
-      const signInData = await nativeSignIn(email.trim(), password)
-      await supabase.auth.setSession({
+      // Store tokens directly in localStorage so Supabase picks them up on reload
+      const storageKey = `sb-${import.meta.env.VITE_SUPABASE_URL.split('//')[1].split('.')[0]}-auth-token`
+      localStorage.setItem(storageKey, JSON.stringify({
         access_token: signInData.access_token,
         refresh_token: signInData.refresh_token,
-      })
+        expires_at: signInData.expires_at,
+        expires_in: signInData.expires_in,
+        token_type: 'bearer',
+        user: signInData.user,
+      }))
       onSuccess()
 
     } catch (err) {
