@@ -149,7 +149,11 @@ export default function FanApp() {
     supabase
       .from('creators')
       .select('*, profiles(display_name, handle, bio, avatar_url)')
-      .then(({ data }) => { setAllCreators(data || []); setCreatorLoading(false) })
+      .then(({ data, error }) => {
+        console.log('creators query - data:', data, 'error:', JSON.stringify(error))
+        setAllCreators(data || [])
+        setCreatorLoading(false)
+      })
   }, [])
 
   // Load subscriptions if fan is logged in
