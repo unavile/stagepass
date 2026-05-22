@@ -16,7 +16,6 @@ const CATEGORIES = [
 
 export default function Auth({ onAuth, creatorOnly = false }) {
   const [mode, setMode] = useState('login')
-  const [role] = useState('creator')
   const [email, setEmail] = useState('')
   const [password, setPassword] = useState('')
   const [displayName, setDisplayName] = useState('')
@@ -26,11 +25,14 @@ export default function Auth({ onAuth, creatorOnly = false }) {
   const [error, setError] = useState(null)
   const [message, setMessage] = useState(null)
 
+  const role = 'creator' // always creator in this portal
+
   async function handleSubmit() {
     setLoading(true)
     setError(null)
     setMessage(null)
 
+    // ── Forgot password ──────────────────────────────────────────────────
     if (mode === 'forgot') {
       const { error } = await supabase.auth.resetPasswordForEmail(email, {
         redirectTo: 'https://myaudience.netlify.app/reset-password',
@@ -41,40 +43,79 @@ export default function Auth({ onAuth, creatorOnly = false }) {
       return
     }
 
+    // ── Sign up ──────────────────────────────────────────────────────────
     if (mode === 'signup') {
+      if (!displayName.trim()) { setError('Please enter your display name.'); setLoading(false); return }
+      if (!handle.trim()) { setError('Please enter a handle.'); setLoading(false); return }
+      if (!email.trim()) { setError('Please enter your email.'); setLoading(false); return }
+      if (password.length < 6) { setError('Password must be at least 6 characters.'); setLoading(false); return }
+
       const { data, error: signUpError } = await supabase.auth.signUp({
-        email,
+        email: email.trim(),
         password,
         options: {
-          data: { display_name: displayName, handle: handle.toLowerCase(), role }
+          data: {
+            display_name: displayName.trim(),
+            handle: handle.toLowerCase().trim(),
+            role,
+            category,
+          }
         }
       })
-      if (signUpError) { setError(signUpError.message); setLoading(false); return }
 
-      if (data?.user?.id) {
-        // Insert profile
-        const { error: profileError } = await supabase
-          .from('profiles')
-          .insert({ id: data.user.id, role, display_name: displayName, handle: handle.toLowerCase() })
-        if (profileError && profileError.code !== '23505') {
-          setError(profileError.message); setLoading(false); return
+      if (signUpError) {
+        // Handle "user already exists" gracefully
+        if (signUpError.message.toLowerCase().includes('already registered') ||
+            signUpError.message.toLowerCase().includes('already exists')) {
+          setError('An account with this email already exists. Please sign in instead.')
+          setMode('login')
+        } else {
+          setError(signUpError.message)
         }
-        // Insert creator record with category
-        await supabase.from('creators').upsert({ id: data.user.id, category }, { onConflict: 'id' })
+        setLoading(false)
+        return
       }
-      setMessage('Account created! Logging you in...')
-    } else {
-      const { error: loginError } = await supabase.auth.signInWithPassword({ email, password })
-      if (loginError) { setError(loginError.message); setLoading(false); return }
-      onAuth()
-    }
-    setLoading(false)
-  }
 
-  const titles = {
-    login:  creatorOnly ? 'CREATOR LOGIN' : 'WELCOME BACK',
-    signup: 'CREATE CREATOR ACCOUNT',
-    forgot: 'RESET PASSWORD',
+      // The Supabase database trigger handles profile + creator record creation
+      // automatically when the user confirms their email — no manual insert needed
+
+      if (data?.session) {
+        // Email confirmation is OFF — user is logged in immediately
+        // Update creator record with category
+        await supabase.from('creators').upsert({ id: data.user.id, category }, { onConflict: 'id' })
+        // onAuthStateChange will handle the rest
+      } else {
+        // Email confirmation is ON — switch to login and show confirmation message
+        setEmail(email.trim()) // keep email pre-filled
+        setPassword('')
+        setMode('login')
+        setMessage('Account created! Check your email to confirm, then sign in below.')
+      }
+
+      setLoading(false)
+      return
+    }
+
+    // ── Sign in ──────────────────────────────────────────────────────────
+    const { error: loginError } = await supabase.auth.signInWithPassword({
+      email: email.trim(),
+      password,
+    })
+
+    if (loginError) {
+      if (loginError.message.toLowerCase().includes('email not confirmed')) {
+        setError('Please confirm your email address before signing in. Check your inbox.')
+      } else if (loginError.message.toLowerCase().includes('invalid login')) {
+        setError('Incorrect email or password.')
+      } else {
+        setError(loginError.message)
+      }
+      setLoading(false)
+      return
+    }
+
+    onAuth()
+    setLoading(false)
   }
 
   const input = {
@@ -85,6 +126,12 @@ export default function Auth({ onAuth, creatorOnly = false }) {
     fontFamily: "'DM Mono', monospace", fontSize: 13,
     outline: 'none', marginBottom: 12, boxSizing: 'border-box',
     backdropFilter: 'blur(4px)',
+  }
+
+  const titles = {
+    login:  'CREATOR LOGIN',
+    signup: 'CREATE CREATOR ACCOUNT',
+    forgot: 'RESET PASSWORD',
   }
 
   return (
@@ -113,20 +160,20 @@ export default function Auth({ onAuth, creatorOnly = false }) {
         <div style={{ textAlign: 'center', marginBottom: 28 }}>
           <div style={{ fontFamily: "'DM Serif Display', Georgia, serif", fontSize: 34, color: ACCENT, letterSpacing: '0.01em', marginBottom: 6, textShadow: `0 0 40px ${ACCENT}60` }}>StagePass</div>
           <div style={{ fontFamily: "'DM Mono', monospace", fontSize: 10, color: TEXT3, letterSpacing: '0.22em' }}>{titles[mode]}</div>
-          {creatorOnly && mode === 'login' && (
+          {mode === 'login' && (
             <div style={{ marginTop: 10, background: ACCENT + '12', border: `1px solid ${ACCENT}30`, borderRadius: 6, padding: '5px 14px', display: 'inline-block' }}>
               <span style={{ fontFamily: "'DM Mono', monospace", fontSize: 10, color: ACCENT, letterSpacing: '0.1em' }}>🎤 CREATOR PORTAL</span>
             </div>
           )}
         </div>
 
-        {/* Signup fields */}
+        {/* Signup extra fields */}
         {mode === 'signup' && (
           <>
-            <input style={input} placeholder="Display name" value={displayName} onChange={e => setDisplayName(e.target.value)} />
-            <input style={input} placeholder="Handle (e.g. maravoss)" value={handle} onChange={e => setHandle(e.target.value)} />
+            <input style={input} placeholder="Display name (e.g. Mara Voss)" value={displayName} onChange={e => setDisplayName(e.target.value)} autoFocus />
+            <input style={input} placeholder="Handle (e.g. maravoss — no spaces)" value={handle} onChange={e => setHandle(e.target.value.toLowerCase().replace(/\s+/g, ''))} />
 
-            {/* Category selection at signup */}
+            {/* Category */}
             <div style={{ fontFamily: "'DM Mono', monospace", fontSize: 9, color: TEXT3, letterSpacing: '0.2em', marginBottom: 10 }}>WHAT KIND OF CREATOR ARE YOU?</div>
             <div style={{ display: 'flex', gap: 8, marginBottom: 16 }}>
               {CATEGORIES.map(cat => (
@@ -157,10 +204,12 @@ export default function Auth({ onAuth, creatorOnly = false }) {
         ) : (
           <>
             <input style={input} placeholder="Email" type="email" value={email} onChange={e => setEmail(e.target.value)} />
-            <input style={input} placeholder="Password" type="password" value={password} onChange={e => setPassword(e.target.value)} />
+            <input style={input} placeholder="Password" type="password" value={password} onChange={e => setPassword(e.target.value)}
+              onKeyDown={e => e.key === 'Enter' && handleSubmit()} />
           </>
         )}
 
+        {/* Messages */}
         {error && (
           <div style={{ color: '#e84545', fontSize: 12, marginBottom: 14, fontFamily: "'DM Mono', monospace", background: 'rgba(232,69,69,0.08)', border: '1px solid rgba(232,69,69,0.2)', borderRadius: 7, padding: '8px 12px' }}>{error}</div>
         )}
@@ -168,6 +217,7 @@ export default function Auth({ onAuth, creatorOnly = false }) {
           <div style={{ color: '#6dbf8a', fontSize: 12, marginBottom: 14, fontFamily: "'DM Mono', monospace", background: 'rgba(109,191,138,0.08)', border: '1px solid rgba(109,191,138,0.2)', borderRadius: 7, padding: '8px 12px' }}>{message}</div>
         )}
 
+        {/* Submit */}
         <button onClick={handleSubmit} disabled={loading} style={{
           width: '100%', background: ACCENT, color: '#080808',
           border: 'none', borderRadius: 8, padding: '14px',
@@ -179,6 +229,7 @@ export default function Auth({ onAuth, creatorOnly = false }) {
           {loading ? 'Please wait...' : mode === 'login' ? 'Log In' : mode === 'signup' ? 'Create Account' : 'Send Reset Link'}
         </button>
 
+        {/* Mode links */}
         <div style={{ textAlign: 'center', fontFamily: "'DM Mono', monospace", fontSize: 11, color: TEXT3, display: 'flex', flexDirection: 'column', gap: 8, letterSpacing: '0.04em' }}>
           {mode === 'login' && (
             <>
@@ -194,6 +245,7 @@ export default function Auth({ onAuth, creatorOnly = false }) {
           )}
         </div>
 
+        {/* Fan page link */}
         <div style={{ marginTop: 24, paddingTop: 20, borderTop: `1px solid ${BORDER}`, textAlign: 'center' }}>
           <a href="/" style={{ fontFamily: "'DM Mono', monospace", fontSize: 10, color: TEXT3, letterSpacing: '0.1em', textDecoration: 'none' }}>
             🎧 Looking for the fan page? <span style={{ color: ACCENT }}>Click here →</span>
