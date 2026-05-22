@@ -84,13 +84,27 @@ export default function FanLoginModal({ onSuccess, onClose, initialMessage }) {
     boxSizing: 'border-box',
   }
 
+  function storeSession(tokenData) {
+    // Store tokens directly in localStorage so Supabase picks them up on reload
+    const projectRef = import.meta.env.VITE_SUPABASE_URL.split('//')[1].split('.')[0]
+    const storageKey = `sb-${projectRef}-auth-token`
+    localStorage.setItem(storageKey, JSON.stringify({
+      access_token: tokenData.access_token,
+      refresh_token: tokenData.refresh_token,
+      expires_at: tokenData.expires_at || Math.floor(Date.now() / 1000) + (tokenData.expires_in || 3600),
+      expires_in: tokenData.expires_in || 3600,
+      token_type: 'bearer',
+      user: tokenData.user,
+    }))
+  }
+
   async function handleSubmit() {
     setLoading(true)
     setError(null)
     setMessage(null)
 
     try {
-      // ── Forgot password ────────────────────────────────────────────────
+      // ── Forgot password ──────────────────────────────────────────────
       if (mode === 'forgot') {
         await nativeResetPassword(email.trim())
         setMessage('Check your email for a reset link.')
@@ -98,7 +112,7 @@ export default function FanLoginModal({ onSuccess, onClose, initialMessage }) {
         return
       }
 
-      // ── Sign up ────────────────────────────────────────────────────────
+      // ── Sign up ──────────────────────────────────────────────────────
       if (mode === 'signup') {
         if (!displayName.trim()) { setError('Please enter your name.'); setLoading(false); return }
         if (!email.trim()) { setError('Please enter your email.'); setLoading(false); return }
@@ -106,27 +120,18 @@ export default function FanLoginModal({ onSuccess, onClose, initialMessage }) {
 
         const handle = displayName.toLowerCase().replace(/\s+/g, '_').replace(/[^a-z0-9_]/g, '') + '_' + Math.random().toString(36).slice(2, 6)
 
-        const signUpData = await nativeSignUp(email.trim(), password, {
+        const signUpResult = await nativeSignUp(email.trim(), password, {
           display_name: displayName.trim(),
           handle,
           role: 'fan',
         })
 
-        if (signUpData.access_token) {
-
-          // Store tokens directly in localStorage so Supabase picks them up on reload
-          const storageKey = `sb-${import.meta.env.VITE_SUPABASE_URL.split('//')[1].split('.')[0]}-auth-token`
-          localStorage.setItem(storageKey, JSON.stringify({
-            access_token: signInData.access_token,
-            refresh_token: signInData.refresh_token,
-            expires_at: signInData.expires_at,
-            expires_in: signInData.expires_in,
-            token_type: 'bearer',
-            user: signInData.user,
-          }))
+        if (signUpResult.access_token) {
+          // Email confirmation OFF — logged in immediately
+          storeSession(signUpResult)
           onSuccess()
         } else {
-          // Email confirmation ON — ask them to confirm then sign in
+          // Email confirmation ON — ask to confirm then sign in
           setEmail(email.trim())
           setPassword('')
           setMode('login')
@@ -136,21 +141,12 @@ export default function FanLoginModal({ onSuccess, onClose, initialMessage }) {
         return
       }
 
-      // ── Sign in ────────────────────────────────────────────────────────
-      // Store tokens directly in localStorage so Supabase picks them up on reload
-      const storageKey = `sb-${import.meta.env.VITE_SUPABASE_URL.split('//')[1].split('.')[0]}-auth-token`
-      localStorage.setItem(storageKey, JSON.stringify({
-        access_token: signInData.access_token,
-        refresh_token: signInData.refresh_token,
-        expires_at: signInData.expires_at,
-        expires_in: signInData.expires_in,
-        token_type: 'bearer',
-        user: signInData.user,
-      }))
+      // ── Sign in ──────────────────────────────────────────────────────
+      const signInResult = await nativeSignIn(email.trim(), password)
+      storeSession(signInResult)
       onSuccess()
 
     } catch (err) {
-      // Make error messages friendlier
       const msg = err.message.toLowerCase()
       if (msg.includes('invalid login') || msg.includes('invalid credentials')) {
         setError('Incorrect email or password.')
