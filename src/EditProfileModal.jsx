@@ -10,12 +10,19 @@ const ACCENT_COLORS = [
   { label: 'Pink',   value: '#ff6db0' },
 ]
 
+const CATEGORIES = [
+  { id: 'Music',  icon: '🎵' },
+  { id: 'Dance',  icon: '💃' },
+  { id: 'Comedy', icon: '🎤' },
+]
+
 export default function EditProfileModal({ profile, creator, onClose, onSaved }) {
   const [displayName, setDisplayName] = useState(profile.display_name || '')
   const [handle, setHandle] = useState(profile.handle || '')
   const [bio, setBio] = useState(profile.bio || '')
   const [monthlyPrice, setMonthlyPrice] = useState(creator.monthlyPrice || 5)
   const [accentColor, setAccentColor] = useState(creator.accentColor || '#c9a84c')
+  const [category, setCategory] = useState(creator.category || 'Music')
   const [avatarFile, setAvatarFile] = useState(null)
   const [avatarPreview, setAvatarPreview] = useState(profile.avatar_url || null)
   const [loading, setLoading] = useState(false)
@@ -32,10 +39,7 @@ export default function EditProfileModal({ profile, creator, onClose, onSaved })
   function handleAvatarChange(e) {
     const file = e.target.files[0]
     if (!file) return
-    if (file.size > 2 * 1024 * 1024) {
-      setError('Image must be under 2MB.')
-      return
-    }
+    if (file.size > 2 * 1024 * 1024) { setError('Image must be under 2MB.'); return }
     setAvatarFile(file)
     setAvatarPreview(URL.createObjectURL(file))
     setError(null)
@@ -72,6 +76,7 @@ export default function EditProfileModal({ profile, creator, onClose, onSaved })
         supabase.from('creators').update({
           monthly_price: parseFloat(monthlyPrice),
           accent_color: accentColor,
+          category,
         }).eq('id', profile.id),
       ])
 
@@ -100,55 +105,59 @@ export default function EditProfileModal({ profile, creator, onClose, onSaved })
         {/* Avatar upload */}
         <div style={{ fontFamily: "'DM Mono', monospace", fontSize: 10, color: '#555', letterSpacing: '0.15em', marginBottom: 12 }}>PROFILE PHOTO</div>
         <div style={{ display: 'flex', alignItems: 'center', gap: 16, marginBottom: 20 }}>
-          <div
-            onClick={() => fileInputRef.current.click()}
-            style={{
-              width: 72, height: 72, borderRadius: '50%', cursor: 'pointer',
-              background: '#161616', border: `2px solid ${accentColor}`,
-              display: 'flex', alignItems: 'center', justifyContent: 'center',
-              overflow: 'hidden', flexShrink: 0, position: 'relative'
-            }}
-          >
+          <div onClick={() => fileInputRef.current.click()} style={{ width: 72, height: 72, borderRadius: '50%', cursor: 'pointer', background: '#161616', border: `2px solid ${accentColor}`, display: 'flex', alignItems: 'center', justifyContent: 'center', overflow: 'hidden', flexShrink: 0 }}>
             {avatarPreview ? (
               <img src={avatarPreview} alt="avatar" style={{ width: '100%', height: '100%', objectFit: 'cover' }} />
             ) : (
-              <div style={{ textAlign: 'center' }}>
-                <div style={{ fontSize: 20, color: accentColor, fontFamily: "'DM Serif Display', Georgia, serif" }}>
-                  {(displayName || 'C').split(' ').map(n => n[0]).join('').slice(0, 2)}
-                </div>
+              <div style={{ fontSize: 20, color: accentColor, fontFamily: "'DM Serif Display', Georgia, serif" }}>
+                {(displayName || 'C').split(' ').map(n => n[0]).join('').slice(0, 2)}
               </div>
             )}
           </div>
           <div>
-            <button
-              onClick={() => fileInputRef.current.click()}
-              style={{ background: accentColor + '18', color: accentColor, border: `1px solid ${accentColor}44`, borderRadius: 6, padding: '8px 16px', fontFamily: "'DM Mono', monospace", fontSize: 11, cursor: 'pointer', letterSpacing: '0.1em', display: 'block', marginBottom: 6 }}
-            >
+            <button onClick={() => fileInputRef.current.click()} style={{ background: accentColor + '18', color: accentColor, border: `1px solid ${accentColor}44`, borderRadius: 6, padding: '8px 16px', fontFamily: "'DM Mono', monospace", fontSize: 11, cursor: 'pointer', letterSpacing: '0.1em', display: 'block', marginBottom: 6 }}>
               {avatarPreview ? 'Change Photo' : 'Upload Photo'}
             </button>
             <div style={{ fontFamily: "'DM Mono', monospace", fontSize: 10, color: '#444' }}>JPG, PNG or WEBP · Max 2MB</div>
           </div>
-          <input
-            ref={fileInputRef}
-            type="file"
-            accept="image/jpeg,image/png,image/webp"
-            onChange={handleAvatarChange}
-            style={{ display: 'none' }}
-          />
+          <input ref={fileInputRef} type="file" accept="image/jpeg,image/png,image/webp" onChange={handleAvatarChange} style={{ display: 'none' }} />
         </div>
 
+        {/* Profile fields */}
         <div style={{ fontFamily: "'DM Mono', monospace", fontSize: 10, color: '#555', letterSpacing: '0.15em', marginBottom: 8 }}>PROFILE</div>
         <input style={input} placeholder="Display name" value={displayName} onChange={e => setDisplayName(e.target.value)} />
         <input style={input} placeholder="Handle" value={handle} onChange={e => setHandle(e.target.value)} />
         <textarea style={{ ...input, minHeight: 80, resize: 'vertical' }} placeholder="Bio (optional)" value={bio} onChange={e => setBio(e.target.value)} />
 
-        <div style={{ fontFamily: "'DM Mono', monospace", fontSize: 10, color: '#555', letterSpacing: '0.15em', marginBottom: 8, marginTop: 8 }}>SUBSCRIPTION PRICE</div>
+        {/* Category */}
+        <div style={{ fontFamily: "'DM Mono', monospace", fontSize: 10, color: '#555', letterSpacing: '0.15em', marginBottom: 12, marginTop: 4 }}>CATEGORY</div>
+        <div style={{ display: 'flex', gap: 8, marginBottom: 20 }}>
+          {CATEGORIES.map(cat => (
+            <button key={cat.id} onClick={() => setCategory(cat.id)} style={{
+              flex: 1, padding: '10px 8px', borderRadius: 9, cursor: 'pointer',
+              background: category === cat.id ? accentColor + '18' : '#111',
+              border: category === cat.id ? `1px solid ${accentColor}55` : '1px solid #ffffff12',
+              color: category === cat.id ? accentColor : '#555',
+              fontFamily: "'DM Mono', monospace", fontSize: 11,
+              letterSpacing: '0.08em', textAlign: 'center',
+              transition: 'all 0.15s',
+              boxShadow: category === cat.id ? `0 0 12px ${accentColor}20` : 'none',
+            }}>
+              <div style={{ fontSize: 18, marginBottom: 4 }}>{cat.icon}</div>
+              {cat.id.toUpperCase()}
+            </button>
+          ))}
+        </div>
+
+        {/* Subscription price */}
+        <div style={{ fontFamily: "'DM Mono', monospace", fontSize: 10, color: '#555', letterSpacing: '0.15em', marginBottom: 8 }}>SUBSCRIPTION PRICE</div>
         <div style={{ display: 'flex', alignItems: 'center', gap: 10, marginBottom: 16 }}>
           <span style={{ color: '#555', fontSize: 18, fontFamily: "'DM Mono', monospace" }}>$</span>
           <input style={{ ...input, marginBottom: 0, width: 100 }} type="number" min="1" max="99" step="1" value={monthlyPrice} onChange={e => setMonthlyPrice(e.target.value)} />
           <span style={{ color: '#555', fontSize: 13, fontFamily: "'DM Mono', monospace" }}>/ month</span>
         </div>
 
+        {/* Accent color */}
         <div style={{ fontFamily: "'DM Mono', monospace", fontSize: 10, color: '#555', letterSpacing: '0.15em', marginBottom: 12 }}>ACCENT COLOR</div>
         <div style={{ display: 'flex', gap: 10, flexWrap: 'wrap', marginBottom: 20 }}>
           {ACCENT_COLORS.map(c => (
@@ -172,6 +181,7 @@ export default function EditProfileModal({ profile, creator, onClose, onSaved })
             <div>
               <div style={{ fontFamily: "'DM Serif Display', Georgia, serif", fontSize: 16, color: '#f0ebe0' }}>{displayName || 'Your Name'}</div>
               <div style={{ fontFamily: "'DM Mono', monospace", fontSize: 11, color: accentColor }}>@{handle || 'yourhandle'} · ${monthlyPrice}/mo</div>
+              <div style={{ fontFamily: "'DM Mono', monospace", fontSize: 9, color: '#555', marginTop: 2, letterSpacing: '0.1em' }}>{category.toUpperCase()}</div>
               {bio && <div style={{ fontSize: 12, color: '#555', marginTop: 4, lineHeight: 1.5 }}>{bio}</div>}
             </div>
           </div>

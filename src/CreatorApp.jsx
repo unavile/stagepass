@@ -70,6 +70,7 @@ export default function CreatorApp({ session, profile, onSignOut }) {
     handle: '@' + (profile.handle || 'creator'),
     accentColor: profile.creators?.accent_color || '#c9a84c',
     monthlyPrice: profile.creators?.monthly_price || 5,
+      category: profile.creators?.category || 'Music',
   }
 
   const ac = creator.accentColor

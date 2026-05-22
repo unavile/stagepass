@@ -3,6 +3,7 @@ import { supabase } from './supabaseClient'
 import { usePublicEvents } from './hooks/useEvents'
 import { useFanEvents } from './hooks/useFanEvents'
 import LiveRoom from './LiveRoom'
+import FanLoginModal from './FanLoginModal'
 
 // ─── Design tokens ──────────────────────────────────────────────────────────
 const BG      = '#09090b'
@@ -94,6 +95,9 @@ export default function FanApp() {
   const [fanProfile, setFanProfile] = useState(null)
   const [sessionChecked, setSessionChecked] = useState(false)
 
+  const [showLoginModal, setShowLoginModal] = useState(false)
+  const [loginModalMessage, setLoginModalMessage] = useState('')
+
   // Navigation
   const [activeTab, setActiveTab] = useState('search')
   const [selected, setSelected] = useState(null)
@@ -184,7 +188,8 @@ export default function FanApp() {
     // If not logged in, redirect to fan sign-in (future: inline modal)
     // For now redirect to creator portal with a note — or handle inline
     if (!fanSession) {
-      alert('Please log in as a fan to subscribe. Fan login coming soon!')
+      setLoginModalMessage('Sign in to subscribe to this creator.')
+      setShowLoginModal(true)
       return
     }
     if (!selected) return
@@ -219,7 +224,12 @@ export default function FanApp() {
   }
 
   async function handleRsvp(eventId) {
-    if (!fanSession) { alert('Please log in to RSVP.'); return }
+    if (!fanSession) {
+      setLoginModalMessage('Sign in to RSVP to events.')
+      setShowLoginModal(true)
+      return
+    }
+
     const already = eventRsvps[eventId]
     if (already) {
       await supabase.from('rsvps').delete().eq('event_id', eventId).eq('fan_id', fanSession.user.id)
@@ -714,6 +724,18 @@ export default function FanApp() {
           </button>
         ))}
       </div>
+
+      {showLoginModal && (
+        <FanLoginModal
+          initialMessage={loginModalMessage}
+          onSuccess={() => {
+            setShowLoginModal(false)
+            // Reload subscriptions and profile after login
+            window.location.reload()
+          }}
+          onClose={() => setShowLoginModal(false)}
+        />
+      )}
 
       {liveEvent && (
         <LiveRoom
