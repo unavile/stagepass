@@ -49,135 +49,144 @@ function SectionLabel({ children }) {
   )
 }
 
-// Check if an event is currently active (started and not expired)
 function isEventActive(event) {
-  if (!event.event_date) return false
+  if (!event?.event_date) return false
   const today = new Date()
   today.setHours(0, 0, 0, 0)
   const eventDate = new Date(event.event_date)
   eventDate.setHours(0, 0, 0, 0)
-  // Active if today is the event date or up to 1 day after (gives time for live sessions)
   const diffDays = Math.floor((today - eventDate) / (1000 * 60 * 60 * 24))
   return diffDays >= 0 && diffDays <= 1
 }
 
-// ─── Creator card (shared) ───────────────────────────────────────────────────
-function CreatorCard({ c, onClick }) {
+function Avatar({ c, size = 50 }) {
   return (
-    <div onClick={onClick}
-      style={{
-        background: 'rgba(17,17,20,0.72)',
-        backdropFilter: 'blur(16px)',
-        border: `1px solid ${BORDER}`,
-        borderRadius: 16, padding: '22px',
-        cursor: 'pointer', transition: 'all 0.2s',
-        boxShadow: '0 4px 24px rgba(0,0,0,0.4)',
-      }}
-      onMouseEnter={e => {
-        e.currentTarget.style.borderColor = ACCENT + '55'
-        e.currentTarget.style.transform = 'translateY(-3px)'
-        e.currentTarget.style.boxShadow = `0 12px 40px ${ACCENT}18`
-      }}
-      onMouseLeave={e => {
-        e.currentTarget.style.borderColor = BORDER
-        e.currentTarget.style.transform = 'translateY(0)'
-        e.currentTarget.style.boxShadow = '0 4px 24px rgba(0,0,0,0.4)'
-      }}
-    >
-      <div style={{
-        width: 50, height: 50, borderRadius: '50%',
-        background: BG3, border: `2px solid ${ACCENT}55`,
-        display: 'flex', alignItems: 'center', justifyContent: 'center',
-        fontFamily: "'DM Serif Display', Georgia, serif",
-        fontSize: 17, color: ACCENT, marginBottom: 14,
-        overflow: 'hidden', flexShrink: 0,
-        boxShadow: `0 0 16px ${ACCENT}22`,
-      }}>
-        {c.profiles?.avatar_url ? (
-          <img src={c.profiles.avatar_url} alt={c.profiles.display_name} style={{ width: '100%', height: '100%', objectFit: 'cover' }} />
-        ) : (
-          (c.profiles?.display_name || 'C').split(' ').map(n => n[0]).join('').slice(0, 2)
-        )}
-      </div>
-      <div style={{ fontFamily: "'DM Serif Display', Georgia, serif", fontSize: 17, color: TEXT1, marginBottom: 2 }}>{c.profiles?.display_name || 'Creator'}</div>
-      <div style={{ fontFamily: "'DM Mono', monospace", fontSize: 10, color: ACCENT, marginBottom: 8, letterSpacing: '0.08em' }}>@{c.profiles?.handle || 'creator'}</div>
-      {c.category && <div style={{ fontFamily: "'DM Mono', monospace", fontSize: 9, color: TEXT3, marginBottom: 8, letterSpacing: '0.1em' }}>{c.category.toUpperCase()}</div>}
-      {c.profiles?.bio && (
-        <div style={{ fontSize: 11, color: TEXT3, lineHeight: 1.6, marginBottom: 14 }}>{c.profiles.bio}</div>
+    <div style={{
+      width: size, height: size, borderRadius: '50%',
+      background: BG3, border: `2px solid ${ACCENT}55`,
+      display: 'flex', alignItems: 'center', justifyContent: 'center',
+      fontFamily: "'DM Serif Display', Georgia, serif",
+      fontSize: Math.round(size * 0.34), color: ACCENT,
+      overflow: 'hidden', flexShrink: 0,
+      boxShadow: `0 0 16px ${ACCENT}22`,
+    }}>
+      {c.profiles?.avatar_url ? (
+        <img src={c.profiles.avatar_url} alt={c.profiles?.display_name} style={{ width: '100%', height: '100%', objectFit: 'cover' }} />
+      ) : (
+        (c.profiles?.display_name || 'C').split(' ').map(n => n[0]).join('').slice(0, 2)
       )}
-      <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', paddingTop: 12, borderTop: `1px solid ${BORDER2}` }}>
-        <div style={{ fontFamily: "'DM Mono', monospace", fontSize: 14, color: ACCENT, fontWeight: 700 }}>${c.monthly_price}<span style={{ fontSize: 9, color: TEXT3, fontWeight: 400 }}>/mo</span></div>
-        <div style={{ fontFamily: "'DM Mono', monospace", fontSize: 9, color: TEXT3, letterSpacing: '0.1em' }}>VIEW →</div>
-      </div>
     </div>
   )
 }
 
+// ─── Bottom nav tabs ─────────────────────────────────────────────────────────
+const TABS = [
+  { id: 'search',   icon: '⊕', label: 'Discover' },
+  { id: 'artists',  icon: '♪',  label: 'Artists'  },
+  { id: 'myevents', icon: '◈',  label: 'Events'   },
+  { id: 'profile',  icon: '◉',  label: 'Me'       },
+]
+
 // ─── Main component ──────────────────────────────────────────────────────────
-export default function FanApp({ session, profile, onSignOut }) {
+export default function FanApp() {
+  // Optional fan session (not required to browse)
+  const [fanSession, setFanSession] = useState(null)
+  const [fanProfile, setFanProfile] = useState(null)
+  const [sessionChecked, setSessionChecked] = useState(false)
+
   // Navigation
   const [activeTab, setActiveTab] = useState('search')
-  const [menuOpen, setMenuOpen] = useState(false)
-
-  // Creator browsing
-  const [allCreators, setAllCreators] = useState([])
-  const [subscribedCreators, setSubscribedCreators] = useState([])
   const [selected, setSelected] = useState(null)
+
+  // Data
+  const [allCreators, setAllCreators] = useState([])
+  const [subscribedIds, setSubscribedIds] = useState(new Set())
+  const [creatorLoading, setCreatorLoading] = useState(true)
   const [posts, setPosts] = useState([])
   const [subscribed, setSubscribed] = useState(false)
-  const [creatorLoading, setCreatorLoading] = useState(true)
-
-  // Search / filter
-  const [searchCategory, setSearchCategory] = useState('All')
-  const [searchQuery, setSearchQuery] = useState('')
-
-  // Subscription
   const [subscribeLoading, setSubscribeLoading] = useState(false)
-
-  // Events
   const [eventRsvps, setEventRsvps] = useState({})
   const [liveEvent, setLiveEvent] = useState(null)
-  const { events: creatorEvents } = usePublicEvents(selected?.id)
-  const { events: fanEvents, loading: fanEventsLoading, refetch: refetchFanEvents } = useFanEvents(session.user.id)
 
-  const typeLabels = { video: 'VIDEO', audio: 'AUDIO', event: 'EVENT', text: 'JOURNAL' }
+  // Search / filter
+  const [searchQuery, setSearchQuery] = useState('')
+  const [searchCategory, setSearchCategory] = useState('All')
+
   const CATEGORIES = ['All', 'Music', 'Dance', 'Comedy']
+  const typeLabels = { video: 'VIDEO', audio: 'AUDIO', event: 'EVENT', text: 'JOURNAL' }
 
-  // Load all creators and subscriptions
+  const { events: creatorEvents } = usePublicEvents(selected?.id)
+  const { events: fanEvents, loading: fanEventsLoading, refetch: refetchFanEvents } = useFanEvents(fanSession?.user?.id)
+
+  // Check for existing fan session (optional)
   useEffect(() => {
-    async function load() {
-      const [{ data: creatorsData }, { data: subsData }] = await Promise.all([
-        supabase.from('creators').select('*, profiles(display_name, handle, bio, avatar_url)'),
-        supabase.from('subscriptions').select('creator_id').eq('fan_id', session.user.id).eq('status', 'active')
-      ])
-      const subscribedIds = new Set((subsData || []).map(s => s.creator_id))
-      const all = creatorsData || []
-      setAllCreators(all)
-      setSubscribedCreators(all.filter(c => subscribedIds.has(c.id)))
-      setCreatorLoading(false)
-    }
-    load()
+    supabase.auth.getSession().then(async ({ data: { session } }) => {
+      if (session) {
+        setFanSession(session)
+        const { data } = await supabase.from('profiles').select('*').eq('id', session.user.id).maybeSingle()
+        if (data) setFanProfile(data)
+      }
+      setSessionChecked(true)
+    })
+
+    const { data: { subscription } } = supabase.auth.onAuthStateChange(async (event, session) => {
+      if (event === 'SIGNED_IN' && session) {
+        setFanSession(session)
+        const { data } = await supabase.from('profiles').select('*').eq('id', session.user.id).maybeSingle()
+        if (data) setFanProfile(data)
+      }
+      if (event === 'SIGNED_OUT') { setFanSession(null); setFanProfile(null) }
+    })
+    return () => subscription.unsubscribe()
   }, [])
+
+  // Load all creators
+  useEffect(() => {
+    supabase
+      .from('creators')
+      .select('*, profiles(display_name, handle, bio, avatar_url)')
+      .then(({ data }) => { setAllCreators(data || []); setCreatorLoading(false) })
+  }, [])
+
+  // Load subscriptions if fan is logged in
+  useEffect(() => {
+    if (!fanSession) { setSubscribedIds(new Set()); return }
+    supabase
+      .from('subscriptions')
+      .select('creator_id')
+      .eq('fan_id', fanSession.user.id)
+      .eq('status', 'active')
+      .then(({ data }) => setSubscribedIds(new Set((data || []).map(s => s.creator_id))))
+  }, [fanSession])
 
   async function selectCreator(c) {
     setSelected(c)
-    const [{ data: postsData }, { data: subData }, { data: rsvpData }] = await Promise.all([
+    const queries = [
       supabase.from('posts').select('*').eq('creator_id', c.id).order('published_at', { ascending: false }),
-      supabase.from('subscriptions').select('id').eq('fan_id', session.user.id).eq('creator_id', c.id).eq('status', 'active').maybeSingle(),
-      supabase.from('rsvps').select('event_id').eq('fan_id', session.user.id)
-    ])
-    setPosts(postsData || [])
-    setSubscribed(!!subData)
-    const rsvpMap = {}
-    rsvpData?.forEach(r => { rsvpMap[r.event_id] = true })
-    setEventRsvps(rsvpMap)
-  }
-
-  function goBack() {
-    setSelected(null)
+    ]
+    if (fanSession) {
+      queries.push(
+        supabase.from('subscriptions').select('id').eq('fan_id', fanSession.user.id).eq('creator_id', c.id).eq('status', 'active').maybeSingle(),
+        supabase.from('rsvps').select('event_id').eq('fan_id', fanSession.user.id)
+      )
+    }
+    const results = await Promise.all(queries)
+    setPosts(results[0].data || [])
+    setSubscribed(fanSession ? !!results[1]?.data : false)
+    if (fanSession && results[2]?.data) {
+      const rsvpMap = {}
+      results[2].data.forEach(r => { rsvpMap[r.event_id] = true })
+      setEventRsvps(rsvpMap)
+    }
   }
 
   async function handleSubscribe() {
+    // If not logged in, redirect to fan sign-in (future: inline modal)
+    // For now redirect to creator portal with a note — or handle inline
+    if (!fanSession) {
+      alert('Please log in as a fan to subscribe. Fan login coming soon!')
+      return
+    }
     if (!selected) return
     setSubscribeLoading(true)
     try {
@@ -188,8 +197,8 @@ export default function FanApp({ session, profile, onSignOut }) {
           creatorId: selected.id,
           creatorName: selected.profiles?.display_name,
           monthlyPrice: selected.monthly_price,
-          fanId: session.user.id,
-          fanEmail: session.user.email,
+          fanId: fanSession.user.id,
+          fanEmail: fanSession.user.email,
         })
       })
       const { url, error } = await res.json()
@@ -202,27 +211,29 @@ export default function FanApp({ session, profile, onSignOut }) {
   }
 
   async function handleUnsubscribe() {
+    if (!fanSession) return
     await supabase.from('subscriptions').update({ status: 'cancelled' })
-      .eq('fan_id', session.user.id).eq('creator_id', selected.id)
+      .eq('fan_id', fanSession.user.id).eq('creator_id', selected.id)
     setSubscribed(false)
-    setSubscribedCreators(prev => prev.filter(c => c.id !== selected.id))
+    setSubscribedIds(prev => { const n = new Set(prev); n.delete(selected.id); return n })
   }
 
   async function handleRsvp(eventId) {
+    if (!fanSession) { alert('Please log in to RSVP.'); return }
     const already = eventRsvps[eventId]
     if (already) {
-      await supabase.from('rsvps').delete().eq('event_id', eventId).eq('fan_id', session.user.id)
+      await supabase.from('rsvps').delete().eq('event_id', eventId).eq('fan_id', fanSession.user.id)
       setEventRsvps(prev => ({ ...prev, [eventId]: false }))
     } else {
       const { error } = await supabase.from('rsvps')
-        .upsert({ event_id: eventId, fan_id: session.user.id }, { onConflict: 'event_id,fan_id' })
+        .upsert({ event_id: eventId, fan_id: fanSession.user.id }, { onConflict: 'event_id,fan_id' })
       if (!error) setEventRsvps(prev => ({ ...prev, [eventId]: true }))
     }
     refetchFanEvents()
   }
 
-  // Unsubscribed creators filtered for Search tab
-  const subscribedIds = new Set(subscribedCreators.map(c => c.id))
+  // Derived lists
+  const subscribedCreators = allCreators.filter(c => subscribedIds.has(c.id))
   const unsubscribedCreators = allCreators
     .filter(c => !subscribedIds.has(c.id))
     .filter(c => searchCategory === 'All' || c.category === searchCategory)
@@ -236,35 +247,23 @@ export default function FanApp({ session, profile, onSignOut }) {
       )
     })
 
-  // ─── Shared creator page view ────────────────────────────────────────────
+  // ─── Creator page ────────────────────────────────────────────────────────
   function CreatorPage() {
     if (!selected) return null
     return (
-      <div style={{ maxWidth: 820, margin: '0 auto', padding: '16px 16px 100px' }}>
+      <div style={{ maxWidth: 820, margin: '0 auto', padding: '16px 16px 80px' }}>
         {/* Header */}
         <div style={{
-          background: 'rgba(17,17,20,0.80)', backdropFilter: 'blur(20px)',
+          background: 'rgba(17,17,20,0.82)', backdropFilter: 'blur(20px)',
           border: `1px solid ${ACCENT}22`, borderRadius: 16, padding: '20px',
-          marginBottom: 20, boxShadow: `0 8px 48px ${ACCENT}0c`,
+          marginBottom: 20,
         }}>
           <div style={{ display: 'flex', gap: 14, alignItems: 'flex-start', marginBottom: 16 }}>
-            <div style={{
-              width: 56, height: 56, borderRadius: '50%', background: BG3,
-              border: `2px solid ${ACCENT}55`, overflow: 'hidden', flexShrink: 0,
-              display: 'flex', alignItems: 'center', justifyContent: 'center',
-              boxShadow: `0 0 20px ${ACCENT}25`,
-            }}>
-              {selected.profiles?.avatar_url ? (
-                <img src={selected.profiles.avatar_url} alt={selected.profiles.display_name} style={{ width: '100%', height: '100%', objectFit: 'cover' }} />
-              ) : (
-                <span style={{ fontFamily: "'DM Serif Display', Georgia, serif", fontSize: 20, color: ACCENT }}>
-                  {(selected.profiles?.display_name || 'C').split(' ').map(n => n[0]).join('').slice(0, 2)}
-                </span>
-              )}
-            </div>
+            <Avatar c={selected} size={56} />
             <div style={{ flex: 1, minWidth: 0 }}>
               <div style={{ fontFamily: "'DM Serif Display', Georgia, serif", fontSize: 22, color: TEXT1, lineHeight: 1.2 }}>{selected.profiles?.display_name}</div>
-              <div style={{ fontFamily: "'DM Mono', monospace", fontSize: 10, color: ACCENT, marginTop: 2, letterSpacing: '0.08em' }}>@{selected.profiles?.handle}</div>
+              <div style={{ fontFamily: "'DM Mono', monospace", fontSize: 10, color: ACCENT, marginTop: 2 }}>@{selected.profiles?.handle}</div>
+              {selected.category && <div style={{ fontFamily: "'DM Mono', monospace", fontSize: 9, color: TEXT3, marginTop: 4 }}>{selected.category.toUpperCase()}</div>}
               {selected.profiles?.bio && <p style={{ fontSize: 12, color: TEXT2, lineHeight: 1.6, margin: '8px 0 0' }}>{selected.profiles.bio}</p>}
             </div>
           </div>
@@ -277,11 +276,9 @@ export default function FanApp({ session, profile, onSignOut }) {
             <button onClick={handleSubscribe} disabled={subscribeLoading} style={{
               width: '100%', background: ACCENT, color: '#080808',
               border: 'none', borderRadius: 8, padding: '12px',
-              fontFamily: "'DM Mono', monospace", fontSize: 12,
-              fontWeight: 700, letterSpacing: '0.12em',
-              cursor: subscribeLoading ? 'not-allowed' : 'pointer',
-              opacity: subscribeLoading ? 0.7 : 1,
-              boxShadow: `0 4px 24px ${ACCENT}50`,
+              fontFamily: "'DM Mono', monospace", fontSize: 12, fontWeight: 700,
+              letterSpacing: '0.12em', cursor: subscribeLoading ? 'not-allowed' : 'pointer',
+              opacity: subscribeLoading ? 0.7 : 1, boxShadow: `0 4px 24px ${ACCENT}50`,
             }}>
               {subscribeLoading ? 'REDIRECTING...' : `SUBSCRIBE · $${selected.monthly_price}/mo`}
             </button>
@@ -332,7 +329,7 @@ export default function FanApp({ session, profile, onSignOut }) {
                 <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start', marginBottom: 8 }}>
                   <div>
                     <div style={{ fontFamily: "'DM Serif Display', Georgia, serif", fontSize: 16, color: TEXT1, marginBottom: 2 }}>{event.name}</div>
-                    <div style={{ fontFamily: "'DM Mono', monospace", fontSize: 14, color: ACCENT, fontWeight: 700 }}>
+                    <div style={{ fontFamily: "'DM Mono', monospace", fontSize: 13, color: ACCENT, fontWeight: 700 }}>
                       {new Date(event.event_date).toLocaleDateString('en-US', { month: 'short', day: 'numeric', year: 'numeric' })}
                     </div>
                   </div>
@@ -378,232 +375,182 @@ export default function FanApp({ session, profile, onSignOut }) {
     )
   }
 
-  // ─── Page wrapper styles ─────────────────────────────────────────────────
-  const pageStyle = {
-    minHeight: '100vh',
-    color: TEXT1,
-    backgroundImage: `
-      linear-gradient(to bottom,
-        rgba(9,9,11,0.72) 0%,
-        rgba(9,9,11,0.88) 40%,
-        rgba(9,9,11,0.97) 100%
-      ),
-      url('${IMG_STAGE}')
-    `,
-    backgroundSize: 'cover',
-    backgroundPosition: 'center 30%',
-    backgroundAttachment: 'scroll', // fixed causes issues on mobile Safari
-    // Critical mobile fix: prevent horizontal overflow
-    overflowX: 'hidden',
-    width: '100%',
-  }
-
-  const contentPad = { padding: '16px 16px 100px', maxWidth: 960, margin: '0 auto' }
-
+  // ─── Render ──────────────────────────────────────────────────────────────
   return (
-    <div style={pageStyle}>
-      {/* Critical viewport meta is set in index.html — this ensures no zoom needed */}
+    <div style={{
+      minHeight: '100vh', color: TEXT1,
+      backgroundImage: `
+        linear-gradient(to bottom,
+          rgba(9,9,11,0.72) 0%,
+          rgba(9,9,11,0.88) 40%,
+          rgba(9,9,11,0.97) 100%
+        ),
+        url('${IMG_STAGE}')
+      `,
+      backgroundSize: 'cover',
+      backgroundPosition: 'center 30%',
+      backgroundAttachment: 'scroll',
+      overflowX: 'hidden', width: '100%',
+    }}>
       <link href="https://fonts.googleapis.com/css2?family=DM+Serif+Display&family=DM+Mono:wght@400;500&display=swap" rel="stylesheet" />
 
       {/* Accent glow */}
       <div style={{ position: 'fixed', top: 0, left: 0, width: '100vw', height: 400, background: `radial-gradient(ellipse at 20% 0%, ${ACCENT}08 0%, transparent 60%)`, pointerEvents: 'none', zIndex: 0 }} />
 
-      {/* ── Top nav ── */}
+      {/* ── Top bar ── */}
       <nav style={{
         display: 'flex', alignItems: 'center', justifyContent: 'space-between',
         padding: '0 16px', height: 56,
         borderBottom: `1px solid ${BORDER}`,
         position: 'sticky', top: 0,
-        background: 'rgba(9,9,11,0.92)',
-        backdropFilter: 'blur(24px)',
+        background: 'rgba(9,9,11,0.92)', backdropFilter: 'blur(24px)',
         zIndex: 100,
       }}>
         <div style={{ display: 'flex', alignItems: 'center', gap: 10 }}>
           {selected && (
-            <button onClick={goBack} style={{ background: 'none', border: 'none', color: TEXT3, fontSize: 18, cursor: 'pointer', padding: '4px 8px 4px 0', lineHeight: 1 }}>←</button>
+            <button onClick={() => setSelected(null)} style={{ background: 'none', border: 'none', color: TEXT3, fontSize: 18, cursor: 'pointer', padding: '4px 8px 4px 0', lineHeight: 1 }}>←</button>
           )}
           <span style={{ fontFamily: "'DM Serif Display', Georgia, serif", fontSize: 20, color: ACCENT }}>StagePass</span>
         </div>
 
-        {/* Hamburger menu button */}
-        <button
-          onClick={() => setMenuOpen(!menuOpen)}
-          style={{ background: 'none', border: `1px solid ${BORDER}`, borderRadius: 7, padding: '6px 10px', color: TEXT2, cursor: 'pointer', display: 'flex', flexDirection: 'column', gap: 4 }}
-        >
-          <div style={{ width: 18, height: 2, background: menuOpen ? ACCENT : TEXT2, borderRadius: 2, transition: 'background 0.15s' }} />
-          <div style={{ width: 18, height: 2, background: menuOpen ? ACCENT : TEXT2, borderRadius: 2, transition: 'background 0.15s' }} />
-          <div style={{ width: 18, height: 2, background: menuOpen ? ACCENT : TEXT2, borderRadius: 2, transition: 'background 0.15s' }} />
-        </button>
+        {/* Creator login link + optional fan sign out */}
+        <div style={{ display: 'flex', gap: 8, alignItems: 'center' }}>
+          {fanSession && fanProfile && (
+            <span style={{ fontFamily: "'DM Mono', monospace", fontSize: 10, color: TEXT3 }}>@{fanProfile.handle}</span>
+          )}
+          {fanSession ? (
+            <button onClick={() => supabase.auth.signOut()} style={{
+              background: 'transparent', border: `1px solid ${BORDER}`,
+              borderRadius: 7, padding: '5px 10px', color: TEXT3,
+              fontFamily: "'DM Mono', monospace", fontSize: 9,
+              letterSpacing: '0.08em', cursor: 'pointer',
+            }}>SIGN OUT</button>
+          ) : null}
+          <a href="/creator" style={{
+            background: ACCENT + '14', color: ACCENT,
+            border: `1px solid ${ACCENT}35`, borderRadius: 7,
+            padding: '5px 12px', fontFamily: "'DM Mono', monospace",
+            fontSize: 9, letterSpacing: '0.1em', cursor: 'pointer',
+            textDecoration: 'none', whiteSpace: 'nowrap',
+          }}>🎤 CREATOR</a>
+        </div>
       </nav>
 
-      {/* ── Dropdown menu ── */}
-      {menuOpen && (
-        <div style={{
-          position: 'fixed', top: 56, right: 0, width: '100%', maxWidth: 280,
-          background: 'rgba(17,17,20,0.97)', backdropFilter: 'blur(24px)',
-          border: `1px solid ${BORDER}`, borderTop: 'none',
-          borderRadius: '0 0 0 14px',
-          zIndex: 200, overflow: 'hidden',
-          boxShadow: '0 16px 48px rgba(0,0,0,0.6)',
-        }}>
-          {/* Profile header in menu */}
-          <div style={{ padding: '16px 20px', borderBottom: `1px solid ${BORDER2}` }}>
-            <div style={{ fontSize: 13, color: TEXT1, fontWeight: 500 }}>{profile.display_name}</div>
-            <div style={{ fontFamily: "'DM Mono', monospace", fontSize: 10, color: TEXT3, marginTop: 2 }}>@{profile.handle}</div>
-          </div>
+      {/* ── Content ── */}
+      <div style={{ position: 'relative', zIndex: 1, paddingBottom: 70 }}>
 
-          {[
-            { id: 'profile',   icon: '◉', label: 'My Profile' },
-            { id: 'artists',   icon: '♪', label: 'My Artists' },
-            { id: 'myevents',  icon: '◈', label: 'My Events' },
-            { id: 'search',    icon: '⊕', label: 'Search' },
-          ].map(item => (
-            <button key={item.id} onClick={() => { setActiveTab(item.id); setSelected(null); setMenuOpen(false) }} style={{
-              display: 'flex', alignItems: 'center', gap: 14,
-              width: '100%', background: activeTab === item.id ? ACCENT + '12' : 'transparent',
-              border: 'none',
-              borderLeft: activeTab === item.id ? `3px solid ${ACCENT}` : '3px solid transparent',
-              color: activeTab === item.id ? ACCENT : TEXT2,
-              padding: '13px 20px', cursor: 'pointer', textAlign: 'left',
-              fontFamily: "'DM Mono', monospace", fontSize: 12, letterSpacing: '0.08em',
-              transition: 'all 0.15s',
-            }}>
-              <span style={{ fontSize: 14, opacity: activeTab === item.id ? 1 : 0.5 }}>{item.icon}</span>
-              {item.label.toUpperCase()}
-            </button>
-          ))}
-
-          <div style={{ padding: '12px 20px', borderTop: `1px solid ${BORDER2}` }}>
-            <button onClick={() => { setMenuOpen(false); onSignOut() }} style={{
-              width: '100%', background: 'transparent', color: TEXT3,
-              border: `1px solid ${BORDER}`, borderRadius: 7, padding: '9px',
-              fontFamily: "'DM Mono', monospace", fontSize: 11,
-              letterSpacing: '0.1em', cursor: 'pointer',
-            }}>SIGN OUT</button>
-          </div>
-        </div>
-      )}
-
-      {/* Dismiss menu on outside tap */}
-      {menuOpen && (
-        <div onClick={() => setMenuOpen(false)} style={{ position: 'fixed', inset: 0, zIndex: 150 }} />
-      )}
-
-      {/* ── Tab indicator bar ── */}
-      <div style={{
-        display: 'flex', borderBottom: `1px solid ${BORDER2}`,
-        background: 'rgba(9,9,11,0.6)', backdropFilter: 'blur(8px)',
-        position: 'sticky', top: 56, zIndex: 90, overflowX: 'auto',
-        WebkitOverflowScrolling: 'touch',
-      }}>
-        {[
-          { id: 'profile',  label: 'Profile' },
-          { id: 'artists',  label: 'Artists' },
-          { id: 'myevents', label: 'Events' },
-          { id: 'search',   label: 'Search' },
-        ].map(t => (
-          <button key={t.id} onClick={() => { setActiveTab(t.id); setSelected(null) }} style={{
-            flex: '1 0 auto', minWidth: 72, padding: '10px 12px',
-            background: 'none', border: 'none',
-            borderBottom: activeTab === t.id ? `2px solid ${ACCENT}` : '2px solid transparent',
-            color: activeTab === t.id ? ACCENT : TEXT3,
-            fontFamily: "'DM Mono', monospace", fontSize: 10,
-            letterSpacing: '0.1em', textTransform: 'uppercase',
-            cursor: 'pointer', whiteSpace: 'nowrap',
-            transition: 'all 0.15s',
-          }}>{t.label}</button>
-        ))}
-      </div>
-
-      {/* ── Content area ── */}
-      <div style={{ position: 'relative', zIndex: 1 }}>
-
-        {/* Creator page overlay (shared across tabs) */}
         {selected ? <CreatorPage /> : (
           <>
 
-          {/* ── MY PROFILE ── */}
-          {activeTab === 'profile' && (
-            <div style={contentPad}>
-              <div style={{ marginBottom: 28 }}>
-                <div style={{ fontFamily: "'DM Serif Display', Georgia, serif", fontSize: 28, color: TEXT1, lineHeight: 1.2 }}>
-                  My <span style={{ color: ACCENT }}>Profile</span>
+          {/* ── DISCOVER / SEARCH ── */}
+          {activeTab === 'search' && (
+            <div style={{ padding: '20px 16px', maxWidth: 960, margin: '0 auto' }}>
+              <div style={{ marginBottom: 20 }}>
+                <div style={{ fontFamily: "'DM Serif Display', Georgia, serif", fontSize: 28, color: TEXT1, lineHeight: 1.2, marginBottom: 4 }}>
+                  Discover <span style={{ color: ACCENT }}>Artists</span>
                 </div>
+                <div style={{ fontFamily: "'DM Mono', monospace", fontSize: 10, color: TEXT3, letterSpacing: '0.18em' }}>FIND CREATORS TO SUPPORT</div>
               </div>
 
-              <div style={{
-                background: 'rgba(17,17,20,0.80)', backdropFilter: 'blur(20px)',
-                border: `1px solid ${BORDER}`, borderRadius: 16, padding: '24px', marginBottom: 20,
-              }}>
-                <div style={{ display: 'flex', alignItems: 'center', gap: 16, marginBottom: 20 }}>
-                  <div style={{
-                    width: 64, height: 64, borderRadius: '50%', background: BG3,
-                    border: `2px solid ${ACCENT}55`, overflow: 'hidden', flexShrink: 0,
-                    display: 'flex', alignItems: 'center', justifyContent: 'center',
-                    boxShadow: `0 0 20px ${ACCENT}25`,
-                  }}>
-                    {profile.avatar_url ? (
-                      <img src={profile.avatar_url} alt={profile.display_name} style={{ width: '100%', height: '100%', objectFit: 'cover' }} />
-                    ) : (
-                      <span style={{ fontFamily: "'DM Serif Display', Georgia, serif", fontSize: 22, color: ACCENT }}>
-                        {(profile.display_name || 'F').split(' ').map(n => n[0]).join('').slice(0, 2)}
-                      </span>
-                    )}
-                  </div>
-                  <div>
-                    <div style={{ fontFamily: "'DM Serif Display', Georgia, serif", fontSize: 22, color: TEXT1 }}>{profile.display_name}</div>
-                    <div style={{ fontFamily: "'DM Mono', monospace", fontSize: 11, color: ACCENT, marginTop: 2 }}>@{profile.handle}</div>
-                    <div style={{ fontFamily: "'DM Mono', monospace", fontSize: 10, color: TEXT3, marginTop: 4 }}>{session.user.email}</div>
-                  </div>
-                </div>
+              {/* Search input */}
+              <input
+                value={searchQuery}
+                onChange={e => setSearchQuery(e.target.value)}
+                placeholder="Search by name, handle or bio..."
+                style={{
+                  width: '100%', background: 'rgba(17,17,20,0.8)',
+                  backdropFilter: 'blur(8px)', border: `1px solid ${BORDER}`,
+                  borderRadius: 9, padding: '11px 16px', color: TEXT1,
+                  fontFamily: "'DM Mono', monospace", fontSize: 12,
+                  outline: 'none', marginBottom: 12, boxSizing: 'border-box',
+                }}
+              />
 
-                <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 12 }}>
-                  <div style={{ ...card({ padding: '16px' }) }}>
-                    <div style={{ fontFamily: "'DM Mono', monospace", fontSize: 9, color: TEXT3, letterSpacing: '0.18em', marginBottom: 6 }}>SUBSCRIPTIONS</div>
-                    <div style={{ fontFamily: "'DM Serif Display', Georgia, serif", fontSize: 26, color: ACCENT }}>{subscribedCreators.length}</div>
-                  </div>
-                  <div style={{ ...card({ padding: '16px' }) }}>
-                    <div style={{ fontFamily: "'DM Mono', monospace", fontSize: 9, color: TEXT3, letterSpacing: '0.18em', marginBottom: 6 }}>EVENTS</div>
-                    <div style={{ fontFamily: "'DM Serif Display', Georgia, serif", fontSize: 26, color: ACCENT }}>{fanEvents.length}</div>
-                  </div>
-                </div>
+              {/* Category filters */}
+              <div style={{ display: 'flex', gap: 8, marginBottom: 20, flexWrap: 'wrap' }}>
+                {CATEGORIES.map(cat => (
+                  <button key={cat} onClick={() => setSearchCategory(cat)} style={{
+                    background: searchCategory === cat ? ACCENT : 'rgba(17,17,20,0.7)',
+                    color: searchCategory === cat ? '#080808' : TEXT3,
+                    border: searchCategory === cat ? 'none' : `1px solid ${BORDER}`,
+                    borderRadius: 20, padding: '6px 14px',
+                    fontFamily: "'DM Mono', monospace", fontSize: 10,
+                    fontWeight: searchCategory === cat ? 700 : 400,
+                    letterSpacing: '0.1em', cursor: 'pointer',
+                    boxShadow: searchCategory === cat ? `0 4px 14px ${ACCENT}40` : 'none',
+                    transition: 'all 0.15s',
+                  }}>{cat.toUpperCase()}</button>
+                ))}
               </div>
 
-              <div style={{ fontFamily: "'DM Mono', monospace", fontSize: 10, color: TEXT3, letterSpacing: '0.12em', textAlign: 'center', marginTop: 8 }}>
-                To edit your profile, contact support or sign up as a creator.
-              </div>
+              {creatorLoading ? (
+                <div style={{ color: TEXT3, fontFamily: "'DM Mono', monospace", fontSize: 11 }}>Loading...</div>
+              ) : unsubscribedCreators.length === 0 ? (
+                <div style={{ textAlign: 'center', padding: '40px 0', color: TEXT3, fontFamily: "'DM Mono', monospace", fontSize: 11 }}>
+                  No artists found.
+                </div>
+              ) : (
+                <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fill, minmax(260px, 1fr))', gap: 16 }}>
+                  {unsubscribedCreators.map(c => (
+                    <div key={c.id} onClick={() => selectCreator(c)}
+                      style={{ background: 'rgba(17,17,20,0.72)', backdropFilter: 'blur(16px)', border: `1px solid ${BORDER}`, borderRadius: 16, padding: '22px', cursor: 'pointer', transition: 'all 0.2s', boxShadow: '0 4px 24px rgba(0,0,0,0.4)' }}
+                      onMouseEnter={e => { e.currentTarget.style.borderColor = ACCENT + '55'; e.currentTarget.style.transform = 'translateY(-3px)' }}
+                      onMouseLeave={e => { e.currentTarget.style.borderColor = BORDER; e.currentTarget.style.transform = 'translateY(0)' }}
+                    >
+                      <Avatar c={c} size={50} />
+                      <div style={{ fontFamily: "'DM Serif Display', Georgia, serif", fontSize: 17, color: TEXT1, marginBottom: 2, marginTop: 14 }}>{c.profiles?.display_name || 'Creator'}</div>
+                      <div style={{ fontFamily: "'DM Mono', monospace", fontSize: 10, color: ACCENT, marginBottom: 6, letterSpacing: '0.08em' }}>@{c.profiles?.handle || 'creator'}</div>
+                      {c.category && <div style={{ fontFamily: "'DM Mono', monospace", fontSize: 9, color: TEXT3, marginBottom: 8, letterSpacing: '0.1em' }}>{c.category.toUpperCase()}</div>}
+                      {c.profiles?.bio && <div style={{ fontSize: 11, color: TEXT3, lineHeight: 1.6, marginBottom: 14 }}>{c.profiles.bio}</div>}
+                      <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', paddingTop: 12, borderTop: `1px solid ${BORDER2}` }}>
+                        <div style={{ fontFamily: "'DM Mono', monospace", fontSize: 14, color: ACCENT, fontWeight: 700 }}>${c.monthly_price}<span style={{ fontSize: 9, color: TEXT3, fontWeight: 400 }}>/mo</span></div>
+                        <div style={{ fontFamily: "'DM Mono', monospace", fontSize: 9, color: TEXT3, letterSpacing: '0.1em' }}>VIEW →</div>
+                      </div>
+                    </div>
+                  ))}
+                </div>
+              )}
             </div>
           )}
 
           {/* ── MY ARTISTS ── */}
           {activeTab === 'artists' && (
-            <div style={contentPad}>
-              <div style={{ marginBottom: 24 }}>
+            <div style={{ padding: '20px 16px', maxWidth: 960, margin: '0 auto' }}>
+              <div style={{ marginBottom: 20 }}>
                 <div style={{ fontFamily: "'DM Serif Display', Georgia, serif", fontSize: 28, color: TEXT1, lineHeight: 1.2 }}>
                   My <span style={{ color: ACCENT }}>Artists</span>
                 </div>
                 <div style={{ fontFamily: "'DM Mono', monospace", fontSize: 10, color: TEXT3, letterSpacing: '0.18em', marginTop: 4 }}>
-                  {subscribedCreators.length} ACTIVE SUBSCRIPTION{subscribedCreators.length !== 1 ? 'S' : ''}
+                  {subscribedCreators.length} SUBSCRIPTION{subscribedCreators.length !== 1 ? 'S' : ''}
                 </div>
               </div>
-
-              {creatorLoading ? (
-                <div style={{ color: TEXT3, fontFamily: "'DM Mono', monospace", fontSize: 11 }}>Loading...</div>
+              {!fanSession ? (
+                <div style={{ textAlign: 'center', padding: '48px 0' }}>
+                  <div style={{ fontSize: 32, marginBottom: 12, color: TEXT3 }}>♪</div>
+                  <div style={{ color: TEXT3, fontFamily: "'DM Mono', monospace", fontSize: 11, marginBottom: 20 }}>Sign in to see your subscriptions.</div>
+                </div>
               ) : subscribedCreators.length === 0 ? (
                 <div style={{ textAlign: 'center', padding: '48px 0' }}>
                   <div style={{ fontSize: 32, marginBottom: 12, color: TEXT3 }}>♪</div>
                   <div style={{ color: TEXT3, fontFamily: "'DM Mono', monospace", fontSize: 11, marginBottom: 20 }}>No subscriptions yet.</div>
-                  <button onClick={() => setActiveTab('search')} style={{
-                    background: ACCENT, color: '#080808', border: 'none', borderRadius: 7,
-                    padding: '10px 20px', fontFamily: "'DM Mono', monospace", fontSize: 11,
-                    fontWeight: 700, cursor: 'pointer', letterSpacing: '0.12em',
-                    boxShadow: `0 4px 16px ${ACCENT}40`,
-                  }}>FIND ARTISTS</button>
+                  <button onClick={() => setActiveTab('search')} style={{ background: ACCENT, color: '#080808', border: 'none', borderRadius: 7, padding: '10px 20px', fontFamily: "'DM Mono', monospace", fontSize: 11, fontWeight: 700, cursor: 'pointer', letterSpacing: '0.12em', boxShadow: `0 4px 16px ${ACCENT}40` }}>FIND ARTISTS</button>
                 </div>
               ) : (
                 <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fill, minmax(260px, 1fr))', gap: 16 }}>
                   {subscribedCreators.map(c => (
-                    <CreatorCard key={c.id} c={c} onClick={() => selectCreator(c)} />
+                    <div key={c.id} onClick={() => selectCreator(c)}
+                      style={{ background: 'rgba(17,17,20,0.72)', backdropFilter: 'blur(16px)', border: `1px solid ${ACCENT}30`, borderRadius: 16, padding: '22px', cursor: 'pointer', transition: 'all 0.2s' }}
+                      onMouseEnter={e => { e.currentTarget.style.borderColor = ACCENT + '66'; e.currentTarget.style.transform = 'translateY(-2px)' }}
+                      onMouseLeave={e => { e.currentTarget.style.borderColor = ACCENT + '30'; e.currentTarget.style.transform = 'translateY(0)' }}
+                    >
+                      <Avatar c={c} size={50} />
+                      <div style={{ fontFamily: "'DM Serif Display', Georgia, serif", fontSize: 17, color: TEXT1, marginBottom: 2, marginTop: 14 }}>{c.profiles?.display_name || 'Creator'}</div>
+                      <div style={{ fontFamily: "'DM Mono', monospace", fontSize: 10, color: ACCENT, marginBottom: 6 }}>@{c.profiles?.handle}</div>
+                      {c.profiles?.bio && <div style={{ fontSize: 11, color: TEXT3, lineHeight: 1.6, marginBottom: 14 }}>{c.profiles.bio}</div>}
+                      <div style={{ paddingTop: 12, borderTop: `1px solid ${BORDER2}` }}>
+                        <Pill color={ACCENT}>✓ SUBSCRIBED</Pill>
+                      </div>
+                    </div>
                   ))}
                 </div>
               )}
@@ -612,26 +559,26 @@ export default function FanApp({ session, profile, onSignOut }) {
 
           {/* ── MY EVENTS ── */}
           {activeTab === 'myevents' && (
-            <div style={contentPad}>
-              <div style={{ marginBottom: 24 }}>
+            <div style={{ padding: '20px 16px', maxWidth: 820, margin: '0 auto' }}>
+              <div style={{ marginBottom: 20 }}>
                 <div style={{ fontFamily: "'DM Serif Display', Georgia, serif", fontSize: 28, color: TEXT1, lineHeight: 1.2 }}>
                   My <span style={{ color: ACCENT }}>Events</span>
                 </div>
                 <div style={{ fontFamily: "'DM Mono', monospace", fontSize: 10, color: TEXT3, letterSpacing: '0.18em', marginTop: 4 }}>YOUR RSVPS</div>
               </div>
 
-              {fanEventsLoading ? (
+              {!fanSession ? (
+                <div style={{ textAlign: 'center', padding: '48px 0' }}>
+                  <div style={{ fontSize: 32, marginBottom: 12, color: TEXT3 }}>◈</div>
+                  <div style={{ color: TEXT3, fontFamily: "'DM Mono', monospace", fontSize: 11 }}>Sign in to see your events.</div>
+                </div>
+              ) : fanEventsLoading ? (
                 <div style={{ color: TEXT3, fontFamily: "'DM Mono', monospace", fontSize: 11 }}>Loading...</div>
               ) : fanEvents.length === 0 ? (
                 <div style={{ textAlign: 'center', padding: '48px 0' }}>
                   <div style={{ fontSize: 32, marginBottom: 12, color: TEXT3 }}>◈</div>
                   <div style={{ color: TEXT3, fontFamily: "'DM Mono', monospace", fontSize: 11, marginBottom: 20 }}>No upcoming events.</div>
-                  <button onClick={() => setActiveTab('artists')} style={{
-                    background: ACCENT, color: '#080808', border: 'none', borderRadius: 7,
-                    padding: '10px 20px', fontFamily: "'DM Mono', monospace", fontSize: 11,
-                    fontWeight: 700, cursor: 'pointer', letterSpacing: '0.12em',
-                    boxShadow: `0 4px 16px ${ACCENT}40`,
-                  }}>BROWSE ARTISTS</button>
+                  <button onClick={() => setActiveTab('artists')} style={{ background: ACCENT, color: '#080808', border: 'none', borderRadius: 7, padding: '10px 20px', fontFamily: "'DM Mono', monospace", fontSize: 11, fontWeight: 700, cursor: 'pointer', letterSpacing: '0.12em', boxShadow: `0 4px 16px ${ACCENT}40` }}>BROWSE ARTISTS</button>
                 </div>
               ) : (
                 <div style={{ display: 'flex', flexDirection: 'column', gap: 12 }}>
@@ -642,7 +589,7 @@ export default function FanApp({ session, profile, onSignOut }) {
                     return (
                       <div key={rsvp.id} style={{
                         background: 'rgba(17,17,20,0.75)', backdropFilter: 'blur(16px)',
-                        border: `1px solid ${active ? ACCENT + '44' : ACCENT + '22'}`,
+                        border: `1px solid ${active ? ACCENT + '55' : ACCENT + '22'}`,
                         borderRadius: 14, padding: '18px 20px',
                         boxShadow: active ? `0 4px 24px ${ACCENT}18` : 'none',
                       }}>
@@ -654,50 +601,27 @@ export default function FanApp({ session, profile, onSignOut }) {
                             </div>
                           </div>
                           <div style={{ display: 'flex', flexDirection: 'column', gap: 5, alignItems: 'flex-end', flexShrink: 0 }}>
-                            {active && (
-                              <span style={{ background: '#e8454518', color: '#e84545', border: '1px solid #e8454540', borderRadius: 5, fontSize: 9, fontWeight: 700, padding: '3px 8px', letterSpacing: '0.12em', fontFamily: "'DM Mono', monospace" }}>● LIVE NOW</span>
-                            )}
+                            {active && <span style={{ background: '#e8454518', color: '#e84545', border: '1px solid #e8454540', borderRadius: 5, fontSize: 9, fontWeight: 700, padding: '3px 8px', letterSpacing: '0.12em', fontFamily: "'DM Mono', monospace" }}>● LIVE NOW</span>}
                             <span style={{ background: ACCENT + '18', color: ACCENT, border: `1px solid ${ACCENT}40`, borderRadius: 5, fontSize: 9, fontWeight: 700, padding: '3px 8px', letterSpacing: '0.12em', fontFamily: "'DM Mono', monospace" }}>
                               {event.event_type === 'virtual' ? '💻 VIRTUAL' : '📍 IN PERSON'}
                             </span>
                             <span style={{ background: '#6dbf8a18', color: '#6dbf8a', border: '1px solid #6dbf8a40', borderRadius: 5, fontSize: 9, fontWeight: 700, padding: '3px 8px', letterSpacing: '0.12em', fontFamily: "'DM Mono', monospace" }}>✓ RSVP'D</span>
                           </div>
                         </div>
-
                         {event.description && <div style={{ fontSize: 12, color: TEXT2, lineHeight: 1.55, marginBottom: 10 }}>{event.description}</div>}
-
                         <div style={{ display: 'flex', gap: 12, flexWrap: 'wrap', marginBottom: 12 }}>
                           {event.venue && <div style={{ fontSize: 11, color: TEXT3 }}>📍 {event.venue}</div>}
                           <div style={{ fontSize: 11, color: TEXT3 }}>By <span style={{ color: TEXT2 }}>{event.creators?.profiles?.display_name || 'Creator'}</span></div>
                         </div>
-
                         <div style={{ display: 'flex', gap: 8, flexWrap: 'wrap' }}>
-                          {/* Join Live — only show when active */}
                           {event.daily_room_name && active && (
-                            <button onClick={() => setLiveEvent(rsvp.events)} style={{
-                              background: ACCENT, color: '#080808', border: 'none',
-                              borderRadius: 7, padding: '9px 18px',
-                              fontFamily: "'DM Mono', monospace", fontSize: 11,
-                              fontWeight: 700, cursor: 'pointer', letterSpacing: '0.1em',
-                              boxShadow: `0 4px 16px ${ACCENT}50`,
-                            }}>🎙 JOIN LIVE</button>
+                            <button onClick={() => setLiveEvent(rsvp.events)} style={{ background: ACCENT, color: '#080808', border: 'none', borderRadius: 7, padding: '9px 18px', fontFamily: "'DM Mono', monospace", fontSize: 11, fontWeight: 700, cursor: 'pointer', letterSpacing: '0.1em', boxShadow: `0 4px 16px ${ACCENT}50` }}>🎙 JOIN LIVE</button>
                           )}
-                          {/* Show room link even if not "active" but has daily room */}
                           {event.daily_room_name && !active && (
-                            <button onClick={() => setLiveEvent(rsvp.events)} style={{
-                              background: ACCENT + '14', color: ACCENT,
-                              border: `1px solid ${ACCENT}40`, borderRadius: 7, padding: '9px 18px',
-                              fontFamily: "'DM Mono', monospace", fontSize: 11,
-                              fontWeight: 700, cursor: 'pointer', letterSpacing: '0.1em',
-                            }}>🎙 ENTER ROOM</button>
+                            <button onClick={() => setLiveEvent(rsvp.events)} style={{ background: ACCENT + '14', color: ACCENT, border: `1px solid ${ACCENT}40`, borderRadius: 7, padding: '9px 18px', fontFamily: "'DM Mono', monospace", fontSize: 11, fontWeight: 700, cursor: 'pointer', letterSpacing: '0.1em' }}>🎙 ENTER ROOM</button>
                           )}
                           <button onClick={async () => { await supabase.from('rsvps').delete().eq('id', rsvp.id); refetchFanEvents() }}
-                            style={{
-                              background: 'transparent', border: `1px solid ${BORDER}`,
-                              borderRadius: 7, padding: '9px 14px',
-                              color: TEXT3, fontFamily: "'DM Mono', monospace",
-                              fontSize: 10, cursor: 'pointer', letterSpacing: '0.08em',
-                            }}>CANCEL RSVP</button>
+                            style={{ background: 'transparent', border: `1px solid ${BORDER}`, borderRadius: 7, padding: '9px 14px', color: TEXT3, fontFamily: "'DM Mono', monospace", fontSize: 10, cursor: 'pointer', letterSpacing: '0.08em' }}>CANCEL RSVP</button>
                         </div>
                       </div>
                     )
@@ -707,64 +631,58 @@ export default function FanApp({ session, profile, onSignOut }) {
             </div>
           )}
 
-          {/* ── SEARCH ── */}
-          {activeTab === 'search' && (
-            <div style={contentPad}>
+          {/* ── MY PROFILE ── */}
+          {activeTab === 'profile' && (
+            <div style={{ padding: '20px 16px', maxWidth: 820, margin: '0 auto' }}>
               <div style={{ marginBottom: 20 }}>
-                <div style={{ fontFamily: "'DM Serif Display', Georgia, serif", fontSize: 28, color: TEXT1, lineHeight: 1.2, marginBottom: 4 }}>
-                  Discover <span style={{ color: ACCENT }}>Artists</span>
+                <div style={{ fontFamily: "'DM Serif Display', Georgia, serif", fontSize: 28, color: TEXT1, lineHeight: 1.2 }}>
+                  My <span style={{ color: ACCENT }}>Profile</span>
                 </div>
-                <div style={{ fontFamily: "'DM Mono', monospace", fontSize: 10, color: TEXT3, letterSpacing: '0.18em' }}>FIND NEW CREATORS TO SUPPORT</div>
               </div>
 
-              {/* Search input */}
-              <input
-                value={searchQuery}
-                onChange={e => setSearchQuery(e.target.value)}
-                placeholder="Search by name, handle or bio..."
-                style={{
-                  width: '100%', background: 'rgba(17,17,20,0.8)',
-                  backdropFilter: 'blur(8px)',
-                  border: `1px solid ${BORDER}`, borderRadius: 9,
-                  padding: '11px 16px', color: TEXT1,
-                  fontFamily: "'DM Mono', monospace", fontSize: 12,
-                  outline: 'none', marginBottom: 14, boxSizing: 'border-box',
-                }}
-              />
-
-              {/* Category filter pills */}
-              <div style={{ display: 'flex', gap: 8, marginBottom: 20, flexWrap: 'wrap' }}>
-                {CATEGORIES.map(cat => (
-                  <button key={cat} onClick={() => setSearchCategory(cat)} style={{
-                    background: searchCategory === cat ? ACCENT : 'rgba(17,17,20,0.7)',
-                    color: searchCategory === cat ? '#080808' : TEXT3,
-                    border: searchCategory === cat ? 'none' : `1px solid ${BORDER}`,
-                    borderRadius: 20, padding: '7px 16px',
-                    fontFamily: "'DM Mono', monospace", fontSize: 10,
-                    fontWeight: searchCategory === cat ? 700 : 400,
-                    letterSpacing: '0.1em', cursor: 'pointer',
-                    boxShadow: searchCategory === cat ? `0 4px 14px ${ACCENT}40` : 'none',
-                    transition: 'all 0.15s',
-                  }}>{cat.toUpperCase()}</button>
-                ))}
-              </div>
-
-              {/* Results count */}
-              <div style={{ fontFamily: "'DM Mono', monospace", fontSize: 10, color: TEXT3, letterSpacing: '0.14em', marginBottom: 16 }}>
-                {unsubscribedCreators.length} ARTIST{unsubscribedCreators.length !== 1 ? 'S' : ''} FOUND
-              </div>
-
-              {creatorLoading ? (
-                <div style={{ color: TEXT3, fontFamily: "'DM Mono', monospace", fontSize: 11 }}>Loading...</div>
-              ) : unsubscribedCreators.length === 0 ? (
-                <div style={{ textAlign: 'center', padding: '40px 0', color: TEXT3, fontFamily: "'DM Mono', monospace", fontSize: 11 }}>
-                  No artists found. Try a different filter.
+              {fanSession && fanProfile ? (
+                <div>
+                  <div style={{ background: 'rgba(17,17,20,0.82)', backdropFilter: 'blur(20px)', border: `1px solid ${BORDER}`, borderRadius: 16, padding: '24px', marginBottom: 16 }}>
+                    <div style={{ display: 'flex', alignItems: 'center', gap: 16, marginBottom: 16 }}>
+                      <div style={{ width: 60, height: 60, borderRadius: '50%', background: BG3, border: `2px solid ${ACCENT}55`, display: 'flex', alignItems: 'center', justifyContent: 'center', fontFamily: "'DM Serif Display', Georgia, serif", fontSize: 22, color: ACCENT, overflow: 'hidden', flexShrink: 0 }}>
+                        {fanProfile.avatar_url ? <img src={fanProfile.avatar_url} alt="" style={{ width: '100%', height: '100%', objectFit: 'cover' }} /> : (fanProfile.display_name || 'F').split(' ').map(n => n[0]).join('').slice(0, 2)}
+                      </div>
+                      <div>
+                        <div style={{ fontFamily: "'DM Serif Display', Georgia, serif", fontSize: 22, color: TEXT1 }}>{fanProfile.display_name}</div>
+                        <div style={{ fontFamily: "'DM Mono', monospace", fontSize: 11, color: ACCENT, marginTop: 2 }}>@{fanProfile.handle}</div>
+                        <div style={{ fontFamily: "'DM Mono', monospace", fontSize: 10, color: TEXT3, marginTop: 4 }}>{fanSession.user.email}</div>
+                      </div>
+                    </div>
+                    <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 12 }}>
+                      <div style={{ ...card({ padding: '14px' }) }}>
+                        <div style={{ fontFamily: "'DM Mono', monospace", fontSize: 9, color: TEXT3, letterSpacing: '0.18em', marginBottom: 6 }}>SUBSCRIPTIONS</div>
+                        <div style={{ fontFamily: "'DM Serif Display', Georgia, serif", fontSize: 26, color: ACCENT }}>{subscribedCreators.length}</div>
+                      </div>
+                      <div style={{ ...card({ padding: '14px' }) }}>
+                        <div style={{ fontFamily: "'DM Mono', monospace", fontSize: 9, color: TEXT3, letterSpacing: '0.18em', marginBottom: 6 }}>EVENTS</div>
+                        <div style={{ fontFamily: "'DM Serif Display', Georgia, serif", fontSize: 26, color: ACCENT }}>{fanEvents.length}</div>
+                      </div>
+                    </div>
+                  </div>
+                  <button onClick={() => supabase.auth.signOut()} style={{ width: '100%', background: 'transparent', color: TEXT3, border: `1px solid ${BORDER}`, borderRadius: 7, padding: '11px', fontFamily: "'DM Mono', monospace", fontSize: 11, letterSpacing: '0.1em', cursor: 'pointer' }}>SIGN OUT</button>
                 </div>
               ) : (
-                <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fill, minmax(260px, 1fr))', gap: 16 }}>
-                  {unsubscribedCreators.map(c => (
-                    <CreatorCard key={c.id} c={c} onClick={() => selectCreator(c)} />
-                  ))}
+                <div style={{ background: 'rgba(17,17,20,0.82)', backdropFilter: 'blur(20px)', border: `1px solid ${BORDER}`, borderRadius: 16, padding: '32px', textAlign: 'center' }}>
+                  <div style={{ fontSize: 36, marginBottom: 14, color: TEXT3 }}>◉</div>
+                  <div style={{ fontFamily: "'DM Serif Display', Georgia, serif", fontSize: 20, color: TEXT1, marginBottom: 8 }}>You're browsing as a guest</div>
+                  <div style={{ fontFamily: "'DM Mono', monospace", fontSize: 11, color: TEXT3, marginBottom: 24, lineHeight: 1.7 }}>
+                    Sign in to subscribe to artists,<br />RSVP to events, and access exclusive content.
+                  </div>
+                  <a href="/creator" style={{
+                    display: 'block', background: ACCENT, color: '#080808',
+                    border: 'none', borderRadius: 8, padding: '12px',
+                    fontFamily: "'DM Mono', monospace", fontSize: 12, fontWeight: 700,
+                    letterSpacing: '0.12em', cursor: 'pointer', textDecoration: 'none',
+                    boxShadow: `0 4px 24px ${ACCENT}40`, marginBottom: 12, textAlign: 'center',
+                  }}>🎤 I'M A CREATOR</a>
+                  <div style={{ fontFamily: "'DM Mono', monospace", fontSize: 10, color: TEXT3, letterSpacing: '0.08em' }}>
+                    Fan login coming soon
+                  </div>
                 </div>
               )}
             </div>
@@ -774,20 +692,15 @@ export default function FanApp({ session, profile, onSignOut }) {
         )}
       </div>
 
-      {/* ── Bottom nav bar (mobile) ── */}
+      {/* ── Bottom tab bar ── */}
       <div style={{
         position: 'fixed', bottom: 0, left: 0, right: 0,
         background: 'rgba(9,9,11,0.96)', backdropFilter: 'blur(24px)',
         borderTop: `1px solid ${BORDER}`,
         display: 'flex', zIndex: 100, height: 60,
       }}>
-        {[
-          { id: 'profile',  icon: '◉', label: 'Me' },
-          { id: 'artists',  icon: '♪', label: 'Artists' },
-          { id: 'myevents', icon: '◈', label: 'Events' },
-          { id: 'search',   icon: '⊕', label: 'Search' },
-        ].map(t => (
-          <button key={t.id} onClick={() => { setActiveTab(t.id); setSelected(null); setMenuOpen(false) }} style={{
+        {TABS.map(t => (
+          <button key={t.id} onClick={() => { setActiveTab(t.id); setSelected(null) }} style={{
             flex: 1, display: 'flex', flexDirection: 'column',
             alignItems: 'center', justifyContent: 'center', gap: 3,
             background: 'none', border: 'none',
@@ -803,7 +716,12 @@ export default function FanApp({ session, profile, onSignOut }) {
       </div>
 
       {liveEvent && (
-        <LiveRoom event={liveEvent} profile={profile} isCreator={false} onLeave={() => setLiveEvent(null)} />
+        <LiveRoom
+          event={liveEvent}
+          profile={fanProfile || { display_name: 'Guest' }}
+          isCreator={false}
+          onLeave={() => setLiveEvent(null)}
+        />
       )}
     </div>
   )

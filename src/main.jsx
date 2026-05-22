@@ -2,15 +2,23 @@ import { StrictMode } from 'react'
 import { createRoot } from 'react-dom/client'
 import './index.css'
 import App from './App'
+import CreatorPortal from './CreatorPortal'
 import Success from './Success'
 import ResetPassword from './ResetPassword'
 
-const path = window.location.pathname
+const path = window.location.pathname.toLowerCase()
+
+let Root
+if (path === '/success') {
+  Root = <Success />
+} else if (path === '/reset-password') {
+  Root = <ResetPassword />
+} else if (path === '/creator' || path === '/creator/') {
+  Root = <CreatorPortal />
+} else {
+  Root = <App />
+}
 
 createRoot(document.getElementById('root')).render(
-  <StrictMode>
-    {path === '/success' ? <Success /> :
-     path === '/reset-password' ? <ResetPassword /> :
-     <App />}
-  </StrictMode>
+  <StrictMode>{Root}</StrictMode>
 )
