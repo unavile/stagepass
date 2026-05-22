@@ -17,26 +17,28 @@ function Loading() {
 }
 
 export default function CreatorPortal() {
-  const [session, setSession] = useState(undefined)
+  // Start as null (not logged in) — show Auth immediately
+  // Only switch to a session if onAuthStateChange confirms one exists
+  const [session, setSession] = useState(null)
+  const [sessionChecked, setSessionChecked] = useState(false)
   const [profile, setProfile] = useState(null)
   const [profileLoading, setProfileLoading] = useState(false)
 
   useEffect(() => {
-    supabase.auth.getSession().then(({ data: { session } }) => {
-      setSession(session ?? null)
-    })
-
     const { data: { subscription } } = supabase.auth.onAuthStateChange((event, session) => {
+      if (event === 'INITIAL_SESSION') {
+        setSession(session ?? null)
+        setSessionChecked(true)
+      }
       if (event === 'SIGNED_IN')       setSession(session)
       if (event === 'SIGNED_OUT')      { setSession(null); setProfile(null) }
       if (event === 'TOKEN_REFRESHED') setSession(session)
     })
-
     return () => subscription.unsubscribe()
   }, [])
 
+  // Load profile once we have a session
   useEffect(() => {
-    if (session === undefined) return
     if (!session) { setProfile(null); setProfileLoading(false); return }
     if (profile?.id === session.user.id) return
 
@@ -53,21 +55,19 @@ export default function CreatorPortal() {
       })
   }, [session])
 
-  // Still checking session
-  if (session === undefined) return <Loading />
+  // Show Auth immediately if no session confirmed yet
+  // This prevents the "Loading..." freeze — show login form right away
+  if (!sessionChecked && !session) {
+    return <Auth creatorOnly={true} onAuth={() => {}} />
+  }
 
-  // Not logged in — show creator-specific auth
-  if (!session) return (
-    <Auth
-      creatorOnly={true}
-      onAuth={() => {}}
-    />
-  )
+  // Session confirmed but still loading profile
+  if (session && (profileLoading || !profile)) return <Loading />
 
-  // Logged in but loading profile
-  if (profileLoading || !profile) return <Loading />
+  // No session — show login
+  if (!session) return <Auth creatorOnly={true} onAuth={() => {}} />
 
-  // Logged in but not a creator — show error
+  // Logged in but not a creator
   if (profile.role !== 'creator') {
     return (
       <div style={{
