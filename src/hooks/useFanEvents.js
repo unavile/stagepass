@@ -3,10 +3,11 @@ import { supabase } from '../supabaseClient'
 
 export function useFanEvents(fanId) {
   const [events, setEvents] = useState([])
-  const [loading, setLoading] = useState(true)
+  const [loading, setLoading] = useState(false) // false by default — no fanId on mount
 
   async function fetchFanEvents() {
-    if (!fanId) return
+    if (!fanId) { setEvents([]); setLoading(false); return }
+    setLoading(true)
     const { data, error } = await supabase
       .from('rsvps')
       .select(`

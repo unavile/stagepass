@@ -1,7 +1,7 @@
 import { useState, useEffect } from 'react'
 import { supabase } from './supabaseClient'
-// import { usePublicEvents } from './hooks/useEvents'
-// import { useFanEvents } from './hooks/useFanEvents'
+import { usePublicEvents } from './hooks/useEvents'
+import { useFanEvents } from './hooks/useFanEvents'
 import LiveRoom from './LiveRoom'
 import FanLoginModal from './FanLoginModal'
 
@@ -122,13 +122,9 @@ export default function FanApp() {
   // Live room
   const [liveEvent, setLiveEvent] = useState(null)
 
-  // const { events: creatorEvents } = usePublicEvents(selected?.id)
-  // const { events: fanEvents, loading: fanEventsLoading, refetch: refetchFanEvents } = useFanEvents(fanSession?.user?.id)
-  const creatorEvents = []
-  const fanEvents = []
-  const fanEventsLoading = false
-  const refetchFanEvents = () => {}
-  
+  const { events: creatorEvents } = usePublicEvents(selected?.id)
+  const { events: fanEvents, loading: fanEventsLoading, refetch: refetchFanEvents } = useFanEvents(fanSession?.user?.id)
+
   // ── Check for existing fan session on mount ──────────────────────────────
   useEffect(() => {
     supabase.auth.getSession().then(async ({ data: { session } }) => {
