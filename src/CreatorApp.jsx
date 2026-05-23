@@ -158,14 +158,21 @@ export default function CreatorApp({ session, profile, onSignOut }) {
           position: 'sticky', top: 0, zIndex: 100,
         }}>
           <span style={{ fontFamily: "'DM Serif Display', Georgia, serif", fontSize: 18, color: ac }}>StagePass</span>
-          <span style={{ fontFamily: "'DM Mono', monospace", fontSize: 10, color: TEXT3, letterSpacing: '0.1em' }}>{creator.handle}</span>
-          <button onClick={() => setShowUpload(true)} style={{
-            background: ac, color: '#080808',
-            border: 'none', borderRadius: 6, padding: '6px 14px',
-            fontFamily: "'DM Mono', monospace", fontSize: 10, fontWeight: 700,
-            letterSpacing: '0.12em', cursor: 'pointer',
-            boxShadow: `0 2px 12px ${ac}50`,
-          }}>+ POST</button>
+          <div style={{ display: 'flex', gap: 8, alignItems: 'center' }}>
+            <button onClick={() => setShowEditProfile(true)} style={{
+              background: 'transparent', color: TEXT2,
+              border: `1px solid ${BORDER}`, borderRadius: 6, padding: '6px 12px',
+              fontFamily: "'DM Mono', monospace", fontSize: 10,
+              letterSpacing: '0.1em', cursor: 'pointer',
+            }}>PROFILE</button>
+            <button onClick={() => setShowUpload(true)} style={{
+              background: ac, color: '#080808',
+              border: 'none', borderRadius: 6, padding: '6px 14px',
+              fontFamily: "'DM Mono', monospace", fontSize: 10, fontWeight: 700,
+              letterSpacing: '0.12em', cursor: 'pointer',
+              boxShadow: `0 2px 12px ${ac}50`,
+            }}>+ POST</button>
+          </div>
         </div>
       )}
 

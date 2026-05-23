@@ -3,6 +3,7 @@ import { createRoot } from 'react-dom/client'
 import './index.css'
 import App from './App'
 import CreatorPortal from './CreatorPortal'
+import AdminPortal from './AdminPortal'
 import Success from './Success'
 import ResetPassword from './ResetPassword'
 
@@ -15,6 +16,8 @@ if (path === '/success') {
   Root = <ResetPassword />
 } else if (path === '/creator' || path === '/creator/') {
   Root = <CreatorPortal />
+} else if (path === '/admin' || path === '/admin/') {
+  Root = <AdminPortal />
 } else {
   Root = <App />
 }
