@@ -42,8 +42,8 @@ const TABS = [
 // ─── CSV helpers ─────────────────────────────────────────────────────────────
 const CREATOR_TEMPLATE = [
   'display_name,handle,email,category,monthly_price,bio',
-  'Mara Voss,maravoss,mara@example.com,Music,9,Singer-songwriter from Berlin',
-  'DJ Kemi,djkemi,kemi@example.com,Dance,12,House and afrobeats DJ',
+  'Mara Voss,maravoss,mara@example.com,Music,9,"Singer-songwriter from Berlin"',
+  'DJ Kemi,djkemi,kemi@example.com,Dance,12,"House and afrobeats DJ"',
 ].join('\n')
 
 const EVENT_TEMPLATE = [
