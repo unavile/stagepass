@@ -125,36 +125,10 @@ export default function FanApp() {
   const { events: creatorEvents } = usePublicEvents(selected?.id)
   const { events: fanEvents, loading: fanEventsLoading, refetch: refetchFanEvents } = useFanEvents(fanSession?.user?.id)
 
-  // ── Check for existing fan session on mount ──────────────────────────────
+  // ── Fan session — always starts as guest, only activated on explicit sign-in ─
   useEffect(() => {
-    // Read session directly from localStorage — bypasses Supabase JS hang
-    async function loadSession() {
-      const projectRef = import.meta.env.VITE_SUPABASE_URL.split('//')[1].split('.')[0]
-      const storageKey = `sb-${projectRef}-auth-token`
-      const stored = localStorage.getItem(storageKey)
-      if (stored) {
-        try {
-          const tokenData = JSON.parse(stored)
-          if (tokenData?.user?.id) {
-            // Fetch profile using native fetch with the stored access token
-            const url = `${import.meta.env.VITE_SUPABASE_URL}/rest/v1/profiles?select=*&id=eq.${tokenData.user.id}&limit=1`
-            const res = await fetch(url, {
-              headers: {
-                'apikey': import.meta.env.VITE_SUPABASE_ANON_KEY,
-                'Authorization': `Bearer ${tokenData.access_token}`,
-              }
-            })
-            const profiles = await res.json()
-            setFanSession({ user: tokenData.user, access_token: tokenData.access_token })
-            if (profiles?.[0]) setFanProfile(profiles[0])
-          }
-        } catch (e) {
-          console.error('Session parse error:', e)
-        }
-      }
-    }
-    loadSession()
-
+    // Do NOT read from localStorage on mount — always start as guest.
+    // Session is only set when the fan explicitly signs in during this session.
     const { data: { subscription } } = supabase.auth.onAuthStateChange(async (event, session) => {
       if (event === 'SIGNED_IN' && session) {
         setFanSession(session)
@@ -776,9 +750,30 @@ export default function FanApp() {
       {showLoginModal && (
         <FanLoginModal
           initialMessage={loginModalMessage}
-          onSuccess={() => {
+          onSuccess={async () => {
             setShowLoginModal(false)
-            window.location.reload()
+            // Native fetch bypasses onAuthStateChange — manually read session from localStorage
+            try {
+              const projectRef = import.meta.env.VITE_SUPABASE_URL.split('//')[1].split('.')[0]
+              const stored = localStorage.getItem(`sb-${projectRef}-auth-token`)
+              if (stored) {
+                const tokenData = JSON.parse(stored)
+                if (tokenData?.user?.id) {
+                  const url = `${import.meta.env.VITE_SUPABASE_URL}/rest/v1/profiles?select=*&id=eq.${tokenData.user.id}&limit=1`
+                  const res = await fetch(url, {
+                    headers: {
+                      'apikey': import.meta.env.VITE_SUPABASE_ANON_KEY,
+                      'Authorization': `Bearer ${tokenData.access_token}`,
+                    }
+                  })
+                  const profiles = await res.json()
+                  setFanSession({ user: tokenData.user, access_token: tokenData.access_token })
+                  if (profiles?.[0]) setFanProfile(profiles[0])
+                }
+              }
+            } catch (e) {
+              console.error('Post-login session load error:', e)
+            }
           }}
           onClose={() => setShowLoginModal(false)}
         />
