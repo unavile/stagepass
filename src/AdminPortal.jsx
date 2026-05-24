@@ -42,6 +42,7 @@ const TABS = [
 function AdminLogin({ onLogin }) {
   const [password, setPassword] = useState('')
   const [error, setError] = useState('')
+  const [showPassword, setShowPassword] = useState(false)
   const ADMIN_PASSWORD = import.meta.env.VITE_ADMIN_PASSWORD || 'stagepass-admin-2026'
 
   function handleLogin() {
@@ -61,14 +62,21 @@ function AdminLogin({ onLogin }) {
           <div style={{ fontFamily: "'DM Serif Display', Georgia, serif", fontSize: 28, color: ACCENT, marginBottom: 4 }}>StagePass</div>
           <div style={{ fontFamily: "'DM Mono', monospace", fontSize: 10, color: TEXT3, letterSpacing: '0.2em' }}>ADMIN PORTAL</div>
         </div>
-        <input
-          type="password"
-          placeholder="Admin password"
-          value={password}
-          onChange={e => setPassword(e.target.value)}
-          onKeyDown={e => e.key === 'Enter' && handleLogin()}
-          style={{ width: '100%', background: BG3, border: `1px solid ${BORDER}`, borderRadius: 8, padding: '11px 14px', color: TEXT1, fontFamily: "'DM Mono', monospace", fontSize: 12, outline: 'none', marginBottom: 12, boxSizing: 'border-box' }}
-        />
+        <div style={{ position: 'relative', marginBottom: 12 }}>
+          <input
+            type={showPassword ? 'text' : 'password'}
+            placeholder="Admin password"
+            value={password}
+            onChange={e => setPassword(e.target.value)}
+            onKeyDown={e => e.key === 'Enter' && handleLogin()}
+            style={{ width: '100%', background: BG3, border: `1px solid ${BORDER}`, borderRadius: 8, padding: '11px 44px 11px 14px', color: TEXT1, fontFamily: "'DM Mono', monospace", fontSize: 12, outline: 'none', boxSizing: 'border-box' }}
+          />
+          <button
+            type="button"
+            onClick={() => setShowPassword(!showPassword)}
+            style={{ position: 'absolute', right: 12, top: '50%', transform: 'translateY(-50%)', background: 'none', border: 'none', color: TEXT3, cursor: 'pointer', fontSize: 15, padding: 4, lineHeight: 1 }}
+          >{showPassword ? '🙈' : '👁'}</button>
+        </div>
         {error && <div style={{ color: RED, fontSize: 11, fontFamily: "'DM Mono', monospace", marginBottom: 10 }}>{error}</div>}
         <button onClick={handleLogin} style={{ width: '100%', background: ACCENT, color: '#080808', border: 'none', borderRadius: 8, padding: '12px', fontFamily: "'DM Mono', monospace", fontSize: 12, fontWeight: 700, letterSpacing: '0.14em', cursor: 'pointer', boxShadow: `0 4px 16px ${ACCENT}40` }}>
           SIGN IN

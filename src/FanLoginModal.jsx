@@ -69,6 +69,7 @@ export default function FanLoginModal({ onSuccess, onClose, initialMessage }) {
   const [loading, setLoading] = useState(false)
   const [error, setError] = useState(null)
   const [message, setMessage] = useState(null)
+  const [showPassword, setShowPassword] = useState(false)
 
   const input = {
     width: '100%',
@@ -224,8 +225,21 @@ export default function FanLoginModal({ onSuccess, onClose, initialMessage }) {
         ) : (
           <>
             <input style={input} placeholder="Email" type="email" value={email} onChange={e => setEmail(e.target.value)} />
-            <input style={input} placeholder="Password" type="password" value={password} onChange={e => setPassword(e.target.value)}
-              onKeyDown={e => e.key === 'Enter' && handleSubmit()} />
+            <div style={{ position: 'relative', marginBottom: 10 }}>
+              <input
+                style={{ ...input, marginBottom: 0, paddingRight: 44 }}
+                placeholder="Password"
+                type={showPassword ? 'text' : 'password'}
+                value={password}
+                onChange={e => setPassword(e.target.value)}
+                onKeyDown={e => e.key === 'Enter' && handleSubmit()}
+              />
+              <button
+                type="button"
+                onClick={() => setShowPassword(!showPassword)}
+                style={{ position: 'absolute', right: 10, top: '50%', transform: 'translateY(-50%)', background: 'none', border: 'none', color: TEXT3, cursor: 'pointer', fontSize: 15, padding: 4, lineHeight: 1 }}
+              >{showPassword ? '🙈' : '👁'}</button>
+            </div>
           </>
         )}
 
