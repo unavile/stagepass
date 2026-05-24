@@ -36,13 +36,88 @@ const TABS = [
   { id: 'creators',  label: 'Creators',  icon: '♪'  },
   { id: 'revenue',   label: 'Revenue',   icon: '◇'  },
   { id: 'notify',    label: 'Notify',    icon: '◎'  },
+  { id: 'import',    label: 'Import',    icon: '↑'  },
 ]
+
+// ─── CSV helpers ─────────────────────────────────────────────────────────────
+const CREATOR_TEMPLATE = [
+  'display_name,handle,email,category,monthly_price,bio',
+  'Mara Voss,maravoss,mara@example.com,Music,9,Singer-songwriter from Berlin',
+  'DJ Kemi,djkemi,kemi@example.com,Dance,12,House and afrobeats DJ',
+].join('\n')
+
+const EVENT_TEMPLATE = [
+  'creator_handle,name,description,event_date,event_type,is_free,venue',
+  'maravoss,Acoustic Session,Intimate live set,2026-07-15,virtual,true,',
+  'djkemi,Summer Dance Night,Dance workshop and set,2026-07-20,in_person,true,Fabric London',
+].join('\n')
+
+const CONTENT_TEMPLATE = [
+  'creator_handle,title,description,type,is_locked',
+  'maravoss,Studio Diaries Ep1,Behind the scenes in the studio,video,true',
+  'maravoss,Free Intro Track,Sample my new EP,audio,false',
+].join('\n')
+
+function downloadCSV(content, filename) {
+  const blob = new Blob([content], { type: 'text/csv' })
+  const url = URL.createObjectURL(blob)
+  const a = document.createElement('a')
+  a.href = url; a.download = filename; a.click()
+  URL.revokeObjectURL(url)
+}
+
+function parseCSV(text) {
+  const lines = text.trim().split('\n').map(l => l.trim()).filter(Boolean)
+  if (lines.length < 2) return { headers: [], rows: [] }
+  const headers = lines[0].split(',').map(h => h.trim().toLowerCase())
+  const rows = lines.slice(1).map(line => {
+    const fields = []
+    let current = ''
+    let inQuotes = false
+    for (const ch of line) {
+      if (ch === '"') { inQuotes = !inQuotes }
+      else if (ch === ',' && !inQuotes) { fields.push(current.trim()); current = '' }
+      else { current += ch }
+    }
+    fields.push(current.trim())
+    const obj = {}
+    headers.forEach((h, i) => { obj[h] = fields[i] || '' })
+    return obj
+  })
+  return { headers, rows }
+}
+
+function validateCreatorRow(row) {
+  const errors = []
+  if (!row.display_name) errors.push('Missing display_name')
+  if (!row.handle) errors.push('Missing handle')
+  if (!row.email || !row.email.includes('@')) errors.push('Invalid email')
+  if (!['Music','Dance','Comedy'].includes(row.category)) errors.push('Category must be Music, Dance, or Comedy')
+  if (!row.monthly_price || isNaN(parseFloat(row.monthly_price))) errors.push('Invalid monthly_price')
+  return errors
+}
+
+function validateEventRow(row) {
+  const errors = []
+  if (!row.creator_handle) errors.push('Missing creator_handle')
+  if (!row.name) errors.push('Missing name')
+  if (!row.event_date) errors.push('Missing event_date')
+  if (!['virtual','in_person'].includes(row.event_type)) errors.push('event_type must be virtual or in_person')
+  return errors
+}
+
+function validateContentRow(row) {
+  const errors = []
+  if (!row.creator_handle) errors.push('Missing creator_handle')
+  if (!row.title) errors.push('Missing title')
+  if (!['video','audio','text'].includes(row.type)) errors.push('type must be video, audio, or text')
+  return errors
+}
 
 // ─── Login screen ────────────────────────────────────────────────────────────
 function AdminLogin({ onLogin }) {
   const [password, setPassword] = useState('')
   const [error, setError] = useState('')
-  const [showPassword, setShowPassword] = useState(false)
   const ADMIN_PASSWORD = import.meta.env.VITE_ADMIN_PASSWORD || 'stagepass-admin-2026'
 
   function handleLogin() {
@@ -62,21 +137,14 @@ function AdminLogin({ onLogin }) {
           <div style={{ fontFamily: "'DM Serif Display', Georgia, serif", fontSize: 28, color: ACCENT, marginBottom: 4 }}>StagePass</div>
           <div style={{ fontFamily: "'DM Mono', monospace", fontSize: 10, color: TEXT3, letterSpacing: '0.2em' }}>ADMIN PORTAL</div>
         </div>
-        <div style={{ position: 'relative', marginBottom: 12 }}>
-          <input
-            type={showPassword ? 'text' : 'password'}
-            placeholder="Admin password"
-            value={password}
-            onChange={e => setPassword(e.target.value)}
-            onKeyDown={e => e.key === 'Enter' && handleLogin()}
-            style={{ width: '100%', background: BG3, border: `1px solid ${BORDER}`, borderRadius: 8, padding: '11px 44px 11px 14px', color: TEXT1, fontFamily: "'DM Mono', monospace", fontSize: 12, outline: 'none', boxSizing: 'border-box' }}
-          />
-          <button
-            type="button"
-            onClick={() => setShowPassword(!showPassword)}
-            style={{ position: 'absolute', right: 12, top: '50%', transform: 'translateY(-50%)', background: 'none', border: 'none', color: TEXT3, cursor: 'pointer', fontSize: 15, padding: 4, lineHeight: 1 }}
-          >{showPassword ? '🙈' : '👁'}</button>
-        </div>
+        <input
+          type="password"
+          placeholder="Admin password"
+          value={password}
+          onChange={e => setPassword(e.target.value)}
+          onKeyDown={e => e.key === 'Enter' && handleLogin()}
+          style={{ width: '100%', background: BG3, border: `1px solid ${BORDER}`, borderRadius: 8, padding: '11px 14px', color: TEXT1, fontFamily: "'DM Mono', monospace", fontSize: 12, outline: 'none', marginBottom: 12, boxSizing: 'border-box' }}
+        />
         {error && <div style={{ color: RED, fontSize: 11, fontFamily: "'DM Mono', monospace", marginBottom: 10 }}>{error}</div>}
         <button onClick={handleLogin} style={{ width: '100%', background: ACCENT, color: '#080808', border: 'none', borderRadius: 8, padding: '12px', fontFamily: "'DM Mono', monospace", fontSize: 12, fontWeight: 700, letterSpacing: '0.14em', cursor: 'pointer', boxShadow: `0 4px 16px ${ACCENT}40` }}>
           SIGN IN
@@ -121,6 +189,13 @@ export default function AdminPortal() {
   const [notifyAll, setNotifyAll] = useState(true)
   const [actionLoading, setActionLoading] = useState(false)
   const [actionResult, setActionResult] = useState(null)
+
+  // Import tab state
+  const [importType, setImportType] = useState('creators')
+  const [importRows, setImportRows] = useState([])
+  const [importErrors, setImportErrors] = useState([])
+  const [importLoading, setImportLoading] = useState(false)
+  const [importResult, setImportResult] = useState(null)
 
   useEffect(() => {
     const fn = () => setIsMobile(window.innerWidth < 768)
@@ -520,7 +595,205 @@ export default function AdminPortal() {
         </div>
       </div>
 
-      {/* ── Mobile bottom tabs ── */}
+      {/* ── IMPORT TAB ── */}
+      {tab === 'import' && (
+        <div style={{ flex: 1, overflowY: 'auto', padding: isMobile ? '16px' : '28px 32px' }}>
+          <div style={{ fontFamily: "'DM Serif Display', Georgia, serif", fontSize: isMobile ? 22 : 28, color: TEXT1, marginBottom: 4 }}>Bulk Import</div>
+          <div style={{ fontFamily: "'DM Mono', monospace", fontSize: 10, color: TEXT3, letterSpacing: '0.16em', marginBottom: 24 }}>IMPORT CREATORS, EVENTS OR CONTENT FROM CSV</div>
+
+          {importResult && (
+            <div style={{ background: importResult.type === 'success' ? GREEN + '15' : RED + '15', border: `1px solid ${importResult.type === 'success' ? GREEN + '40' : RED + '40'}`, borderRadius: 8, padding: '12px 16px', marginBottom: 20, display: 'flex', justifyContent: 'space-between' }}>
+              <div style={{ fontFamily: "'DM Mono', monospace", fontSize: 12, color: importResult.type === 'success' ? GREEN : RED }}>{importResult.message}</div>
+              <button onClick={() => setImportResult(null)} style={{ background: 'none', border: 'none', color: TEXT3, cursor: 'pointer', fontSize: 16 }}>✕</button>
+            </div>
+          )}
+
+          {/* Type selector */}
+          <div style={{ display: 'flex', gap: 8, marginBottom: 20 }}>
+            {[
+              { id: 'creators', label: '♪ Creators' },
+              { id: 'events',   label: '◈ Events'   },
+              { id: 'content',  label: '▤ Content'  },
+            ].map(t => (
+              <button key={t.id} onClick={() => { setImportType(t.id); setImportRows([]); setImportErrors([]); setImportResult(null) }} style={{
+                background: importType === t.id ? ACCENT + '18' : BG2,
+                color: importType === t.id ? ACCENT : TEXT3,
+                border: importType === t.id ? `1px solid ${ACCENT}55` : `1px solid ${BORDER}`,
+                borderRadius: 8, padding: '8px 18px',
+                fontFamily: "'DM Mono', monospace", fontSize: 11,
+                letterSpacing: '0.08em', cursor: 'pointer',
+                boxShadow: importType === t.id ? `0 0 12px ${ACCENT}20` : 'none',
+              }}>{t.label.toUpperCase()}</button>
+            ))}
+          </div>
+
+          {/* CSV format info */}
+          <div style={{ background: BG2, border: `1px solid ${BORDER}`, borderRadius: 10, padding: '14px 18px', marginBottom: 16 }}>
+            <div style={{ fontFamily: "'DM Mono', monospace", fontSize: 9, color: TEXT3, letterSpacing: '0.18em', marginBottom: 8 }}>REQUIRED CSV COLUMNS</div>
+            <div style={{ fontFamily: "'DM Mono', monospace", fontSize: 11, color: ACCENT, wordBreak: 'break-all' }}>
+              {importType === 'creators' && 'display_name, handle, email, category, monthly_price, bio'}
+              {importType === 'events'   && 'creator_handle, name, description, event_date, event_type, is_free, venue'}
+              {importType === 'content'  && 'creator_handle, title, description, type, is_locked'}
+            </div>
+            {importType === 'creators' && <div style={{ fontFamily: "'DM Mono', monospace", fontSize: 10, color: TEXT3, marginTop: 6 }}>category: Music / Dance / Comedy · monthly_price: number · A password reset email will be sent to each creator</div>}
+            {importType === 'events'   && <div style={{ fontFamily: "'DM Mono', monospace", fontSize: 10, color: TEXT3, marginTop: 6 }}>event_date: YYYY-MM-DD · event_type: virtual / in_person · is_free: true / false</div>}
+            {importType === 'content'  && <div style={{ fontFamily: "'DM Mono', monospace", fontSize: 10, color: TEXT3, marginTop: 6 }}>type: video / audio / text · is_locked: true / false</div>}
+          </div>
+
+          {/* Download template + upload */}
+          <div style={{ display: 'flex', gap: 10, marginBottom: 20, flexWrap: 'wrap' }}>
+            <button onClick={() => {
+              const templates = { creators: CREATOR_TEMPLATE, events: EVENT_TEMPLATE, content: CONTENT_TEMPLATE }
+              downloadCSV(templates[importType], `stagepass-${importType}-template.csv`)
+            }} style={{ background: BG2, color: TEXT2, border: `1px solid ${BORDER}`, borderRadius: 8, padding: '9px 16px', fontFamily: "'DM Mono', monospace", fontSize: 11, cursor: 'pointer', letterSpacing: '0.08em', display: 'flex', alignItems: 'center', gap: 8 }}>
+              ↓ DOWNLOAD TEMPLATE
+            </button>
+            <label style={{ background: ACCENT + '18', color: ACCENT, border: `1px solid ${ACCENT}40`, borderRadius: 8, padding: '9px 16px', fontFamily: "'DM Mono', monospace", fontSize: 11, cursor: 'pointer', letterSpacing: '0.08em' }}>
+              ↑ UPLOAD CSV
+              <input type="file" accept=".csv,text/csv" style={{ display: 'none' }} onChange={e => {
+                const file = e.target.files?.[0]
+                if (!file) return
+                const reader = new FileReader()
+                reader.onload = ev => {
+                  const { rows } = parseCSV(ev.target.result)
+                  const validators = { creators: validateCreatorRow, events: validateEventRow, content: validateContentRow }
+                  const errs = rows.map(r => validators[importType](r))
+                  setImportRows(rows)
+                  setImportErrors(errs)
+                  setImportResult(null)
+                }
+                reader.readAsText(file)
+                e.target.value = ''
+              }} />
+            </label>
+          </div>
+
+          {/* Preview table */}
+          {importRows.length > 0 && (
+            <>
+              <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 12 }}>
+                <div style={{ fontFamily: "'DM Mono', monospace", fontSize: 9, color: TEXT3, letterSpacing: '0.18em' }}>
+                  PREVIEW — {importRows.length} ROWS · {importErrors.filter(e => e.length === 0).length} VALID · {importErrors.filter(e => e.length > 0).length} ERRORS
+                </div>
+                <button onClick={() => { setImportRows([]); setImportErrors([]) }} style={{ background: 'none', border: 'none', color: TEXT3, cursor: 'pointer', fontFamily: "'DM Mono', monospace", fontSize: 10 }}>CLEAR</button>
+              </div>
+
+              <div style={{ background: BG2, border: `1px solid ${BORDER}`, borderRadius: 12, overflow: 'hidden', marginBottom: 20 }}>
+                <div style={{ overflowX: 'auto' }}>
+                  <table style={{ width: '100%', fontSize: 12, borderCollapse: 'collapse', tableLayout: 'fixed', minWidth: 600 }}>
+                    <thead>
+                      <tr style={{ background: BG3 }}>
+                        {Object.keys(importRows[0]).map(h => (
+                          <th key={h} style={{ textAlign: 'left', padding: '9px 14px', fontFamily: "'DM Mono', monospace", fontSize: 9, color: TEXT3, letterSpacing: '0.12em', borderBottom: `1px solid ${BORDER2}`, fontWeight: 400 }}>{h.toUpperCase()}</th>
+                        ))}
+                        <th style={{ textAlign: 'left', padding: '9px 14px', fontFamily: "'DM Mono', monospace", fontSize: 9, color: TEXT3, letterSpacing: '0.12em', borderBottom: `1px solid ${BORDER2}`, fontWeight: 400 }}>STATUS</th>
+                      </tr>
+                    </thead>
+                    <tbody>
+                      {importRows.map((row, i) => {
+                        const errs = importErrors[i] || []
+                        const isValid = errs.length === 0
+                        return (
+                          <tr key={i} style={{ borderBottom: i < importRows.length - 1 ? `1px solid ${BORDER2}` : 'none', background: isValid ? 'transparent' : RED + '08' }}>
+                            {Object.values(row).map((val, j) => (
+                              <td key={j} style={{ padding: '9px 14px', color: TEXT2, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{val || <span style={{ color: TEXT3 }}>—</span>}</td>
+                            ))}
+                            <td style={{ padding: '9px 14px', whiteSpace: 'nowrap' }}>
+                              {isValid
+                                ? <span style={{ color: GREEN, fontFamily: "'DM Mono', monospace", fontSize: 10 }}>✓ Valid</span>
+                                : <span style={{ color: RED, fontFamily: "'DM Mono', monospace", fontSize: 10 }} title={errs.join(', ')}>✕ {errs[0]}</span>
+                              }
+                            </td>
+                          </tr>
+                        )
+                      })}
+                    </tbody>
+                  </table>
+                </div>
+              </div>
+
+              {/* Import button */}
+              {importErrors.filter(e => e.length === 0).length > 0 && (
+                <button
+                  onClick={async () => {
+                    setImportLoading(true)
+                    const validRows = importRows.filter((_, i) => importErrors[i].length === 0)
+                    try {
+                      if (importType === 'creators') {
+                        // Call Netlify function to create users server-side
+                        const res = await fetch('/.netlify/functions/bulk-create-creators', {
+                          method: 'POST',
+                          headers: { 'Content-Type': 'application/json' },
+                          body: JSON.stringify({ creators: validRows }),
+                        })
+                        const data = await res.json()
+                        if (!res.ok) throw new Error(data.error || 'Import failed')
+                        setImportResult({ type: 'success', message: `${data.created} creator${data.created !== 1 ? 's' : ''} created. Password reset emails sent.` })
+                      } else if (importType === 'events') {
+                        // Look up creator IDs by handle
+                        const handles = [...new Set(validRows.map(r => r.creator_handle))]
+                        const creatorsData = await sbFetch(`creators?select=id,profiles(handle)&profiles.handle=in.(${handles.join(',')})`)
+                        const handleToId = {}
+                        ;(Array.isArray(creatorsData) ? creatorsData : []).forEach(c => {
+                          if (c.profiles?.handle) handleToId[c.profiles.handle] = c.id
+                        })
+                        const inserts = validRows.map(r => ({
+                          creator_id: handleToId[r.creator_handle],
+                          name: r.name,
+                          description: r.description || '',
+                          event_date: r.event_date,
+                          event_type: r.event_type,
+                          is_free: r.is_free === 'true',
+                          venue: r.venue || null,
+                        })).filter(r => r.creator_id)
+                        await sbFetch('events', { method: 'POST', body: JSON.stringify(inserts), headers: { 'Prefer': 'return=minimal' } })
+                        setImportResult({ type: 'success', message: `${inserts.length} event${inserts.length !== 1 ? 's' : ''} created successfully.` })
+                      } else if (importType === 'content') {
+                        const handles = [...new Set(validRows.map(r => r.creator_handle))]
+                        const creatorsData = await sbFetch(`creators?select=id,profiles(handle)&profiles.handle=in.(${handles.join(',')})`)
+                        const handleToId = {}
+                        ;(Array.isArray(creatorsData) ? creatorsData : []).forEach(c => {
+                          if (c.profiles?.handle) handleToId[c.profiles.handle] = c.id
+                        })
+                        const emojiMap = { video: '🎛️', audio: '🎵', text: '📖' }
+                        const inserts = validRows.map(r => ({
+                          creator_id: handleToId[r.creator_handle],
+                          title: r.title,
+                          description: r.description || '',
+                          type: r.type,
+                          is_locked: r.is_locked === 'true',
+                          thumbnail_emoji: emojiMap[r.type] || '✦',
+                        })).filter(r => r.creator_id)
+                        await sbFetch('posts', { method: 'POST', body: JSON.stringify(inserts), headers: { 'Prefer': 'return=minimal' } })
+                        setImportResult({ type: 'success', message: `${inserts.length} content item${inserts.length !== 1 ? 's' : ''} created successfully.` })
+                      }
+                      setImportRows([])
+                      setImportErrors([])
+                    } catch (err) {
+                      setImportResult({ type: 'error', message: err.message })
+                    }
+                    setImportLoading(false)
+                  }}
+                  disabled={importLoading}
+                  style={{
+                    background: ACCENT, color: '#080808', border: 'none',
+                    borderRadius: 8, padding: '12px 28px',
+                    fontFamily: "'DM Mono', monospace", fontSize: 12,
+                    fontWeight: 700, letterSpacing: '0.14em',
+                    cursor: importLoading ? 'not-allowed' : 'pointer',
+                    opacity: importLoading ? 0.7 : 1,
+                    boxShadow: `0 4px 20px ${ACCENT}40`,
+                  }}
+                >
+                  {importLoading ? 'IMPORTING...' : `IMPORT ${importErrors.filter(e => e.length === 0).length} ${importType.toUpperCase()}`}
+                </button>
+              )}
+            </>
+          )}
+        </div>
+      )}
+
+      {/* ── Mobile bottom tabs ── */}}
       {isMobile && (
         <div style={{ position: 'fixed', bottom: 0, left: 0, right: 0, background: BG2 + 'f4', backdropFilter: 'blur(20px)', borderTop: `1px solid ${BORDER}`, display: 'flex', zIndex: 100, height: 60 }}>
           {TABS.map(t => (
