@@ -126,16 +126,35 @@ export default function AdminPortal() {
 
   async function loadData() {
     setLoading(true)
-    const data = await sbFetch('creators?select=*,profiles(display_name,handle,bio,avatar_url),subscriptions(count)&order=created_at.desc')
-    setCreators(Array.isArray(data) ? data : [])
+    const [creatorsData, subsData] = await Promise.all([
+      sbFetch('creators?select=*,profiles(display_name,handle,bio,avatar_url)&order=created_at.desc'),
+      sbFetch('subscriptions?select=creator_id&status=eq.active'),
+    ])
+
+    const creators = Array.isArray(creatorsData) ? creatorsData : []
+    const subs = Array.isArray(subsData) ? subsData : []
+
+    // Count active subscriptions per creator
+    const subCounts = {}
+    subs.forEach(s => {
+      subCounts[s.creator_id] = (subCounts[s.creator_id] || 0) + 1
+    })
+
+    // Attach count to each creator
+    const enriched = creators.map(c => ({
+      ...c,
+      subCount: subCounts[c.id] || 0,
+    }))
+
+    setCreators(enriched)
     setLoading(false)
   }
 
   // ── Stats ──────────────────────────────────────────────────────────────
-  const totalGross = creators.reduce((s, c) => s + (c.subscriptions?.[0]?.count || 0) * (c.monthly_price || 0), 0)
+  const totalGross = creators.reduce((s, c) => s + (c.subCount || 0) * (c.monthly_price || 0), 0)
   const platformRevenue = totalGross * PLATFORM_FEE
   const creatorPayouts = totalGross * (1 - PLATFORM_FEE)
-  const totalSubs = creators.reduce((s, c) => s + (c.subscriptions?.[0]?.count || 0), 0)
+  const totalSubs = creators.reduce((s, c) => s + (c.subCount || 0), 0)
   const activeCreators = creators.filter(c => !c.suspended).length
   const suspendedCount = creators.filter(c => c.suspended).length
 
@@ -146,7 +165,7 @@ export default function AdminPortal() {
   })
 
   const filteredStats = {
-    gross: filteredCreators.reduce((s, c) => s + (c.subscriptions?.[0]?.count || 0) * (c.monthly_price || 0), 0),
+    gross: filteredCreators.reduce((s, c) => s + (c.subCount || 0) * (c.monthly_price || 0), 0),
   }
 
   // ── Actions ────────────────────────────────────────────────────────────
@@ -282,7 +301,7 @@ export default function AdminPortal() {
                     ))}
                   </div>
                   {sortedByRevenue.slice(0, 8).map((c, i) => {
-                    const subs = c.subscriptions?.[0]?.count || 0
+                    const subs = c.subCount || 0
                     const gross = subs * (c.monthly_price || 0)
                     return (
                       <div key={c.id} style={{ display: 'grid', gridTemplateColumns: isMobile ? '2fr 1fr 1fr' : '2fr 1fr 1fr 1fr', padding: '12px 16px', borderBottom: i < 7 ? `1px solid ${BORDER2}` : 'none', alignItems: 'center' }}>
@@ -312,7 +331,7 @@ export default function AdminPortal() {
               {loading ? <div style={{ color: TEXT3, fontFamily: "'DM Mono', monospace", fontSize: 11 }}>Loading...</div> : (
                 <div style={{ display: 'flex', flexDirection: 'column', gap: 10 }}>
                   {filteredCreators.map(c => {
-                    const subs = c.subscriptions?.[0]?.count || 0
+                    const subs = c.subCount || 0
                     const gross = subs * (c.monthly_price || 0)
                     const isSuspended = c.suspended
                     return (
@@ -403,7 +422,7 @@ export default function AdminPortal() {
                   ))}
                 </div>
                 {sortedByRevenue.map((c, i) => {
-                  const subs = c.subscriptions?.[0]?.count || 0
+                  const subs = c.subCount || 0
                   const gross = subs * (c.monthly_price || 0)
                   const cut = gross * PLATFORM_FEE
                   return (
