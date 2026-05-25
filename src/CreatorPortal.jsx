@@ -24,33 +24,20 @@ export default function CreatorPortal() {
   const [profile, setProfile] = useState(null)
   const [profileLoading, setProfileLoading] = useState(false)
 
-  // Read session from localStorage on mount and after login
-  async function loadSessionFromStorage() {
-    try {
-      const projectRef = import.meta.env.VITE_SUPABASE_URL.split('//')[1].split('.')[0]
-      const stored = localStorage.getItem(`sb-${projectRef}-auth-token`)
-      if (stored) {
-        const tokenData = JSON.parse(stored)
-        if (tokenData?.user?.id && tokenData?.access_token) {
-          setSession({
-            user: tokenData.user,
-            access_token: tokenData.access_token,
-            refresh_token: tokenData.refresh_token,
-          })
-          setSessionChecked(true)
-          return
-        }
-      }
-    } catch (e) {
-      console.error('Session read error:', e)
+  // Called by Auth after successful login with token data
+  function handleAuthSuccess(tokenData) {
+    if (tokenData?.access_token && tokenData?.user) {
+      setSession({
+        user: tokenData.user,
+        access_token: tokenData.access_token,
+        refresh_token: tokenData.refresh_token,
+      })
+      setSessionChecked(true)
     }
-    setSession(null)
-    setSessionChecked(true)
   }
 
   useEffect(() => {
-    loadSessionFromStorage()
-
+    // Listen only for sign-out
     const { data: { subscription } } = supabase.auth.onAuthStateChange((event) => {
       if (event === 'SIGNED_OUT') {
         setSession(null)
@@ -58,6 +45,7 @@ export default function CreatorPortal() {
         setSessionChecked(true)
       }
     })
+    setSessionChecked(true) // No stored session on mount — show login immediately
     return () => subscription.unsubscribe()
   }, [])
 
@@ -67,22 +55,16 @@ export default function CreatorPortal() {
     if (profile?.id === session.user.id) return
 
     setProfileLoading(true)
-    const url = `${import.meta.env.VITE_SUPABASE_URL}/rest/v1/profiles?select=*,creators(*)&id=eq.${session.user.id}&limit=1`
-    fetch(url, {
-      headers: {
-        'apikey': import.meta.env.VITE_SUPABASE_ANON_KEY,
-        'Authorization': `Bearer ${session.access_token}`,
-      }
+    const sbUrl = import.meta.env.VITE_SUPABASE_URL
+    const sbKey = import.meta.env.VITE_SUPABASE_ANON_KEY
+    fetch(`${sbUrl}/rest/v1/profiles?select=*,creators(*)&id=eq.${session.user.id}&limit=1`, {
+      headers: { 'apikey': sbKey, 'Authorization': `Bearer ${session.access_token}` }
     })
       .then(r => r.json())
       .then(data => {
-        const profile = Array.isArray(data) ? data[0] : null
-        if (profile) setProfile(profile)
-        else {
-          const projectRef = import.meta.env.VITE_SUPABASE_URL.split('//')[1].split('.')[0]
-          localStorage.removeItem(`sb-${projectRef}-auth-token`)
-          setSession(null)
-        }
+        const p = Array.isArray(data) ? data[0] : null
+        if (p) setProfile(p)
+        else { setSession(null) }
         setProfileLoading(false)
       })
       .catch(() => { setSession(null); setProfileLoading(false) })
@@ -91,14 +73,14 @@ export default function CreatorPortal() {
   // Show Auth immediately if no session confirmed yet
   // This prevents the "Loading..." freeze — show login form right away
   if (!sessionChecked && !session) {
-    return <Auth creatorOnly={true} onAuth={() => loadSessionFromStorage()} />
+    return <Auth creatorOnly={true} onAuth={handleAuthSuccess} />
   }
 
   // Session confirmed but still loading profile
   if (session && (profileLoading || !profile)) return <Loading />
 
   // No session — show login
-  if (!session) return <Auth creatorOnly={true} onAuth={() => loadSessionFromStorage()} />
+  if (!session) return <Auth creatorOnly={true} onAuth={handleAuthSuccess} />
 
   // Logged in but not a creator
   if (profile.role !== 'creator') {

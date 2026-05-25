@@ -1,10 +1,8 @@
 import { useState } from 'react'
 import { supabase } from './supabaseClient'
 
-// Native fetch for auth — avoids Supabase JS client hang on Netlify
 async function nativeSignIn(email, password) {
-  const url = `${import.meta.env.VITE_SUPABASE_URL}/auth/v1/token?grant_type=password`
-  const res = await fetch(url, {
+  const res = await fetch(`${import.meta.env.VITE_SUPABASE_URL}/auth/v1/token?grant_type=password`, {
     method: 'POST',
     headers: { 'Content-Type': 'application/json', 'apikey': import.meta.env.VITE_SUPABASE_ANON_KEY },
     body: JSON.stringify({ email, password }),
@@ -12,18 +10,6 @@ async function nativeSignIn(email, password) {
   const data = await res.json()
   if (data.error || data.error_description) throw new Error(data.error_description || data.error || 'Sign in failed')
   return data
-}
-
-function storeSession(tokenData) {
-  const projectRef = import.meta.env.VITE_SUPABASE_URL.split('//')[1].split('.')[0]
-  localStorage.setItem(`sb-${projectRef}-auth-token`, JSON.stringify({
-    access_token: tokenData.access_token,
-    refresh_token: tokenData.refresh_token,
-    expires_at: tokenData.expires_at || Math.floor(Date.now() / 1000) + (tokenData.expires_in || 3600),
-    expires_in: tokenData.expires_in || 3600,
-    token_type: 'bearer',
-    user: tokenData.user,
-  }))
 }
 
 const ACCENT  = '#c9a84c'
@@ -122,20 +108,12 @@ export default function Auth({ onAuth, creatorOnly = false }) {
       return
     }
 
-    // ── Sign in — use native fetch to avoid Supabase JS hang on Netlify ────
+    // ── Sign in — native fetch, pass token directly to onAuth ──────────
     try {
-      console.log('Attempting native sign in for:', email.trim())
       const signInResult = await nativeSignIn(email.trim(), password)
-      console.log('Sign in result:', JSON.stringify(signInResult))
-      storeSession(signInResult)
-      console.log('Session stored, calling onAuth')
-      await supabase.auth.setSession({
-        access_token: signInResult.access_token,
-        refresh_token: signInResult.refresh_token,
-      }).catch(() => {})
-      onAuth()
+      // Pass token data directly to CreatorPortal — no localStorage needed
+      onAuth(signInResult)
     } catch (err) {
-      console.error('Sign in error:', err.message)
       const msg = err.message.toLowerCase()
       if (msg.includes('invalid login') || msg.includes('invalid credentials')) {
         setError('Incorrect email or password.')
