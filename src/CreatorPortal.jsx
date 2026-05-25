@@ -24,34 +24,39 @@ export default function CreatorPortal() {
   const [profile, setProfile] = useState(null)
   const [profileLoading, setProfileLoading] = useState(false)
 
-  useEffect(() => {
-    // Read session from localStorage — bypasses Supabase JS hang on Netlify
-    async function checkSession() {
-      try {
-        const projectRef = import.meta.env.VITE_SUPABASE_URL.split('//')[1].split('.')[0]
-        const stored = localStorage.getItem(`sb-${projectRef}-auth-token`)
-        if (stored) {
-          const tokenData = JSON.parse(stored)
-          if (tokenData?.user?.id && tokenData?.access_token) {
-            // Build a minimal session object
-            setSession({
-              user: tokenData.user,
-              access_token: tokenData.access_token,
-              refresh_token: tokenData.refresh_token,
-            })
-          }
+  // Read session from localStorage on mount and after login
+  async function loadSessionFromStorage() {
+    try {
+      const projectRef = import.meta.env.VITE_SUPABASE_URL.split('//')[1].split('.')[0]
+      const stored = localStorage.getItem(`sb-${projectRef}-auth-token`)
+      if (stored) {
+        const tokenData = JSON.parse(stored)
+        if (tokenData?.user?.id && tokenData?.access_token) {
+          setSession({
+            user: tokenData.user,
+            access_token: tokenData.access_token,
+            refresh_token: tokenData.refresh_token,
+          })
+          setSessionChecked(true)
+          return
         }
-      } catch (e) {
-        console.error('Session read error:', e)
       }
-      setSessionChecked(true)
+    } catch (e) {
+      console.error('Session read error:', e)
     }
-    checkSession()
+    setSession(null)
+    setSessionChecked(true)
+  }
 
-    // Still listen for sign-out events
-    const { data: { subscription } } = supabase.auth.onAuthStateChange((event, session) => {
-      if (event === 'SIGNED_OUT') { setSession(null); setProfile(null); setSessionChecked(true) }
-      if (event === 'TOKEN_REFRESHED' && session) setSession(session)
+  useEffect(() => {
+    loadSessionFromStorage()
+
+    const { data: { subscription } } = supabase.auth.onAuthStateChange((event) => {
+      if (event === 'SIGNED_OUT') {
+        setSession(null)
+        setProfile(null)
+        setSessionChecked(true)
+      }
     })
     return () => subscription.unsubscribe()
   }, [])
@@ -74,30 +79,26 @@ export default function CreatorPortal() {
         const profile = Array.isArray(data) ? data[0] : null
         if (profile) setProfile(profile)
         else {
-          // Clear invalid session
           const projectRef = import.meta.env.VITE_SUPABASE_URL.split('//')[1].split('.')[0]
           localStorage.removeItem(`sb-${projectRef}-auth-token`)
           setSession(null)
         }
         setProfileLoading(false)
       })
-      .catch(() => {
-        setSession(null)
-        setProfileLoading(false)
-      })
+      .catch(() => { setSession(null); setProfileLoading(false) })
   }, [session])
 
   // Show Auth immediately if no session confirmed yet
   // This prevents the "Loading..." freeze — show login form right away
   if (!sessionChecked && !session) {
-    return <Auth creatorOnly={true} onAuth={() => {}} />
+    return <Auth creatorOnly={true} onAuth={() => loadSessionFromStorage()} />
   }
 
   // Session confirmed but still loading profile
   if (session && (profileLoading || !profile)) return <Loading />
 
   // No session — show login
-  if (!session) return <Auth creatorOnly={true} onAuth={() => {}} />
+  if (!session) return <Auth creatorOnly={true} onAuth={() => loadSessionFromStorage()} />
 
   // Logged in but not a creator
   if (profile.role !== 'creator') {
