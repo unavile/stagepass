@@ -131,7 +131,6 @@ export default function FanApp() {
     // Session is only set when the fan explicitly signs in during this session.
     const { data: { subscription } } = supabase.auth.onAuthStateChange(async (event, session) => {
       if (event === 'SIGNED_IN' && session) {
-        setFanSession(session)
         const url = `${import.meta.env.VITE_SUPABASE_URL}/rest/v1/profiles?select=*&id=eq.${session.user.id}&limit=1`
         const res = await fetch(url, {
           headers: {
@@ -140,7 +139,15 @@ export default function FanApp() {
           }
         })
         const profiles = await res.json()
-        if (profiles?.[0]) setFanProfile(profiles[0])
+        const profile = profiles?.[0]
+        // Reject creator accounts — they belong on /creator not here
+        if (profile?.role === 'creator') {
+          console.log('Creator account detected in fan portal — ignoring session')
+          await supabase.auth.signOut()
+          return
+        }
+        setFanSession(session)
+        if (profile) setFanProfile(profile)
       }
       if (event === 'SIGNED_OUT') {
         setFanSession(null)
@@ -820,8 +827,16 @@ export default function FanApp() {
                     }
                   })
                   const profiles = await res.json()
+                  const profile = profiles?.[0]
+                  // Reject creator accounts — they belong on /creator not the fan portal
+                  if (profile?.role === 'creator') {
+                    setError && setError('This is a creator account. Please visit /creator to log in.')
+                    const projectRef = import.meta.env.VITE_SUPABASE_URL.split('//')[1].split('.')[0]
+                    localStorage.removeItem(`sb-${projectRef}-auth-token`)
+                    return
+                  }
                   setFanSession({ user: tokenData.user, access_token: tokenData.access_token })
-                  if (profiles?.[0]) setFanProfile(profiles[0])
+                  if (profile) setFanProfile(profile)
                 }
               }
             } catch (e) {

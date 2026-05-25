@@ -743,6 +743,7 @@ export default function AdminPortal() {
                         ;(Array.isArray(creatorsData) ? creatorsData : []).forEach(c => {
                           if (c.profiles?.handle) handleToId[c.profiles.handle] = c.id
                         })
+
                         const inserts = validRows.map(r => ({
                           creator_id: handleToId[r.creator_handle],
                           name: r.name,
@@ -753,9 +754,20 @@ export default function AdminPortal() {
                           is_free: r.access_type === 'free',
                           ticket_price: r.access_type === 'ticketed' ? parseFloat(r.ticket_price) : null,
                           venue: r.venue || null,
-                        })).filter(r => r.creator_id)
-                        await sbFetch('events', { method: 'POST', body: JSON.stringify(inserts), headers: { 'Prefer': 'return=minimal' } })
-                        setImportResult({ type: 'success', message: `${inserts.length} event${inserts.length !== 1 ? 's' : ''} created successfully.` })
+                        }))
+
+                        const skipped = inserts.filter(r => !r.creator_id).map((_, i) => validRows[i].creator_handle)
+                        const toInsert = inserts.filter(r => r.creator_id)
+
+                        if (toInsert.length > 0) {
+                          await sbFetch('events', { method: 'POST', body: JSON.stringify(toInsert), headers: { 'Prefer': 'return=minimal' } })
+                        }
+
+                        const skipMsg = skipped.length > 0 ? ` ${skipped.length} skipped — handles not found: ${[...new Set(skipped)].join(', ')}` : ''
+                        setImportResult({
+                          type: toInsert.length > 0 ? 'success' : 'error',
+                          message: `${toInsert.length} event${toInsert.length !== 1 ? 's' : ''} created.${skipMsg}`
+                        })
                       } else if (importType === 'content') {
                         const handles = [...new Set(validRows.map(r => r.creator_handle))]
                         const creatorsData = await sbFetch(`creators?select=id,profiles(handle)&profiles.handle=in.(${handles.join(',')})`)
