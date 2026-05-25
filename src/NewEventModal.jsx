@@ -159,7 +159,7 @@ export default function NewEventModal({ creatorId, accentColor, onClose, onEvent
         )}
 
         {/* Date */}
-        <input style={input} type="date" value={eventDate} onChange={e => setEventDate(e.target.value)} />
+        <input style={input} placeholder="Enter Event Date" type="date" value={eventDate} onChange={e => setEventDate(e.target.value)} />
 
         {/* Time + duration — virtual only */}
         {eventType === 'virtual' && (

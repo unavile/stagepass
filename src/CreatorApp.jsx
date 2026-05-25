@@ -7,6 +7,8 @@ import { useEvents } from './hooks/useEvents'
 import NewEventModal from './NewEventModal'
 import EditProfileModal from './EditProfileModal'
 import LiveRoom from './LiveRoom'
+import EditPostModal from './EditPostModal'
+import EditEventModal from './EditEventModal'
 
 // ─── Design tokens ─────────────────────────────────────────────────────────
 const BG      = '#09090b'
@@ -57,6 +59,8 @@ export default function CreatorApp({ session, profile, onSignOut }) {
   const [showNewEvent, setShowNewEvent] = useState(false)
   const [showEditProfile, setShowEditProfile] = useState(false)
   const [liveEvent, setLiveEvent] = useState(null)
+  const [editPost, setEditPost] = useState(null)
+  const [editEvent, setEditEvent] = useState(null)
 
   useEffect(() => {
     const fn = () => setIsMobile(window.innerWidth < 768)
@@ -356,6 +360,12 @@ export default function CreatorApp({ session, profile, onSignOut }) {
                         <span style={{ fontFamily: "'DM Mono', monospace", fontSize: 10, color: TEXT3, paddingTop: 2 }}>{new Date(post.published_at).toLocaleDateString()}</span>
                       </div>
                     </div>
+                    <button onClick={() => setEditPost(post)} style={{
+                      background: 'transparent', border: `1px solid ${BORDER}`,
+                      borderRadius: 6, padding: '5px 12px', color: TEXT2,
+                      fontFamily: "'DM Mono', monospace", fontSize: 10,
+                      cursor: 'pointer', letterSpacing: '0.08em', flexShrink: 0,
+                    }}>EDIT</button>
                   </div>
                 </div>
               ))}
@@ -438,9 +448,17 @@ export default function CreatorApp({ session, profile, onSignOut }) {
                             {new Date(event.event_date).toLocaleDateString('en-US', { month: 'short', day: 'numeric', year: 'numeric' })}
                           </div>
                         </div>
-                        <span style={{ background: ac + '18', color: ac, border: `1px solid ${ac}40`, borderRadius: 5, fontSize: 9, fontWeight: 700, padding: '3px 9px', letterSpacing: '0.14em', textTransform: 'uppercase', fontFamily: "'DM Mono', monospace", flexShrink: 0 }}>
-                          {event.event_type === 'virtual' ? '💻 VIRTUAL' : '📍 IN PERSON'}
-                        </span>
+                        <div style={{ display: 'flex', gap: 8, alignItems: 'center', flexShrink: 0 }}>
+                          <span style={{ background: ac + '18', color: ac, border: `1px solid ${ac}40`, borderRadius: 5, fontSize: 9, fontWeight: 700, padding: '3px 9px', letterSpacing: '0.14em', textTransform: 'uppercase', fontFamily: "'DM Mono', monospace" }}>
+                            {event.event_type === 'virtual' ? '💻 VIRTUAL' : '📍 IN PERSON'}
+                          </span>
+                          <button onClick={() => setEditEvent(event)} style={{
+                            background: 'transparent', border: `1px solid ${BORDER}`,
+                            borderRadius: 6, padding: '4px 10px', color: TEXT2,
+                            fontFamily: "'DM Mono', monospace", fontSize: 10,
+                            cursor: 'pointer', letterSpacing: '0.08em',
+                          }}>EDIT</button>
+                        </div>
                       </div>
                       {event.description && <div style={{ fontSize: 13, color: TEXT2, lineHeight: 1.6, marginBottom: 10 }}>{event.description}</div>}
                       <div style={{ display: 'flex', gap: 16, flexWrap: 'wrap', marginBottom: 12 }}>
@@ -571,6 +589,8 @@ export default function CreatorApp({ session, profile, onSignOut }) {
       )}
 
       {showUpload && <NewPostModal creator={creator} onClose={() => setShowUpload(false)} onPostCreated={refetch} />}
+      {editPost && <EditPostModal post={editPost} accentColor={ac} onClose={() => setEditPost(null)} onSaved={() => { setEditPost(null); refetch() }} />}
+      {editEvent && <EditEventModal event={editEvent} accentColor={ac} onClose={() => setEditEvent(null)} onSaved={() => { setEditEvent(null); refetchEvents() }} />}
       {showNewEvent && <NewEventModal creatorId={creator.id} accentColor={ac} onClose={() => setShowNewEvent(false)} onEventCreated={refetchEvents} />}
       {showEditProfile && <EditProfileModal profile={profile} creator={creator} onClose={() => setShowEditProfile(false)} onSaved={() => window.location.reload()} />}
       {liveEvent && <LiveRoom event={liveEvent} profile={profile} isCreator={true} onLeave={() => setLiveEvent(null)} />}
