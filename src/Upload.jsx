@@ -9,7 +9,7 @@ const ACCEPTED = {
 }
 
 const BUCKET_MAP = { video: 'videos', audio: 'audio', document: 'documents' }
-const EMOJI_MAP  = { video: '🎛️', audio: '🎵', document: '📖', event: '🎟️' }
+const EMOJI_MAP  = { video: '🎛️', audio: '🎵', document: '📖' }
 
 export default function Upload({ creatorId, accentColor, onPostCreated }) {
   const [step, setStep]         = useState('form')   // 'form' | 'uploading' | 'done'
@@ -27,20 +27,19 @@ export default function Upload({ creatorId, accentColor, onPostCreated }) {
 
   const { getRootProps, getInputProps, isDragActive } = useDropzone({
     onDrop,
-    accept: type !== 'event' ? ACCEPTED[type] : {},
+    accept: ACCEPTED[type],
     maxFiles: 1,
-    disabled: type === 'event',
   })
 
   async function handleSubmit() {
     if (!title.trim()) { setError('Please add a title.'); return }
-    if (type !== 'event' && !file) { setError('Please select a file to upload.'); return }
+    if (!file) { setError('Please select a file to upload.'); return }
     setError(null)
     setStep('uploading')
 
     let fileUrl = null
 
-    if (file && type !== 'event') {
+    if (file) {
       const bucket = BUCKET_MAP[type]
       const ext    = file.name.split('.').pop()
       const path   = `${creatorId}/${Date.now()}.${ext}`
@@ -129,7 +128,6 @@ export default function Upload({ creatorId, accentColor, onPostCreated }) {
           { id: 'video',    label: '▶ Video' },
           { id: 'audio',    label: '♪ Audio' },
           { id: 'document', label: '✦ PDF' },
-          { id: 'event',    label: '🎟 Event' },
         ].map(t => (
           <button key={t.id} onClick={() => { setType(t.id); setFile(null) }} style={{
             flex: 1, padding: '9px 4px', borderRadius: 8, cursor: 'pointer',
@@ -159,7 +157,7 @@ export default function Upload({ creatorId, accentColor, onPostCreated }) {
       />
 
       {/* File dropzone */}
-      {type !== 'event' && (
+      {(
         <div {...getRootProps()} style={{
           border: `1px dashed ${isDragActive ? accentColor : '#ffffff20'}`,
           borderRadius: 10, padding: '28px', textAlign: 'center',
