@@ -590,7 +590,8 @@ export default function CreatorApp({ session, profile, onSignOut }) {
 
       {showUpload && <NewPostModal creator={creator} onClose={() => setShowUpload(false)} onPostCreated={refetch} />}
       {editPost && <EditPostModal post={editPost} accentColor={ac} onClose={() => setEditPost(null)} onSaved={() => { setEditPost(null); refetch() }} />}
-      {editEvent && <EditEventModal event={editEvent} accentColor={ac} onClose={() => setEditEvent(null)} onSaved={() => { setEditEvent(null); refetchEvents() }} />}
+      {editEvent && <EditEventModal event={editEvent} accentColor={ac} onClose={() => setEditEvent(null)} onSaved={() => window.location.reload()} />}
+      {editPost && <EditPostModal post={editPost} accentColor={ac} onClose={() => setEditPost(null)} onSaved={() => window.location.reload()} />}
       {showNewEvent && <NewEventModal creatorId={creator.id} accentColor={ac} onClose={() => setShowNewEvent(false)} onEventCreated={refetchEvents} />}
       {showEditProfile && <EditProfileModal profile={profile} creator={creator} onClose={() => setShowEditProfile(false)} onSaved={() => window.location.reload()} />}
       {liveEvent && <LiveRoom event={liveEvent} profile={profile} isCreator={true} onLeave={() => setLiveEvent(null)} />}
