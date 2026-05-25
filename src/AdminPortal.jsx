@@ -103,6 +103,8 @@ function validateEventRow(row) {
   if (!row.creator_handle) errors.push('Missing creator_handle')
   if (!row.name) errors.push('Missing name')
   if (!row.event_date) errors.push('Missing event_date')
+  // Validate YYYY-MM-DD format
+  if (!/^\d{4}-\d{2}-\d{2}$/.test(row.event_date)) errors.push('event_date must be YYYY-MM-DD format')
   if (!['virtual','in_person'].includes(row.event_type)) errors.push('event_type must be virtual or in_person')
   if (!['free','subscribers','ticketed'].includes(row.access_type)) errors.push('access_type must be free, subscribers, or ticketed')
   if (row.access_type === 'ticketed' && (!row.ticket_price || isNaN(parseFloat(row.ticket_price)))) errors.push('ticket_price required for ticketed events')
