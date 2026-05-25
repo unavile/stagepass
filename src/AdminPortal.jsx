@@ -47,15 +47,16 @@ const CREATOR_TEMPLATE = [
 ].join('\n')
 
 const EVENT_TEMPLATE = [
-  'creator_handle,name,description,event_date,event_type,is_free,venue',
-  'maravoss,Acoustic Session,Intimate live set,2026-07-15,virtual,true,',
-  'djkemi,Summer Dance Night,Dance workshop and set,2026-07-20,in_person,true,Fabric London',
+  'creator_handle,name,description,event_date,event_type,access_type,ticket_price,venue',
+  'maravoss,Acoustic Session,"Intimate live set",2026-07-15,virtual,free,,',
+  'djkemi,Summer Dance Night,"Dance workshop and set",2026-07-20,in_person,subscribers,,Fabric London',
+  'nalini,Bharatanatyam Masterclass,"Full 90-min workshop",2026-08-01,in_person,ticketed,25.00,Arts Centre London',
 ].join('\n')
 
 const CONTENT_TEMPLATE = [
-  'creator_handle,title,description,type,is_locked',
-  'maravoss,Studio Diaries Ep1,Behind the scenes in the studio,video,true',
-  'maravoss,Free Intro Track,Sample my new EP,audio,false',
+  'creator_handle,title,description,type,access',
+  'maravoss,Studio Diaries Ep1,"Behind the scenes in the studio",video,subscribers',
+  'maravoss,Free Intro Track,"Sample my new EP",audio,free',
 ].join('\n')
 
 function downloadCSV(content, filename) {
@@ -103,6 +104,8 @@ function validateEventRow(row) {
   if (!row.name) errors.push('Missing name')
   if (!row.event_date) errors.push('Missing event_date')
   if (!['virtual','in_person'].includes(row.event_type)) errors.push('event_type must be virtual or in_person')
+  if (!['free','subscribers','ticketed'].includes(row.access_type)) errors.push('access_type must be free, subscribers, or ticketed')
+  if (row.access_type === 'ticketed' && (!row.ticket_price || isNaN(parseFloat(row.ticket_price)))) errors.push('ticket_price required for ticketed events')
   return errors
 }
 
@@ -111,6 +114,7 @@ function validateContentRow(row) {
   if (!row.creator_handle) errors.push('Missing creator_handle')
   if (!row.title) errors.push('Missing title')
   if (!['video','audio','text'].includes(row.type)) errors.push('type must be video, audio, or text')
+  if (!['free','subscribers'].includes(row.access)) errors.push('access must be free or subscribers')
   return errors
 }
 
@@ -632,12 +636,12 @@ export default function AdminPortal() {
             <div style={{ fontFamily: "'DM Mono', monospace", fontSize: 9, color: TEXT3, letterSpacing: '0.18em', marginBottom: 8 }}>REQUIRED CSV COLUMNS</div>
             <div style={{ fontFamily: "'DM Mono', monospace", fontSize: 11, color: ACCENT, wordBreak: 'break-all' }}>
               {importType === 'creators' && 'display_name, handle, email, category, monthly_price, bio'}
-              {importType === 'events'   && 'creator_handle, name, description, event_date, event_type, is_free, venue'}
-              {importType === 'content'  && 'creator_handle, title, description, type, is_locked'}
+              {importType === 'events'   && 'creator_handle, name, description, event_date, event_type, access_type, ticket_price, venue'}
+              {importType === 'content'  && 'creator_handle, title, description, type, access'}
             </div>
             {importType === 'creators' && <div style={{ fontFamily: "'DM Mono', monospace", fontSize: 10, color: TEXT3, marginTop: 6 }}>category: Music / Dance / Comedy · monthly_price: number · A password reset email will be sent to each creator</div>}
-            {importType === 'events'   && <div style={{ fontFamily: "'DM Mono', monospace", fontSize: 10, color: TEXT3, marginTop: 6 }}>event_date: YYYY-MM-DD · event_type: virtual / in_person · is_free: true / false</div>}
-            {importType === 'content'  && <div style={{ fontFamily: "'DM Mono', monospace", fontSize: 10, color: TEXT3, marginTop: 6 }}>type: video / audio / text · is_locked: true / false</div>}
+            {importType === 'events'   && <div style={{ fontFamily: "'DM Mono', monospace", fontSize: 10, color: TEXT3, marginTop: 6 }}>event_date: YYYY-MM-DD · event_type: virtual / in_person · access_type: free / subscribers / ticketed · ticket_price: required when ticketed</div>}
+            {importType === 'content'  && <div style={{ fontFamily: "'DM Mono', monospace", fontSize: 10, color: TEXT3, marginTop: 6 }}>type: video / audio / text · access: free / subscribers</div>}
           </div>
 
           {/* Download template + upload */}
@@ -743,7 +747,9 @@ export default function AdminPortal() {
                           description: r.description || '',
                           event_date: r.event_date,
                           event_type: r.event_type,
-                          is_free: r.is_free === 'true',
+                          access_type: r.access_type,
+                          is_free: r.access_type === 'free',
+                          ticket_price: r.access_type === 'ticketed' ? parseFloat(r.ticket_price) : null,
                           venue: r.venue || null,
                         })).filter(r => r.creator_id)
                         await sbFetch('events', { method: 'POST', body: JSON.stringify(inserts), headers: { 'Prefer': 'return=minimal' } })
@@ -761,7 +767,7 @@ export default function AdminPortal() {
                           title: r.title,
                           description: r.description || '',
                           type: r.type,
-                          is_locked: r.is_locked === 'true',
+                          is_locked: r.access === 'subscribers',
                           thumbnail_emoji: emojiMap[r.type] || '✦',
                         })).filter(r => r.creator_id)
                         await sbFetch('posts', { method: 'POST', body: JSON.stringify(inserts), headers: { 'Prefer': 'return=minimal' } })
