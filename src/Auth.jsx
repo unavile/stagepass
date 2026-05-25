@@ -124,18 +124,18 @@ export default function Auth({ onAuth, creatorOnly = false }) {
 
     // ── Sign in — use native fetch to avoid Supabase JS hang on Netlify ────
     try {
+      console.log('Attempting native sign in for:', email.trim())
       const signInResult = await nativeSignIn(email.trim(), password)
+      console.log('Sign in result:', JSON.stringify(signInResult))
       storeSession(signInResult)
-      // Let onAuthStateChange in CreatorPortal pick up the session
-      // Also manually trigger a session refresh via supabase client
+      console.log('Session stored, calling onAuth')
       await supabase.auth.setSession({
         access_token: signInResult.access_token,
         refresh_token: signInResult.refresh_token,
-      }).catch(() => {
-        // setSession may also hang — that's ok, localStorage is set
-      })
+      }).catch(() => {})
       onAuth()
     } catch (err) {
+      console.error('Sign in error:', err.message)
       const msg = err.message.toLowerCase()
       if (msg.includes('invalid login') || msg.includes('invalid credentials')) {
         setError('Incorrect email or password.')
