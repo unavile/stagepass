@@ -1,6 +1,31 @@
 import { useState } from 'react'
 import { supabase } from './supabaseClient'
 
+// Native fetch for auth — avoids Supabase JS client hang on Netlify
+async function nativeSignIn(email, password) {
+  const url = `${import.meta.env.VITE_SUPABASE_URL}/auth/v1/token?grant_type=password`
+  const res = await fetch(url, {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json', 'apikey': import.meta.env.VITE_SUPABASE_ANON_KEY },
+    body: JSON.stringify({ email, password }),
+  })
+  const data = await res.json()
+  if (data.error || data.error_description) throw new Error(data.error_description || data.error || 'Sign in failed')
+  return data
+}
+
+function storeSession(tokenData) {
+  const projectRef = import.meta.env.VITE_SUPABASE_URL.split('//')[1].split('.')[0]
+  localStorage.setItem(`sb-${projectRef}-auth-token`, JSON.stringify({
+    access_token: tokenData.access_token,
+    refresh_token: tokenData.refresh_token,
+    expires_at: tokenData.expires_at || Math.floor(Date.now() / 1000) + (tokenData.expires_in || 3600),
+    expires_in: tokenData.expires_in || 3600,
+    token_type: 'bearer',
+    user: tokenData.user,
+  }))
+}
+
 const ACCENT  = '#c9a84c'
 const TEXT1   = '#f4f0e8'
 const TEXT2   = '#9a9690'
@@ -97,25 +122,29 @@ export default function Auth({ onAuth, creatorOnly = false }) {
       return
     }
 
-    // ── Sign in ──────────────────────────────────────────────────────────
-    const { error: loginError } = await supabase.auth.signInWithPassword({
-      email: email.trim(),
-      password,
-    })
-
-    if (loginError) {
-      if (loginError.message.toLowerCase().includes('email not confirmed')) {
-        setError('Please confirm your email address before signing in. Check your inbox.')
-      } else if (loginError.message.toLowerCase().includes('invalid login')) {
+    // ── Sign in — use native fetch to avoid Supabase JS hang on Netlify ────
+    try {
+      const signInResult = await nativeSignIn(email.trim(), password)
+      storeSession(signInResult)
+      // Let onAuthStateChange in CreatorPortal pick up the session
+      // Also manually trigger a session refresh via supabase client
+      await supabase.auth.setSession({
+        access_token: signInResult.access_token,
+        refresh_token: signInResult.refresh_token,
+      }).catch(() => {
+        // setSession may also hang — that's ok, localStorage is set
+      })
+      onAuth()
+    } catch (err) {
+      const msg = err.message.toLowerCase()
+      if (msg.includes('invalid login') || msg.includes('invalid credentials')) {
         setError('Incorrect email or password.')
+      } else if (msg.includes('email not confirmed')) {
+        setError('Please confirm your email address before signing in. Check your inbox.')
       } else {
-        setError(loginError.message)
+        setError(err.message)
       }
-      setLoading(false)
-      return
     }
-
-    onAuth()
     setLoading(false)
   }
 

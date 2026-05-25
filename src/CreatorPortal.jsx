@@ -25,14 +25,33 @@ export default function CreatorPortal() {
   const [profileLoading, setProfileLoading] = useState(false)
 
   useEffect(() => {
-    const { data: { subscription } } = supabase.auth.onAuthStateChange((event, session) => {
-      if (event === 'INITIAL_SESSION') {
-        setSession(session ?? null)
-        setSessionChecked(true)
+    // Read session from localStorage — bypasses Supabase JS hang on Netlify
+    async function checkSession() {
+      try {
+        const projectRef = import.meta.env.VITE_SUPABASE_URL.split('//')[1].split('.')[0]
+        const stored = localStorage.getItem(`sb-${projectRef}-auth-token`)
+        if (stored) {
+          const tokenData = JSON.parse(stored)
+          if (tokenData?.user?.id && tokenData?.access_token) {
+            // Build a minimal session object
+            setSession({
+              user: tokenData.user,
+              access_token: tokenData.access_token,
+              refresh_token: tokenData.refresh_token,
+            })
+          }
+        }
+      } catch (e) {
+        console.error('Session read error:', e)
       }
-      if (event === 'SIGNED_IN')       setSession(session)
-      if (event === 'SIGNED_OUT')      { setSession(null); setProfile(null) }
-      if (event === 'TOKEN_REFRESHED') setSession(session)
+      setSessionChecked(true)
+    }
+    checkSession()
+
+    // Still listen for sign-out events
+    const { data: { subscription } } = supabase.auth.onAuthStateChange((event, session) => {
+      if (event === 'SIGNED_OUT') { setSession(null); setProfile(null); setSessionChecked(true) }
+      if (event === 'TOKEN_REFRESHED' && session) setSession(session)
     })
     return () => subscription.unsubscribe()
   }, [])
@@ -43,14 +62,27 @@ export default function CreatorPortal() {
     if (profile?.id === session.user.id) return
 
     setProfileLoading(true)
-    supabase
-      .from('profiles')
-      .select('*, creators(*)')
-      .eq('id', session.user.id)
-      .maybeSingle()
-      .then(({ data }) => {
-        if (data) setProfile(data)
-        else supabase.auth.signOut()
+    const url = `${import.meta.env.VITE_SUPABASE_URL}/rest/v1/profiles?select=*,creators(*)&id=eq.${session.user.id}&limit=1`
+    fetch(url, {
+      headers: {
+        'apikey': import.meta.env.VITE_SUPABASE_ANON_KEY,
+        'Authorization': `Bearer ${session.access_token}`,
+      }
+    })
+      .then(r => r.json())
+      .then(data => {
+        const profile = Array.isArray(data) ? data[0] : null
+        if (profile) setProfile(profile)
+        else {
+          // Clear invalid session
+          const projectRef = import.meta.env.VITE_SUPABASE_URL.split('//')[1].split('.')[0]
+          localStorage.removeItem(`sb-${projectRef}-auth-token`)
+          setSession(null)
+        }
+        setProfileLoading(false)
+      })
+      .catch(() => {
+        setSession(null)
         setProfileLoading(false)
       })
   }, [session])
