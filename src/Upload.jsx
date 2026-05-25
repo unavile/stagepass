@@ -192,9 +192,9 @@ export default function Upload({ creatorId, accentColor, onPostCreated }) {
       {/* Access toggle */}
       <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', background: '#111', border: '1px solid #ffffff10', borderRadius: 8, padding: '12px 16px', marginBottom: 16 }}>
         <div>
-          <div style={{ fontSize: 13, color: '#e8e2d6' }}>Subscriber only</div>
+          <div style={{ fontSize: 13, color: '#e8e2d6' }}>Subscribers Only</div>
           <div style={{ fontFamily: "'DM Mono', monospace", fontSize: 10, color: '#444', marginTop: 2 }}>
-            {isLocked ? 'Only paying subscribers can view' : 'Visible to everyone'}
+            {isLocked ? 'Only subscribers can view this content' : 'Free — anyone can view'}
           </div>
         </div>
         <div

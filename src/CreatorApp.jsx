@@ -314,7 +314,7 @@ export default function CreatorApp({ session, profile, onSignOut }) {
                     <div style={{ fontSize: 13, color: TEXT1, whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' }}>{post.title}</div>
                     <div style={{ fontFamily: "'DM Mono', monospace", fontSize: 10, color: TEXT3, marginTop: 2 }}>{typeLabels[post.type]} · {new Date(post.published_at).toLocaleDateString()}</div>
                   </div>
-                  {post.is_locked && <Pill color={ac}>EXCL.</Pill>}
+                  {post.is_locked ? <Pill color={ac}>SUBSCRIBERS</Pill> : <Pill color='#6dbf8a'>FREE</Pill>}
                 </div>
               ))}
             </div>
@@ -352,7 +352,7 @@ export default function CreatorApp({ session, profile, onSignOut }) {
                       {post.description && <div style={{ fontSize: 12, color: TEXT3, marginBottom: 6, lineHeight: 1.5 }}>{post.description}</div>}
                       <div style={{ display: 'flex', gap: 6, flexWrap: 'wrap' }}>
                         <Pill color={TEXT2}>{typeLabels[post.type]}</Pill>
-                        {post.is_locked && <Pill color={ac}>EXCLUSIVE</Pill>}
+                        {post.is_locked ? <Pill color={ac}>SUBSCRIBERS ONLY</Pill> : <Pill color='#6dbf8a'>FREE</Pill>}
                         <span style={{ fontFamily: "'DM Mono', monospace", fontSize: 10, color: TEXT3, paddingTop: 2 }}>{new Date(post.published_at).toLocaleDateString()}</span>
                       </div>
                     </div>
@@ -446,7 +446,9 @@ export default function CreatorApp({ session, profile, onSignOut }) {
                       <div style={{ display: 'flex', gap: 16, flexWrap: 'wrap', marginBottom: 12 }}>
                         {event.venue && <div style={{ fontSize: 12, color: TEXT3 }}>📍 {event.venue}</div>}
                         <div style={{ fontSize: 12, color: TEXT3 }}>👥 {event.rsvps?.length || 0} RSVPs {event.capacity ? `/ ${event.capacity}` : ''}</div>
-                        <div style={{ fontSize: 12, color: event.is_free ? '#6dbf8a' : ac }}>{event.is_free ? '✓ Free for subscribers' : 'Ticketed'}</div>
+                        <div style={{ fontSize: 12, color: event.access_type === 'free' ? '#6dbf8a' : event.access_type === 'ticketed' ? ac : '#9a9690' }}>
+                          {event.access_type === 'free' ? '✓ Free for All' : event.access_type === 'ticketed' ? `🎟 Ticketed · $${event.ticket_price}` : '🔑 Subscribers Only'}
+                        </div>
                       </div>
                       {event.rsvps?.length > 0 && (
                         <div style={{ paddingTop: 12, borderTop: `1px solid ${BORDER2}` }}>

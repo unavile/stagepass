@@ -263,6 +263,32 @@ export default function FanApp() {
     setSubscribedIds(prev => { const n = new Set(prev); n.delete(selected.id); return n })
   }
 
+  async function handleBuyTicket(event) {
+    if (!fanSession) {
+      setLoginModalMessage('Sign in to purchase a ticket.')
+      setShowLoginModal(true)
+      return
+    }
+    try {
+      const res = await fetch('/.netlify/functions/create-ticket-checkout', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          eventId: event.id,
+          eventName: event.name,
+          ticketPrice: event.ticket_price,
+          fanId: fanSession.user.id,
+          fanEmail: fanSession.user.email,
+        })
+      })
+      const { url, error } = await res.json()
+      if (error) throw new Error(error)
+      window.location.href = url
+    } catch (err) {
+      console.error('Ticket checkout error:', err)
+    }
+  }
+
   async function handleRsvp(eventId) {
     if (!fanSession) {
       setLoginModalMessage('Sign in to RSVP to events.')
@@ -346,8 +372,7 @@ export default function FanApp() {
                   <div style={{ fontSize: 13, color: canView ? TEXT1 : TEXT3, marginBottom: 4 }}>{post.title}</div>
                   <div style={{ display: 'flex', gap: 6, flexWrap: 'wrap' }}>
                     <Pill color={TEXT2}>{typeLabels[post.type]}</Pill>
-                    {post.is_locked && !subscribed && <Pill color={ACCENT}>EXCLUSIVE</Pill>}
-                    {post.is_locked && subscribed && <Pill color={ACCENT}>✓ UNLOCKED</Pill>}
+                    {post.is_locked ? (!subscribed ? <Pill color={ACCENT}>SUBSCRIBERS ONLY</Pill> : <Pill color={ACCENT}>✓ UNLOCKED</Pill>) : <Pill color='#6dbf8a'>FREE</Pill>}
                   </div>
                 </div>
                 {post.is_locked && !subscribed && <span style={{ color: TEXT3, fontSize: 15 }}>🔒</span>}
@@ -385,8 +410,13 @@ export default function FanApp() {
                   </span>
                 </div>
                 {event.description && <div style={{ fontSize: 12, color: TEXT2, lineHeight: 1.55, marginBottom: 10 }}>{event.description}</div>}
-                <div style={{ display: 'flex', gap: 8, flexWrap: 'wrap' }}>
-                  {subscribed ? (
+                <div style={{ display: 'flex', gap: 8, flexWrap: 'wrap', alignItems: 'center' }}>
+                  {/* Access badge */}
+                  <div style={{ fontFamily: "'DM Mono', monospace", fontSize: 10, color: event.access_type === 'free' ? '#6dbf8a' : event.access_type === 'ticketed' ? ACCENT : TEXT2, marginRight: 4 }}>
+                    {event.access_type === 'free' ? '🌐 Free for All' : event.access_type === 'ticketed' ? `🎟 $${event.ticket_price} / ticket` : '🔑 Subscribers Only'}
+                  </div>
+                  {/* Subscriber: can always RSVP free */}
+                  {subscribed && (
                     <button onClick={() => handleRsvp(event.id)} style={{
                       background: eventRsvps[event.id] ? 'rgba(255,255,255,0.06)' : ACCENT,
                       color: eventRsvps[event.id] ? TEXT2 : '#080808',
@@ -395,15 +425,38 @@ export default function FanApp() {
                       fontFamily: "'DM Mono', monospace", fontSize: 10,
                       fontWeight: 700, cursor: 'pointer', letterSpacing: '0.08em',
                     }}>
-                      {eventRsvps[event.id] ? "✓ RSVP'D — CANCEL" : 'RSVP'}
+                      {eventRsvps[event.id] ? "✓ RSVP'D — CANCEL" : 'RSVP (FREE)'}
                     </button>
-                  ) : (
+                  )}
+                  {/* Non-subscriber: options depend on access_type */}
+                  {!subscribed && event.access_type === 'free' && (
+                    <button onClick={() => handleRsvp(event.id)} style={{
+                      background: eventRsvps[event.id] ? 'rgba(255,255,255,0.06)' : ACCENT,
+                      color: eventRsvps[event.id] ? TEXT2 : '#080808',
+                      border: `1px solid ${eventRsvps[event.id] ? BORDER : 'transparent'}`,
+                      borderRadius: 7, padding: '7px 14px',
+                      fontFamily: "'DM Mono', monospace", fontSize: 10,
+                      fontWeight: 700, cursor: 'pointer', letterSpacing: '0.08em',
+                    }}>
+                      {eventRsvps[event.id] ? "✓ RSVP'D — CANCEL" : 'RSVP FREE'}
+                    </button>
+                  )}
+                  {!subscribed && event.access_type === 'subscribers' && (
                     <button onClick={handleSubscribe} style={{
                       background: ACCENT + '14', color: ACCENT, border: `1px solid ${ACCENT}40`,
                       borderRadius: 7, padding: '7px 14px', fontFamily: "'DM Mono', monospace",
                       fontSize: 10, cursor: 'pointer', letterSpacing: '0.08em',
-                    }}>SUBSCRIBE TO RSVP</button>
+                    }}>SUBSCRIBE TO ATTEND · ${selected?.monthly_price}/mo</button>
                   )}
+                  {!subscribed && event.access_type === 'ticketed' && (
+                    <button onClick={() => handleBuyTicket(event)} style={{
+                      background: ACCENT, color: '#080808', border: 'none',
+                      borderRadius: 7, padding: '7px 14px', fontFamily: "'DM Mono', monospace",
+                      fontSize: 10, fontWeight: 700, cursor: 'pointer', letterSpacing: '0.08em',
+                      boxShadow: `0 4px 14px ${ACCENT}40`,
+                    }}>BUY TICKET · ${event.ticket_price}</button>
+                  )}
+                  {/* Join Live button */}
                   {event.daily_room_name && eventRsvps[event.id] && isEventActive(event) && (
                     <button onClick={() => setLiveEvent(event)} style={{
                       background: ACCENT, color: '#080808', border: 'none',

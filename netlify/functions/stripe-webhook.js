@@ -54,6 +54,27 @@ exports.handler = async (event) => {
 
     console.log('Subscription created successfully')
   }
+  // Inside the checkout.session.completed handler, after the existing subscription logic:
+  if (session.metadata?.type === 'ticket_purchase') {
+    const { event_id, fan_id } = session.metadata
+    // Record ticket purchase and auto-RSVP the fan
+    const { createClient } = require('@supabase/supabase-js')
+    const supabase = createClient(process.env.SUPABASE_URL, process.env.SUPABASE_SERVICE_ROLE_KEY)
+    
+    await supabase.from('ticket_purchases').upsert({
+      event_id,
+      fan_id,
+      stripe_session_id: session.id,
+      amount: session.amount_total / 100,
+      status: 'paid',
+    }, { onConflict: 'event_id,fan_id' })
+
+    // Auto-RSVP the fan to the event
+    await supabase.from('rsvps').upsert(
+      { event_id, fan_id },
+      { onConflict: 'event_id,fan_id' }
+    )
+  }
 
   if (stripeEvent.type === 'customer.subscription.deleted' ||
       stripeEvent.type === 'customer.subscription.paused') {
