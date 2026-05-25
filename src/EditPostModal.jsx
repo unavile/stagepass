@@ -22,23 +22,33 @@ export default function EditPostModal({ post, accentColor, onClose, onSaved }) {
     setLoading(true)
     setError(null)
 
-    const { error: updateError } = await supabase
-      .from('posts')
-      .update({
-        title: title.trim(),
-        description: description.trim(),
-        is_locked: isLocked,
+    try {
+      const sbUrl = import.meta.env.VITE_SUPABASE_URL
+      const sbKey = import.meta.env.VITE_SUPABASE_ANON_KEY
+      const res = await fetch(`${sbUrl}/rest/v1/posts?id=eq.${post.id}`, {
+        method: 'PATCH',
+        headers: {
+          'apikey': sbKey,
+          'Authorization': `Bearer ${sbKey}`,
+          'Content-Type': 'application/json',
+          'Prefer': 'return=minimal',
+        },
+        body: JSON.stringify({
+          title: title.trim(),
+          description: description.trim(),
+          is_locked: isLocked,
+        }),
       })
-      .eq('id', post.id)
-
-    if (updateError) {
-      setError(updateError.message)
+      if (!res.ok) {
+        const errData = await res.json().catch(() => ({}))
+        throw new Error(errData.message || `Update failed (${res.status})`)
+      }
+      onSaved()
+      onClose()
+    } catch (err) {
+      setError(err.message)
       setLoading(false)
-      return
     }
-
-    onSaved()
-    onClose()
   }
 
   const typeLabels = { video: 'VIDEO', audio: 'AUDIO', text: 'PDF', event: 'EVENT' }

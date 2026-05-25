@@ -39,30 +39,40 @@ export default function EditEventModal({ event, accentColor, onClose, onSaved })
     setLoading(true)
     setError(null)
 
-    const { error: updateError } = await supabase
-      .from('events')
-      .update({
-        name: name.trim(),
-        description: description.trim(),
-        venue: venue.trim() || null,
-        event_date: eventDate,
-        start_time: startTime,
-        duration_minutes: parseInt(duration) || 60,
-        capacity: capacity ? parseInt(capacity) : null,
-        access_type: accessType,
-        is_free: accessType === 'free',
-        ticket_price: accessType === 'ticketed' ? parseFloat(ticketPrice) : null,
+    try {
+      const sbUrl = import.meta.env.VITE_SUPABASE_URL
+      const sbKey = import.meta.env.VITE_SUPABASE_ANON_KEY
+      const res = await fetch(`${sbUrl}/rest/v1/events?id=eq.${event.id}`, {
+        method: 'PATCH',
+        headers: {
+          'apikey': sbKey,
+          'Authorization': `Bearer ${sbKey}`,
+          'Content-Type': 'application/json',
+          'Prefer': 'return=minimal',
+        },
+        body: JSON.stringify({
+          name: name.trim(),
+          description: description.trim(),
+          venue: venue.trim() || null,
+          event_date: eventDate,
+          start_time: startTime,
+          duration_minutes: parseInt(duration) || 60,
+          capacity: capacity ? parseInt(capacity) : null,
+          access_type: accessType,
+          is_free: accessType === 'free',
+          ticket_price: accessType === 'ticketed' ? parseFloat(ticketPrice) : null,
+        }),
       })
-      .eq('id', event.id)
-
-    if (updateError) {
-      setError(updateError.message)
+      if (!res.ok) {
+        const errData = await res.json().catch(() => ({}))
+        throw new Error(errData.message || `Update failed (${res.status})`)
+      }
+      onSaved()
+      onClose()
+    } catch (err) {
+      setError(err.message)
       setLoading(false)
-      return
     }
-
-    onSaved()
-    onClose()
   }
 
   return (
