@@ -1,7 +1,7 @@
 import { useState } from 'react'
 import { supabase } from './supabaseClient'
 
-export default function EditPostModal({ post, accentColor, onClose, onSaved }) {
+export default function EditPostModal({ post, accentColor, accessToken, onClose, onSaved }) {
   const [title, setTitle] = useState(post.title || '')
   const [description, setDescription] = useState(post.description || '')
   const [isLocked, setIsLocked] = useState(post.is_locked ?? true)
@@ -29,7 +29,7 @@ export default function EditPostModal({ post, accentColor, onClose, onSaved }) {
         method: 'PATCH',
         headers: {
           'apikey': sbKey,
-          'Authorization': `Bearer ${sbKey}`,
+          'Authorization': `Bearer ${accessToken || sbKey}`,
           'Content-Type': 'application/json',
           'Prefer': 'return=minimal',
         },

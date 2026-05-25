@@ -53,9 +53,15 @@ export default function CreatorApp({ session, profile, onSignOut }) {
   const [tab, setTab] = useState('overview')
   const [showUpload, setShowUpload] = useState(false)
   const [isMobile, setIsMobile] = useState(window.innerWidth < 768)
-  const { posts, loading: postsLoading, refetch } = usePosts(session.user.id)
+  const { posts: hookPosts, loading: postsLoading, refetch } = usePosts(session.user.id)
+  const [postsOverride, setPostsOverride] = useState(null)
+  const posts = postsOverride || hookPosts
+  function setPosts(data) { setPostsOverride(data) }
   const { subscribers, loading: subsLoading } = useSubscribers(session.user.id)
-  const { events, loading: eventsLoading, refetch: refetchEvents } = useEvents(session.user.id)
+  const { events: hookEvents, loading: eventsLoading, refetch: refetchEvents } = useEvents(session.user.id)
+  const [eventsOverride, setEventsOverride] = useState(null)
+  const events = eventsOverride || hookEvents
+  function setEvents(data) { setEventsOverride(data) }
   const [showNewEvent, setShowNewEvent] = useState(false)
   const [showEditProfile, setShowEditProfile] = useState(false)
   const [liveEvent, setLiveEvent] = useState(null)
@@ -78,6 +84,27 @@ export default function CreatorApp({ session, profile, onSignOut }) {
   }
 
   const ac = creator.accentColor
+
+  // Native fetch refetch functions — bypass Supabase JS hang
+  async function nativeRefetchPosts() {
+    const sbUrl = import.meta.env.VITE_SUPABASE_URL
+    const sbKey = import.meta.env.VITE_SUPABASE_ANON_KEY
+    const res = await fetch(`${sbUrl}/rest/v1/posts?creator_id=eq.${session.user.id}&order=published_at.desc`, {
+      headers: { 'apikey': sbKey, 'Authorization': `Bearer ${session.access_token}` }
+    })
+    const data = await res.json()
+    if (Array.isArray(data)) setPosts(data)
+  }
+
+  async function nativeRefetchEvents() {
+    const sbUrl = import.meta.env.VITE_SUPABASE_URL
+    const sbKey = import.meta.env.VITE_SUPABASE_ANON_KEY
+    const res = await fetch(`${sbUrl}/rest/v1/events?creator_id=eq.${session.user.id}&order=event_date.asc&select=*,rsvps(id,fan_id,profiles(display_name,handle))`, {
+      headers: { 'apikey': sbKey, 'Authorization': `Bearer ${session.access_token}` }
+    })
+    const data = await res.json()
+    if (Array.isArray(data)) setEvents(data)
+  }
   const monthlyRevenue = subscribers.length * creator.monthlyPrice
   const netRevenue = (monthlyRevenue * 0.92).toFixed(2)
   const platformFee = (monthlyRevenue * 0.08).toFixed(2)
@@ -589,9 +616,8 @@ export default function CreatorApp({ session, profile, onSignOut }) {
       )}
 
       {showUpload && <NewPostModal creator={creator} onClose={() => setShowUpload(false)} onPostCreated={refetch} />}
-      {editPost && <EditPostModal post={editPost} accentColor={ac} onClose={() => setEditPost(null)} onSaved={() => { setEditPost(null); refetch() }} />}
-      {editEvent && <EditEventModal event={editEvent} accentColor={ac} onClose={() => setEditEvent(null)} onSaved={() => window.location.reload()} />}
-      {editPost && <EditPostModal post={editPost} accentColor={ac} onClose={() => setEditPost(null)} onSaved={() => window.location.reload()} />}
+      {editPost && <EditPostModal post={editPost} accentColor={ac} accessToken={session.access_token} onClose={() => setEditPost(null)} onSaved={() => { setEditPost(null); nativeRefetchPosts() }} />}
+      {editEvent && <EditEventModal event={editEvent} accentColor={ac} accessToken={session.access_token} onClose={() => setEditEvent(null)} onSaved={() => { setEditEvent(null); nativeRefetchEvents() }} />}
       {showNewEvent && <NewEventModal creatorId={creator.id} accentColor={ac} onClose={() => setShowNewEvent(false)} onEventCreated={refetchEvents} />}
       {showEditProfile && <EditProfileModal profile={profile} creator={creator} onClose={() => setShowEditProfile(false)} onSaved={() => window.location.reload()} />}
       {liveEvent && <LiveRoom event={liveEvent} profile={profile} isCreator={true} onLeave={() => setLiveEvent(null)} />}

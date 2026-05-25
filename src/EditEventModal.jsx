@@ -1,7 +1,7 @@
 import { useState } from 'react'
 import { supabase } from './supabaseClient'
 
-export default function EditEventModal({ event, accentColor, onClose, onSaved }) {
+export default function EditEventModal({ event, accentColor, accessToken, onClose, onSaved }) {
   const [name, setName] = useState(event.name || '')
   const [description, setDescription] = useState(event.description || '')
   const [venue, setVenue] = useState(event.venue || '')
@@ -46,7 +46,7 @@ export default function EditEventModal({ event, accentColor, onClose, onSaved })
         method: 'PATCH',
         headers: {
           'apikey': sbKey,
-          'Authorization': `Bearer ${sbKey}`,
+          'Authorization': `Bearer ${accessToken || sbKey}`,
           'Content-Type': 'application/json',
           'Prefer': 'return=minimal',
         },
