@@ -1,6 +1,17 @@
 import { useState } from 'react'
 import { supabase } from './supabaseClient'
 
+async function nativeSignIn(email, password) {
+  const res = await fetch(`${import.meta.env.VITE_SUPABASE_URL}/auth/v1/token?grant_type=password`, {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json', 'apikey': import.meta.env.VITE_SUPABASE_ANON_KEY },
+    body: JSON.stringify({ email, password }),
+  })
+  const data = await res.json()
+  if (data.error || data.error_description) throw new Error(data.error_description || data.error || 'Sign in failed')
+  return data
+}
+
 const ACCENT  = '#c9a84c'
 const TEXT1   = '#f4f0e8'
 const TEXT2   = '#9a9690'
@@ -97,25 +108,20 @@ export default function Auth({ onAuth, creatorOnly = false }) {
       return
     }
 
-    // ── Sign in ──────────────────────────────────────────────────────────
-    const { error: loginError } = await supabase.auth.signInWithPassword({
-      email: email.trim(),
-      password,
-    })
-
-    if (loginError) {
-      if (loginError.message.toLowerCase().includes('email not confirmed')) {
-        setError('Please confirm your email address before signing in. Check your inbox.')
-      } else if (loginError.message.toLowerCase().includes('invalid login')) {
+    // ── Sign in — native fetch, pass token directly to onAuth ──────────
+    try {
+      const signInResult = await nativeSignIn(email.trim(), password)
+      onAuth(signInResult)
+    } catch (err) {
+      const msg = err.message.toLowerCase()
+      if (msg.includes('invalid login') || msg.includes('invalid credentials')) {
         setError('Incorrect email or password.')
+      } else if (msg.includes('email not confirmed')) {
+        setError('Please confirm your email address before signing in. Check your inbox.')
       } else {
-        setError(loginError.message)
+        setError(err.message)
       }
-      setLoading(false)
-      return
     }
-
-    onAuth()
     setLoading(false)
   }
 
