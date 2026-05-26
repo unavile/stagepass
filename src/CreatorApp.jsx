@@ -62,16 +62,16 @@ export default function CreatorApp({ session, profile, onSignOut }) {
   const [eventsOverride, setEventsOverride] = useState(null)
   const events = eventsOverride || hookEvents
   function setEvents(data) { setEventsOverride(data) }
-  const todayStr = new Date().toISOString().split('T')[0]
-  const currentEvents = events.filter(e => e.event_date >= todayStr)
-  const pastEvents = events.filter(e => e.event_date < todayStr)
-  const filteredEvents = eventFilter === 'current' ? currentEvents : pastEvents
   const [showNewEvent, setShowNewEvent] = useState(false)
   const [showEditProfile, setShowEditProfile] = useState(false)
   const [liveEvent, setLiveEvent] = useState(null)
   const [editPost, setEditPost] = useState(null)
   const [editEvent, setEditEvent] = useState(null)
   const [eventFilter, setEventFilter] = useState('current') // 'current' | 'past'
+  const todayStr = new Date().toISOString().split('T')[0]
+  const currentEvents = (events || []).filter(e => e.event_date >= todayStr)
+  const pastEvents = (events || []).filter(e => e.event_date < todayStr)
+  const filteredEvents = eventFilter === 'current' ? currentEvents : pastEvents
 
   useEffect(() => {
     const fn = () => setIsMobile(window.innerWidth < 768)
