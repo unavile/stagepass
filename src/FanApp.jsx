@@ -118,6 +118,8 @@ export default function FanApp() {
   // Login modal
   const [showLoginModal, setShowLoginModal] = useState(false)
   const [loginModalMessage, setLoginModalMessage] = useState('')
+  const [fanEventFilter, setFanEventFilter] = useState('current') // My Events tab
+  const [creatorEventFilter, setCreatorEventFilter] = useState('current') // Creator page
 
   // Live room
   const [liveEvent, setLiveEvent] = useState(null)
@@ -213,6 +215,7 @@ export default function FanApp() {
     setPosts([])
     setSubscribed(false)
     setEventRsvps({})
+    setCreatorEventFilter('current')
 
     const queries = [
       supabase.from('posts').select('*').eq('creator_id', c.id).order('published_at', { ascending: false }),
@@ -399,8 +402,35 @@ export default function FanApp() {
         {/* Events */}
         {creatorEvents.length > 0 && (
           <div style={{ marginTop: 24 }}>
-            <SectionLabel>Upcoming Events</SectionLabel>
-            {creatorEvents.map(event => (
+            <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: 14 }}>
+              <SectionLabel>Events</SectionLabel>
+            </div>
+            {/* Current / Past toggle */}
+            <div style={{ display: 'flex', gap: 8, marginBottom: 16 }}>
+              {['current', 'past'].map(f => (
+                <button key={f} onClick={() => setCreatorEventFilter(f)} style={{
+                  background: creatorEventFilter === f ? ACCENT : 'rgba(17,17,20,0.7)',
+                  color: creatorEventFilter === f ? '#080808' : TEXT3,
+                  border: creatorEventFilter === f ? 'none' : `1px solid ${BORDER}`,
+                  borderRadius: 20, padding: '5px 14px',
+                  fontFamily: "'DM Mono', monospace", fontSize: 9,
+                  fontWeight: creatorEventFilter === f ? 700 : 400,
+                  letterSpacing: '0.1em', cursor: 'pointer',
+                  boxShadow: creatorEventFilter === f ? `0 4px 12px ${ACCENT}40` : 'none',
+                }}>{f === 'current' ? 'CURRENT & UPCOMING' : 'PAST'}</button>
+              ))}
+            </div>
+            {(() => {
+              const todayStr = new Date().toISOString().split('T')[0]
+              const filtered = creatorEvents.filter(e =>
+                creatorEventFilter === 'current' ? e.event_date >= todayStr : e.event_date < todayStr
+              )
+              if (filtered.length === 0) return (
+                <div style={{ color: TEXT3, fontFamily: "'DM Mono', monospace", fontSize: 11, padding: '16px 0' }}>
+                  No {creatorEventFilter === 'current' ? 'upcoming' : 'past'} events.
+                </div>
+              )
+              return filtered.map(event => (
               <div key={event.id} style={{
                 background: 'rgba(17,17,20,0.75)', backdropFilter: 'blur(16px)',
                 border: `1px solid ${ACCENT}22`, borderRadius: 12, padding: '16px', marginBottom: 10,
@@ -475,7 +505,8 @@ export default function FanApp() {
                   )}
                 </div>
               </div>
-            ))}
+              ))
+            })()}
           </div>
         )}
       </div>
@@ -593,15 +624,19 @@ export default function FanApp() {
                 <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fill, minmax(260px, 1fr))', gap: 16 }}>
                   {unsubscribedCreators.map(c => (
                     <div key={c.id} onClick={() => selectCreator(c)}
-                      style={{ background: 'rgba(17,17,20,0.72)', backdropFilter: 'blur(16px)', border: `1px solid ${BORDER}`, borderRadius: 16, padding: '22px', cursor: 'pointer', transition: 'all 0.2s', boxShadow: '0 4px 24px rgba(0,0,0,0.4)' }}
+                      style={{ background: 'rgba(17,17,20,0.72)', backdropFilter: 'blur(16px)', border: `1px solid ${BORDER}`, borderRadius: 16, padding: '18px 20px', cursor: 'pointer', transition: 'all 0.2s', boxShadow: '0 4px 24px rgba(0,0,0,0.4)' }}
                       onMouseEnter={e => { e.currentTarget.style.borderColor = ACCENT + '55'; e.currentTarget.style.transform = 'translateY(-3px)' }}
                       onMouseLeave={e => { e.currentTarget.style.borderColor = BORDER; e.currentTarget.style.transform = 'translateY(0)' }}
                     >
-                      <Avatar c={c} size={50} />
-                      <div style={{ fontFamily: "'DM Serif Display', Georgia, serif", fontSize: 17, color: TEXT1, marginBottom: 2, marginTop: 14 }}>{c.profiles?.display_name || 'Creator'}</div>
-                      <div style={{ fontFamily: "'DM Mono', monospace", fontSize: 10, color: ACCENT, marginBottom: 4, letterSpacing: '0.08em' }}>@{c.profiles?.handle || 'creator'}</div>
-                      {c.category && <div style={{ fontFamily: "'DM Mono', monospace", fontSize: 9, color: TEXT3, marginBottom: 8, letterSpacing: '0.1em' }}>{c.category.toUpperCase()}</div>}
-                      {c.profiles?.bio && <div style={{ fontSize: 11, color: TEXT3, lineHeight: 1.6, marginBottom: 14 }}>{c.profiles.bio}</div>}
+                      <div style={{ display: 'flex', gap: 14, alignItems: 'flex-start', marginBottom: 14 }}>
+                        <Avatar c={c} size={72} />
+                        <div style={{ flex: 1, minWidth: 0 }}>
+                          <div style={{ fontFamily: "'DM Serif Display', Georgia, serif", fontSize: 17, color: TEXT1, marginBottom: 2 }}>{c.profiles?.display_name || 'Creator'}</div>
+                          <div style={{ fontFamily: "'DM Mono', monospace", fontSize: 10, color: ACCENT, marginBottom: 4, letterSpacing: '0.08em' }}>@{c.profiles?.handle || 'creator'}</div>
+                          {c.category && <div style={{ fontFamily: "'DM Mono', monospace", fontSize: 9, color: TEXT3, marginBottom: 6, letterSpacing: '0.1em' }}>{c.category.toUpperCase()}</div>}
+                          {c.profiles?.bio && <div style={{ fontSize: 11, color: TEXT3, lineHeight: 1.6 }}>{c.profiles.bio}</div>}
+                        </div>
+                      </div>
                       <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', paddingTop: 12, borderTop: `1px solid ${BORDER2}` }}>
                         <div style={{ fontFamily: "'DM Mono', monospace", fontSize: 14, color: ACCENT, fontWeight: 700 }}>${c.monthly_price}<span style={{ fontSize: 9, color: TEXT3, fontWeight: 400 }}>/mo</span></div>
                         <div style={{ fontFamily: "'DM Mono', monospace", fontSize: 9, color: TEXT3, letterSpacing: '0.1em' }}>VIEW →</div>
@@ -640,14 +675,19 @@ export default function FanApp() {
                 <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fill, minmax(260px, 1fr))', gap: 16 }}>
                   {subscribedCreators.map(c => (
                     <div key={c.id} onClick={() => selectCreator(c)}
-                      style={{ background: 'rgba(17,17,20,0.72)', backdropFilter: 'blur(16px)', border: `1px solid ${ACCENT}30`, borderRadius: 16, padding: '22px', cursor: 'pointer', transition: 'all 0.2s' }}
+                      style={{ background: 'rgba(17,17,20,0.72)', backdropFilter: 'blur(16px)', border: `1px solid ${ACCENT}30`, borderRadius: 16, padding: '18px 20px', cursor: 'pointer', transition: 'all 0.2s' }}
                       onMouseEnter={e => { e.currentTarget.style.borderColor = ACCENT + '66'; e.currentTarget.style.transform = 'translateY(-2px)' }}
                       onMouseLeave={e => { e.currentTarget.style.borderColor = ACCENT + '30'; e.currentTarget.style.transform = 'translateY(0)' }}
                     >
-                      <Avatar c={c} size={50} />
-                      <div style={{ fontFamily: "'DM Serif Display', Georgia, serif", fontSize: 17, color: TEXT1, marginBottom: 2, marginTop: 14 }}>{c.profiles?.display_name || 'Creator'}</div>
-                      <div style={{ fontFamily: "'DM Mono', monospace", fontSize: 10, color: ACCENT, marginBottom: 6 }}>@{c.profiles?.handle}</div>
-                      {c.profiles?.bio && <div style={{ fontSize: 11, color: TEXT3, lineHeight: 1.6, marginBottom: 14 }}>{c.profiles.bio}</div>}
+                      <div style={{ display: 'flex', gap: 14, alignItems: 'flex-start', marginBottom: 14 }}>
+                        <Avatar c={c} size={72} />
+                        <div style={{ flex: 1, minWidth: 0 }}>
+                          <div style={{ fontFamily: "'DM Serif Display', Georgia, serif", fontSize: 17, color: TEXT1, marginBottom: 2 }}>{c.profiles?.display_name || 'Creator'}</div>
+                          <div style={{ fontFamily: "'DM Mono', monospace", fontSize: 10, color: ACCENT, marginBottom: 4, letterSpacing: '0.08em' }}>@{c.profiles?.handle}</div>
+                          {c.category && <div style={{ fontFamily: "'DM Mono', monospace", fontSize: 9, color: TEXT3, marginBottom: 6, letterSpacing: '0.1em' }}>{c.category.toUpperCase()}</div>}
+                          {c.profiles?.bio && <div style={{ fontSize: 11, color: TEXT3, lineHeight: 1.6 }}>{c.profiles.bio}</div>}
+                        </div>
+                      </div>
                       <div style={{ paddingTop: 12, borderTop: `1px solid ${BORDER2}` }}>
                         <Pill color={ACCENT}>✓ SUBSCRIBED</Pill>
                       </div>
@@ -661,11 +701,26 @@ export default function FanApp() {
           {/* ── MY EVENTS ── */}
           {activeTab === 'myevents' && (
             <div style={{ padding: '20px 16px', maxWidth: 820, margin: '0 auto' }}>
-              <div style={{ marginBottom: 20 }}>
+              <div style={{ marginBottom: 16 }}>
                 <div style={{ fontFamily: "'DM Serif Display', Georgia, serif", fontSize: 28, color: TEXT1 }}>
                   My <span style={{ color: ACCENT }}>Events</span>
                 </div>
                 <div style={{ fontFamily: "'DM Mono', monospace", fontSize: 10, color: TEXT3, letterSpacing: '0.18em', marginTop: 4 }}>YOUR RSVPS</div>
+              </div>
+              {/* Current / Past toggle */}
+              <div style={{ display: 'flex', gap: 8, marginBottom: 20 }}>
+                {['current', 'past'].map(f => (
+                  <button key={f} onClick={() => setFanEventFilter(f)} style={{
+                    background: fanEventFilter === f ? ACCENT : 'rgba(17,17,20,0.7)',
+                    color: fanEventFilter === f ? '#080808' : TEXT3,
+                    border: fanEventFilter === f ? 'none' : `1px solid ${BORDER}`,
+                    borderRadius: 20, padding: '6px 18px',
+                    fontFamily: "'DM Mono', monospace", fontSize: 10,
+                    fontWeight: fanEventFilter === f ? 700 : 400,
+                    letterSpacing: '0.1em', cursor: 'pointer',
+                    boxShadow: fanEventFilter === f ? `0 4px 12px ${ACCENT}40` : 'none',
+                  }}>{f === 'current' ? 'CURRENT & UPCOMING' : 'PAST'}</button>
+                ))}
               </div>
               {!fanSession ? (
                 <div style={{ textAlign: 'center', padding: '48px 0' }}>
@@ -683,7 +738,18 @@ export default function FanApp() {
                 </div>
               ) : (
                 <div style={{ display: 'flex', flexDirection: 'column', gap: 12 }}>
-                  {fanEvents.map(rsvp => {
+                  {(() => {
+                    const todayStr = new Date().toISOString().split('T')[0]
+                    const filtered = fanEvents.filter(rsvp => {
+                      const d = rsvp.events?.event_date
+                      return fanEventFilter === 'current' ? d >= todayStr : d < todayStr
+                    })
+                    if (filtered.length === 0) return (
+                      <div style={{ textAlign: 'center', padding: '32px 0', color: TEXT3, fontFamily: "'DM Mono', monospace", fontSize: 11 }}>
+                        No {fanEventFilter === 'current' ? 'upcoming' : 'past'} events.
+                      </div>
+                    )
+                    return filtered.map(rsvp => {
                     const event = rsvp.events
                     if (!event) return null
                     const active = isEventActive(event)
@@ -721,7 +787,8 @@ export default function FanApp() {
                         </div>
                       </div>
                     )
-                  })}
+                    })
+                  })()}
                 </div>
               )}
             </div>
