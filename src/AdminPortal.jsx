@@ -1144,7 +1144,7 @@ export default function AdminPortal() {
         </div>
       )}
 
-      {/* ── Mobile bottom tabs ── */}}
+      {/* ── Mobile bottom tabs ── */}
       {isMobile && (
         <div style={{ position: 'fixed', bottom: 0, left: 0, right: 0, background: BG2 + 'f4', backdropFilter: 'blur(20px)', borderTop: `1px solid ${BORDER}`, display: 'flex', zIndex: 100, height: 60 }}>
           {TABS.map(t => (
