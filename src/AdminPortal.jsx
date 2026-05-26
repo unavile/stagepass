@@ -37,7 +37,6 @@ const TABS = [
   { id: 'revenue',   label: 'Revenue',   icon: '◇'  },
   { id: 'notify',    label: 'Notify',    icon: '◎'  },
   { id: 'import',    label: 'Import',    icon: '↑'  },
-  { id: 'reports',   label: 'Reports',   icon: '▦'  },
 ]
 
 // ─── CSV helpers ─────────────────────────────────────────────────────────────
@@ -125,7 +124,7 @@ function validateContentRow(row) {
 function AdminLogin({ onLogin }) {
   const [password, setPassword] = useState('')
   const [error, setError] = useState('')
-  const ADMIN_PASSWORD = import.meta.env.VITE_ADMIN_PASSWORD || 'stagepass-admin-2026'
+  const ADMIN_PASSWORD = import.meta.env.VITE_ADMIN_PASSWORD || 'covetedstage-admin-2026'
 
   function handleLogin() {
     if (password === ADMIN_PASSWORD) {
@@ -141,7 +140,7 @@ function AdminLogin({ onLogin }) {
       <link href="https://fonts.googleapis.com/css2?family=DM+Serif+Display&family=DM+Mono:wght@400;500&display=swap" rel="stylesheet" />
       <div style={{ width: '100%', maxWidth: 360, background: BG2, border: `1px solid ${BORDER}`, borderRadius: 16, padding: 36 }}>
         <div style={{ textAlign: 'center', marginBottom: 28 }}>
-          <div style={{ fontFamily: "'DM Serif Display', Georgia, serif", fontSize: 28, color: ACCENT, marginBottom: 4 }}>StagePass</div>
+          <div style={{ fontFamily: "'DM Serif Display', Georgia, serif", fontSize: 28, color: ACCENT, marginBottom: 4 }}>Coveted Stage</div>
           <div style={{ fontFamily: "'DM Mono', monospace", fontSize: 10, color: TEXT3, letterSpacing: '0.2em' }}>ADMIN PORTAL</div>
         </div>
         <input
@@ -157,7 +156,7 @@ function AdminLogin({ onLogin }) {
           SIGN IN
         </button>
         <div style={{ marginTop: 20, textAlign: 'center' }}>
-          <a href="/" style={{ fontFamily: "'DM Mono', monospace", fontSize: 10, color: TEXT3, textDecoration: 'none' }}>← Back to StagePass</a>
+          <a href="/" style={{ fontFamily: "'DM Mono', monospace", fontSize: 10, color: TEXT3, textDecoration: 'none' }}>← Back to Coveted Stage</a>
         </div>
       </div>
     </div>
@@ -196,21 +195,6 @@ export default function AdminPortal() {
   const [notifyAll, setNotifyAll] = useState(true)
   const [actionLoading, setActionLoading] = useState(false)
   const [actionResult, setActionResult] = useState(null)
-
-  // Events state
-  const [allEvents, setAllEvents] = useState([])
-  const [eventsLoading, setEventsLoading] = useState(false)
-  const [expandedCreator, setExpandedCreator] = useState(null)
-  const [creatorEvents, setCreatorEvents] = useState({}) // keyed by creator id
-  const [eventFilter, setEventFilter] = useState('all') // 'all'|'current'|'past'
-  const [editingEvent, setEditingEvent] = useState(null)
-  const [cancellingEvent, setCancellingEvent] = useState(null)
-
-  // Reports state
-  const [reportType, setReportType] = useState('creators')
-  const [reportFilter, setReportFilter] = useState('all')
-  const [reportData, setReportData] = useState([])
-  const [reportLoading, setReportLoading] = useState(false)
 
   // Import tab state
   const [importType, setImportType] = useState('creators')
@@ -312,130 +296,6 @@ export default function AdminPortal() {
     setNotifyMessage(''); setActionCreator(null); setActionLoading(false)
   }
 
-  async function loadCreatorEvents(creatorId) {
-    if (creatorEvents[creatorId]) {
-      setExpandedCreator(expandedCreator === creatorId ? null : creatorId)
-      return
-    }
-    const data = await sbFetch(`events?creator_id=eq.${creatorId}&order=event_date.desc&select=*`)
-    setCreatorEvents(prev => ({ ...prev, [creatorId]: Array.isArray(data) ? data : [] }))
-    setExpandedCreator(creatorId)
-  }
-
-  async function handleCancelEvent(event) {
-    await sbFetch(`events?id=eq.${event.id}`, {
-      method: 'PATCH',
-      body: JSON.stringify({ cancelled: true }),
-      headers: { 'Prefer': 'return=minimal' }
-    })
-    // Remove from local state
-    setCreatorEvents(prev => {
-      const updated = { ...prev }
-      if (updated[event.creator_id]) {
-        updated[event.creator_id] = updated[event.creator_id].filter(e => e.id !== event.id)
-      }
-      return updated
-    })
-    setCancellingEvent(null)
-    setActionResult({ type: 'success', message: `Event "${event.name}" has been cancelled.` })
-  }
-
-  async function handleSaveEventEdit(eventId, updates) {
-    await sbFetch(`events?id=eq.${eventId}`, {
-      method: 'PATCH',
-      body: JSON.stringify(updates),
-      headers: { 'Prefer': 'return=minimal' }
-    })
-    // Update local state
-    setCreatorEvents(prev => {
-      const updated = { ...prev }
-      for (const cid of Object.keys(updated)) {
-        updated[cid] = updated[cid].map(e => e.id === eventId ? { ...e, ...updates } : e)
-      }
-      return updated
-    })
-    setEditingEvent(null)
-    setActionResult({ type: 'success', message: 'Event updated successfully.' })
-  }
-
-  async function runReport() {
-    setReportLoading(true)
-    setReportData([])
-    const todayStr = new Date().toISOString().split('T')[0]
-
-    try {
-      if (reportType === 'creators') {
-        let data = await sbFetch('creators?select=*,profiles(display_name,handle,bio,avatar_url)&order=created_at.desc')
-        data = Array.isArray(data) ? data : []
-        if (reportFilter === 'active') data = data.filter(c => !c.suspended)
-        if (reportFilter === 'suspended') data = data.filter(c => c.suspended)
-        setReportData(data.map(c => ({
-          display_name: c.profiles?.display_name || '',
-          handle: c.profiles?.handle || '',
-          category: c.category || '',
-          monthly_price: c.monthly_price || 0,
-          status: c.suspended ? 'Suspended' : 'Active',
-          bio: c.profiles?.bio || '',
-        })))
-      } else if (reportType === 'events') {
-        let data = await sbFetch('events?select=*,creators(profiles(display_name,handle))&order=event_date.desc')
-        data = Array.isArray(data) ? data : []
-        if (reportFilter === 'current') data = data.filter(e => e.event_date >= todayStr)
-        if (reportFilter === 'past') data = data.filter(e => e.event_date < todayStr)
-        setReportData(data.map(e => ({
-          event_name: e.name || '',
-          artist_name: e.creators?.profiles?.display_name || '',
-          artist_handle: e.creators?.profiles?.handle || '',
-          event_date: e.event_date || '',
-          event_type: e.event_type || '',
-          access_type: e.access_type || '',
-          ticket_price: e.ticket_price || '',
-          venue: e.venue || '',
-          status: e.event_date >= todayStr ? 'Current' : 'Past',
-        })))
-      } else if (reportType === 'rsvps') {
-        let data = await sbFetch('rsvps?select=*,profiles!fan_id(display_name,handle),events(name,event_date,event_type,creators(profiles(display_name,handle)))&order=created_at.desc')
-        data = Array.isArray(data) ? data : []
-        setReportData(data.map(r => ({
-          fan_name: r.profiles?.display_name || '',
-          fan_handle: r.profiles?.handle || '',
-          event_name: r.events?.name || '',
-          event_date: r.events?.event_date || '',
-          event_type: r.events?.event_type || '',
-          artist_name: r.events?.creators?.profiles?.display_name || '',
-          artist_handle: r.events?.creators?.profiles?.handle || '',
-        })))
-      } else if (reportType === 'content') {
-        let data = await sbFetch('posts?select=*,creators(profiles(display_name,handle))&order=published_at.desc')
-        data = Array.isArray(data) ? data : []
-        if (reportFilter === 'video') data = data.filter(p => p.type === 'video')
-        if (reportFilter === 'audio') data = data.filter(p => p.type === 'audio')
-        if (reportFilter === 'pdf') data = data.filter(p => p.type === 'text')
-        setReportData(data.map(p => ({
-          title: p.title || '',
-          artist_name: p.creators?.profiles?.display_name || '',
-          artist_handle: p.creators?.profiles?.handle || '',
-          type: p.type === 'text' ? 'PDF' : (p.type || ''),
-          access: p.is_locked ? 'Subscribers Only' : 'Free',
-          published_at: p.published_at ? p.published_at.split('T')[0] : '',
-          description: p.description || '',
-        })))
-      }
-    } catch (e) {
-      console.error('Report error:', e)
-    }
-    setReportLoading(false)
-  }
-
-  function exportReportCSV() {
-    if (!reportData.length) return
-    const headers = Object.keys(reportData[0])
-    const rows = reportData.map(row => headers.map(h => `"${String(row[h] || '').replace(/"/g, '""')}"`).join(','))
-    const csv = [headers.join(','), ...rows].join('\n')
-    const names = { creators: 'creators', events: 'events', rsvps: 'rsvps', content: 'content' }
-    downloadCSV(csv, `stagepass-report-${names[reportType]}-${new Date().toISOString().split('T')[0]}.csv`)
-  }
-
   if (!authed) return <AdminLogin onLogin={() => setAuthed(true)} />
 
   const input = {
@@ -456,7 +316,7 @@ export default function AdminPortal() {
       {/* ── Header ── */}
       <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', padding: '0 20px', height: 56, background: BG2, borderBottom: `1px solid ${BORDER}`, position: 'sticky', top: 0, zIndex: 100, flexShrink: 0 }}>
         <div style={{ display: 'flex', alignItems: 'center', gap: 10 }}>
-          <span style={{ fontFamily: "'DM Serif Display', Georgia, serif", fontSize: 20, color: ACCENT }}>StagePass</span>
+          <span style={{ fontFamily: "'DM Serif Display', Georgia, serif", fontSize: 20, color: ACCENT }}>Coveted Stage</span>
           <span style={{ fontFamily: "'DM Mono', monospace", fontSize: 9, color: RED, letterSpacing: '0.2em', background: RED + '18', border: `1px solid ${RED}40`, borderRadius: 4, padding: '2px 8px' }}>ADMIN</span>
         </div>
         <div style={{ display: 'flex', gap: 12, alignItems: 'center' }}>
@@ -518,7 +378,7 @@ export default function AdminPortal() {
                 </div>
                 <div style={{ display: 'grid', gridTemplateColumns: isMobile ? '1fr' : 'repeat(3, 1fr)', gap: 12, marginBottom: 28 }}>
                   <StatCard label="Platform Gross (Monthly)" value={`$${totalGross.toLocaleString()}`} sub="All creator subscriptions" accent={ACCENT} />
-                  <StatCard label="StagePass Revenue (15%)" value={`$${platformRevenue.toFixed(2)}`} sub="Platform net" accent={GREEN} />
+                  <StatCard label="Coveted Stage Revenue (15%)" value={`$${platformRevenue.toFixed(2)}`} sub="Platform net" accent={GREEN} />
                   <StatCard label="Creator Payouts (85%)" value={`$${creatorPayouts.toFixed(2)}`} sub="Paid to creators" />
                 </div>
 
@@ -596,77 +456,7 @@ export default function AdminPortal() {
                           )}
                           <button onClick={() => { setActionCreator(c); setActionType('reset') }} style={{ background: ACCENT + '18', color: ACCENT, border: `1px solid ${ACCENT}40`, borderRadius: 6, padding: '6px 14px', fontFamily: "'DM Mono', monospace", fontSize: 10, cursor: 'pointer', letterSpacing: '0.08em' }}>RESET PASSWORD</button>
                           <button onClick={() => { setActionCreator(c); setNotifyAll(false); setTab('notify') }} style={{ background: BG3, color: TEXT2, border: `1px solid ${BORDER}`, borderRadius: 6, padding: '6px 14px', fontFamily: "'DM Mono', monospace", fontSize: 10, cursor: 'pointer', letterSpacing: '0.08em' }}>SEND NOTIFICATION</button>
-                          <button onClick={() => loadCreatorEvents(c.id)} style={{ background: BG3, color: TEXT2, border: `1px solid ${BORDER}`, borderRadius: 6, padding: '6px 14px', fontFamily: "'DM Mono', monospace", fontSize: 10, cursor: 'pointer', letterSpacing: '0.08em' }}>
-                            {expandedCreator === c.id ? '▲ HIDE EVENTS' : '▼ VIEW EVENTS'}
-                          </button>
                         </div>
-
-                        {/* Expanded events panel */}
-                        {expandedCreator === c.id && (
-                          <div style={{ marginTop: 14, paddingTop: 14, borderTop: `1px solid ${BORDER2}` }}>
-                            <div style={{ fontFamily: "'DM Mono', monospace", fontSize: 9, color: TEXT3, letterSpacing: '0.18em', marginBottom: 10 }}>EVENTS</div>
-                            {/* Event filter */}
-                            <div style={{ display: 'flex', gap: 6, marginBottom: 12 }}>
-                              {['all','current','past'].map(f => {
-                                const todayStr = new Date().toISOString().split('T')[0]
-                                return (
-                                  <button key={f} onClick={() => setEventFilter(f)} style={{
-                                    background: eventFilter === f ? ACCENT + '18' : BG3,
-                                    color: eventFilter === f ? ACCENT : TEXT3,
-                                    border: eventFilter === f ? `1px solid ${ACCENT}40` : `1px solid ${BORDER}`,
-                                    borderRadius: 5, padding: '3px 10px',
-                                    fontFamily: "'DM Mono', monospace", fontSize: 9,
-                                    cursor: 'pointer', letterSpacing: '0.08em',
-                                  }}>{f.toUpperCase()}</button>
-                                )
-                              })}
-                            </div>
-                            {!creatorEvents[c.id] ? (
-                              <div style={{ color: TEXT3, fontFamily: "'DM Mono', monospace", fontSize: 11 }}>Loading...</div>
-                            ) : (() => {
-                              const todayStr = new Date().toISOString().split('T')[0]
-                              const evts = creatorEvents[c.id].filter(e => {
-                                if (eventFilter === 'current') return e.event_date >= todayStr
-                                if (eventFilter === 'past') return e.event_date < todayStr
-                                return true
-                              })
-                              return evts.length === 0 ? (
-                                <div style={{ color: TEXT3, fontFamily: "'DM Mono', monospace", fontSize: 11 }}>No {eventFilter !== 'all' ? eventFilter : ''} events.</div>
-                              ) : evts.map(event => (
-                                <div key={event.id} style={{ background: BG3, border: `1px solid ${BORDER2}`, borderRadius: 8, padding: '10px 12px', marginBottom: 8 }}>
-                                  {editingEvent?.id === event.id ? (
-                                    <div>
-                                      <input defaultValue={event.name} id={`ename-${event.id}`} style={{ background: BG, border: `1px solid ${BORDER}`, borderRadius: 6, padding: '6px 10px', color: TEXT1, fontFamily: "'DM Mono', monospace", fontSize: 11, width: '100%', marginBottom: 6, outline: 'none', boxSizing: 'border-box' }} />
-                                      <input defaultValue={event.event_date} type="date" id={`edate-${event.id}`} style={{ background: BG, border: `1px solid ${BORDER}`, borderRadius: 6, padding: '6px 10px', color: TEXT1, fontFamily: "'DM Mono', monospace", fontSize: 11, marginBottom: 6, outline: 'none' }} />
-                                      <div style={{ display: 'flex', gap: 6 }}>
-                                        <button onClick={() => handleSaveEventEdit(event.id, {
-                                          name: document.getElementById(`ename-${event.id}`).value,
-                                          event_date: document.getElementById(`edate-${event.id}`).value,
-                                        })} style={{ background: ACCENT, color: '#080808', border: 'none', borderRadius: 5, padding: '5px 12px', fontFamily: "'DM Mono', monospace", fontSize: 9, fontWeight: 700, cursor: 'pointer' }}>SAVE</button>
-                                        <button onClick={() => setEditingEvent(null)} style={{ background: BG, color: TEXT3, border: `1px solid ${BORDER}`, borderRadius: 5, padding: '5px 12px', fontFamily: "'DM Mono', monospace", fontSize: 9, cursor: 'pointer' }}>CANCEL</button>
-                                      </div>
-                                    </div>
-                                  ) : (
-                                    <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start' }}>
-                                      <div style={{ flex: 1, minWidth: 0 }}>
-                                        <div style={{ fontSize: 12, color: TEXT1, marginBottom: 2 }}>{event.name}</div>
-                                        <div style={{ fontFamily: "'DM Mono', monospace", fontSize: 10, color: ACCENT }}>{event.event_date}</div>
-                                        <div style={{ fontFamily: "'DM Mono', monospace", fontSize: 9, color: TEXT3, marginTop: 2 }}>
-                                          {event.event_type === 'virtual' ? '💻' : '📍'} {event.access_type?.toUpperCase() || 'FREE'}
-                                          {event.ticket_price ? ` · $${event.ticket_price}` : ''}
-                                        </div>
-                                      </div>
-                                      <div style={{ display: 'flex', gap: 6, flexShrink: 0, marginLeft: 8 }}>
-                                        <button onClick={() => setEditingEvent(event)} style={{ background: ACCENT + '18', color: ACCENT, border: `1px solid ${ACCENT}40`, borderRadius: 5, padding: '3px 8px', fontFamily: "'DM Mono', monospace", fontSize: 9, cursor: 'pointer' }}>EDIT</button>
-                                        <button onClick={() => setCancellingEvent(event)} style={{ background: RED + '18', color: RED, border: `1px solid ${RED}40`, borderRadius: 5, padding: '3px 8px', fontFamily: "'DM Mono', monospace", fontSize: 9, cursor: 'pointer' }}>CANCEL</button>
-                                      </div>
-                                    </div>
-                                  )}
-                                </div>
-                              ))
-                            })()}
-                          </div>
-                        )}
                       </div>
                     )
                   })}
@@ -706,7 +496,7 @@ export default function AdminPortal() {
 
               <div style={{ display: 'grid', gridTemplateColumns: isMobile ? '1fr 1fr' : 'repeat(3, 1fr)', gap: 12, marginBottom: 28 }}>
                 <StatCard label="Total Gross" value={`$${totalGross.toLocaleString()}`} sub="All subscriptions" accent={ACCENT} />
-                <StatCard label="StagePass (15%)" value={`$${platformRevenue.toFixed(2)}`} accent={GREEN} />
+                <StatCard label="Coveted Stage (15%)" value={`$${platformRevenue.toFixed(2)}`} accent={GREEN} />
                 <StatCard label="Creator Payouts (85%)" value={`$${creatorPayouts.toFixed(2)}`} />
               </div>
 
@@ -860,7 +650,7 @@ export default function AdminPortal() {
           <div style={{ display: 'flex', gap: 10, marginBottom: 20, flexWrap: 'wrap' }}>
             <button onClick={() => {
               const templates = { creators: CREATOR_TEMPLATE, events: EVENT_TEMPLATE, content: CONTENT_TEMPLATE }
-              downloadCSV(templates[importType], `stagepass-${importType}-template.csv`)
+              downloadCSV(templates[importType], `covetedstage-${importType}-template.csv`)
             }} style={{ background: BG2, color: TEXT2, border: `1px solid ${BORDER}`, borderRadius: 8, padding: '9px 16px', fontFamily: "'DM Mono', monospace", fontSize: 11, cursor: 'pointer', letterSpacing: '0.08em', display: 'flex', alignItems: 'center', gap: 8 }}>
               ↓ DOWNLOAD TEMPLATE
             </button>
@@ -1020,127 +810,6 @@ export default function AdminPortal() {
               )}
             </>
           )}
-        </div>
-      )}
-
-      {/* ── REPORTS TAB ── */}
-      {tab === 'reports' && (
-        <div style={{ flex: 1, overflowY: 'auto', padding: isMobile ? '16px' : '28px 32px' }}>
-          <div style={{ fontFamily: "'DM Serif Display', Georgia, serif", fontSize: isMobile ? 22 : 28, color: TEXT1, marginBottom: 4 }}>Reports</div>
-          <div style={{ fontFamily: "'DM Mono', monospace", fontSize: 10, color: TEXT3, letterSpacing: '0.16em', marginBottom: 24 }}>EXPORT PLATFORM DATA AS CSV</div>
-
-          {/* Report type selector */}
-          <div style={{ display: 'flex', gap: 8, flexWrap: 'wrap', marginBottom: 20 }}>
-            {[
-              { id: 'creators', label: '♪ Creators' },
-              { id: 'events',   label: '◈ Events'   },
-              { id: 'rsvps',    label: '✓ RSVPs'    },
-              { id: 'content',  label: '▤ Content'  },
-            ].map(t => (
-              <button key={t.id} onClick={() => { setReportType(t.id); setReportFilter('all'); setReportData([]) }} style={{
-                background: reportType === t.id ? ACCENT + '18' : BG2,
-                color: reportType === t.id ? ACCENT : TEXT3,
-                border: reportType === t.id ? `1px solid ${ACCENT}55` : `1px solid ${BORDER}`,
-                borderRadius: 8, padding: '8px 16px',
-                fontFamily: "'DM Mono', monospace", fontSize: 11,
-                letterSpacing: '0.08em', cursor: 'pointer',
-              }}>{t.label.toUpperCase()}</button>
-            ))}
-          </div>
-
-          {/* Filter options per report type */}
-          <div style={{ display: 'flex', gap: 8, flexWrap: 'wrap', marginBottom: 20 }}>
-            {(reportType === 'creators' ? ['all','active','suspended'] :
-              reportType === 'events' ? ['all','current','past'] :
-              reportType === 'content' ? ['all','video','audio','pdf'] :
-              ['all']
-            ).map(f => (
-              <button key={f} onClick={() => setReportFilter(f)} style={{
-                background: reportFilter === f ? ACCENT : BG2,
-                color: reportFilter === f ? '#080808' : TEXT3,
-                border: reportFilter === f ? 'none' : `1px solid ${BORDER}`,
-                borderRadius: 20, padding: '5px 14px',
-                fontFamily: "'DM Mono', monospace", fontSize: 10,
-                fontWeight: reportFilter === f ? 700 : 400,
-                letterSpacing: '0.1em', cursor: 'pointer',
-                boxShadow: reportFilter === f ? `0 4px 12px ${ACCENT}40` : 'none',
-              }}>{f.toUpperCase()}</button>
-            ))}
-          </div>
-
-          {/* Run + Export buttons */}
-          <div style={{ display: 'flex', gap: 10, marginBottom: 24 }}>
-            <button onClick={runReport} disabled={reportLoading} style={{
-              background: ACCENT, color: '#080808', border: 'none',
-              borderRadius: 8, padding: '10px 24px',
-              fontFamily: "'DM Mono', monospace", fontSize: 11, fontWeight: 700,
-              letterSpacing: '0.12em', cursor: reportLoading ? 'not-allowed' : 'pointer',
-              opacity: reportLoading ? 0.7 : 1, boxShadow: `0 4px 16px ${ACCENT}40`,
-            }}>{reportLoading ? 'RUNNING...' : 'RUN REPORT'}</button>
-            {reportData.length > 0 && (
-              <button onClick={exportReportCSV} style={{
-                background: GREEN + '18', color: GREEN, border: `1px solid ${GREEN}40`,
-                borderRadius: 8, padding: '10px 24px',
-                fontFamily: "'DM Mono', monospace", fontSize: 11, fontWeight: 700,
-                letterSpacing: '0.12em', cursor: 'pointer',
-              }}>↓ DOWNLOAD CSV ({reportData.length} rows)</button>
-            )}
-          </div>
-
-          {/* Results table */}
-          {reportData.length > 0 && (
-            <div style={{ background: BG2, border: `1px solid ${BORDER}`, borderRadius: 12, overflow: 'hidden' }}>
-              <div style={{ overflowX: 'auto' }}>
-                <table style={{ width: '100%', fontSize: 12, borderCollapse: 'collapse', minWidth: 600 }}>
-                  <thead>
-                    <tr style={{ background: BG3 }}>
-                      {Object.keys(reportData[0]).map(h => (
-                        <th key={h} style={{ textAlign: 'left', padding: '9px 14px', fontFamily: "'DM Mono', monospace", fontSize: 9, color: TEXT3, letterSpacing: '0.12em', borderBottom: `1px solid ${BORDER2}`, fontWeight: 400, whiteSpace: 'nowrap' }}>
-                          {h.replace(/_/g, ' ').toUpperCase()}
-                        </th>
-                      ))}
-                    </tr>
-                  </thead>
-                  <tbody>
-                    {reportData.map((row, i) => (
-                      <tr key={i} style={{ borderBottom: i < reportData.length - 1 ? `1px solid ${BORDER2}` : 'none' }}>
-                        {Object.values(row).map((val, j) => (
-                          <td key={j} style={{ padding: '9px 14px', color: TEXT2, maxWidth: 200, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>
-                            {val !== null && val !== undefined ? String(val) : '—'}
-                          </td>
-                        ))}
-                      </tr>
-                    ))}
-                  </tbody>
-                </table>
-              </div>
-              <div style={{ padding: '10px 16px', borderTop: `1px solid ${BORDER2}`, fontFamily: "'DM Mono', monospace", fontSize: 10, color: TEXT3 }}>
-                {reportData.length} rows
-              </div>
-            </div>
-          )}
-
-          {reportData.length === 0 && !reportLoading && (
-            <div style={{ color: TEXT3, fontFamily: "'DM Mono', monospace", fontSize: 11 }}>
-              Select a report type and filters, then click Run Report.
-            </div>
-          )}
-        </div>
-      )}
-
-      {/* ── Cancel event confirmation modal ── */}
-      {cancellingEvent && (
-        <div style={{ position: 'fixed', inset: 0, background: 'rgba(0,0,0,0.8)', display: 'flex', alignItems: 'center', justifyContent: 'center', zIndex: 300, padding: 24 }}>
-          <div style={{ background: BG2, border: `1px solid ${BORDER}`, borderRadius: 14, padding: 28, maxWidth: 400, width: '100%' }}>
-            <div style={{ fontFamily: "'DM Serif Display', Georgia, serif", fontSize: 20, color: TEXT1, marginBottom: 8 }}>Cancel Event</div>
-            <div style={{ fontSize: 13, color: TEXT2, lineHeight: 1.7, marginBottom: 22 }}>
-              Cancel "{cancellingEvent.name}" on {cancellingEvent.event_date}? This action cannot be undone. Fans who RSVPd will no longer see this event.
-            </div>
-            <div style={{ display: 'flex', gap: 10 }}>
-              <button onClick={() => setCancellingEvent(null)} style={{ flex: 1, background: 'transparent', color: TEXT3, border: `1px solid ${BORDER}`, borderRadius: 8, padding: '11px', fontFamily: "'DM Mono', monospace", fontSize: 12, cursor: 'pointer' }}>KEEP EVENT</button>
-              <button onClick={() => handleCancelEvent(cancellingEvent)} style={{ flex: 2, background: RED, color: '#fff', border: 'none', borderRadius: 8, padding: '11px', fontFamily: "'DM Mono', monospace", fontSize: 12, fontWeight: 700, letterSpacing: '0.1em', cursor: 'pointer' }}>CONFIRM CANCEL</button>
-            </div>
-          </div>
         </div>
       )}
 

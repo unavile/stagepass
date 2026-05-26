@@ -1,56 +1,35 @@
-import { useEffect, useState, useRef, useCallback } from 'react'
+import { useEffect, useState, useCallback } from 'react'
 import DailyIframe from '@daily-co/daily-js'
 
-const ACCENT = '#c9a84c'
-
 export default function LiveRoom({ event, profile, isCreator, onLeave }) {
+  // accentColor must be declared before all hooks
+  const accentColor = '#c9a84c'
+
+  const [callFrame, setCallFrame] = useState(null)
   const [joining, setJoining] = useState(true)
   const [error, setError] = useState(null)
   const [participants, setParticipants] = useState(0)
-  const containerRef = useRef(null)
-  const frameRef = useRef(null)
 
-  useEffect(() => {
-    // Wait for the container div to be in the DOM
-    if (!containerRef.current) {
-      setError('Could not find video container. Please try again.')
-      setJoining(false)
-      return
-    }
-
-    let frame = null
-
-    async function join() {
-      try {
-        // Small delay to ensure container div is fully painted
-        await new Promise(r => setTimeout(r, 100))
-
-        if (!containerRef.current) {
-          throw new Error('Video container not found')
-        }
-
-        const tokenRes = await fetch('/.netlify/functions/create-daily-token', {
-          method: 'POST',
-          headers: { 'Content-Type': 'application/json' },
-          body: JSON.stringify({
-            roomName: event.daily_room_name,
-            isOwner: isCreator,
-            userName: profile.display_name || 'Guest',
-          })
+  const joinRoom = useCallback(async () => {
+    try {
+      // Get a meeting token
+      const tokenRes = await fetch('/.netlify/functions/create-daily-token', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          roomName: event.daily_room_name,
+          isOwner: isCreator,
+          userName: profile.display_name || 'Guest',
         })
+      })
+      const { token, error: tokenError } = await tokenRes.json()
+      if (tokenError) throw new Error(tokenError)
 
-        const tokenData = await tokenRes.json()
-        if (tokenData.error) throw new Error(tokenData.error)
-
-        if (frameRef.current) {
-          frameRef.current.destroy()
-          frameRef.current = null
-        }
-
-        frame = DailyIframe.createFrame(containerRef.current, {
+      // Create the Daily call frame inside the container div
+      const frame = DailyIframe.createFrame(
+        document.getElementById('daily-container'),
+        {
           iframeStyle: {
-            position: 'absolute',
-            top: 0, left: 0,
             width: '100%',
             height: '100%',
             border: 'none',
@@ -64,91 +43,69 @@ export default function LiveRoom({ event, profile, isCreator, onLeave }) {
               accentText: '#080808',
               background: '#0e0e0e',
               backgroundAccent: '#161616',
-              baseText: '#f4f0e8',
-              border: '#2a2a2a',
-              mainAreaBg: '#09090b',
-              mainAreaBgAccent: '#111114',
-              mainAreaText: '#f4f0e8',
-              supportiveText: '#9a9690',
+              baseText: '#e8e2d6',
+              border: '#ffffff15',
+              mainAreaBg: '#080808',
+              mainAreaBgAccent: '#0e0e0e',
+              mainAreaText: '#e8e2d6',
+              supportiveText: '#888',
             }
           }
-        })
+        }
+      )
 
-        frameRef.current = frame
-
-        frame.on('joined-meeting', () => {
-          setJoining(false)
-        })
-
-        // Fallback: if joined-meeting never fires, detect join via local participant tracks becoming playable
-        frame.on('participant-updated', (e) => {
-          if (e.participant?.local) {
-            const tracks = e.participant.tracks
-            const videoPlayable = tracks?.video?.state === 'playable'
-            const audioPlayable = tracks?.audio?.state === 'playable'
-            const videoOff = tracks?.video?.state === 'off'
-            const audioOff = tracks?.audio?.state === 'off'
-
-            // Join is confirmed when tracks are either playable or deliberately off
-            if ((videoPlayable || videoOff) && (audioPlayable || audioOff)) {
-              console.log('Daily: tracks settled, marking as joined')
-              setJoining(false)
-            }
-          }
-        })
-
-        frame.on('participant-counts-updated', (e) => {
-          setParticipants(e.participants?.present || 0)
-        })
-
-        frame.on('left-meeting', () => onLeave())
-        frame.on('error', (e) => {
-          setError(e.errorMsg || e.error?.message || 'Failed to connect')
-          setJoining(false)
-        })
-
-        const dailyDomain = import.meta.env.VITE_DAILY_DOMAIN
-        if (!dailyDomain) throw new Error('VITE_DAILY_DOMAIN is not set')
-
-        await frame.join({
-          url: `https://${dailyDomain}/${event.daily_room_name}`,
-          token: tokenData.token,
-          startVideoOff: false,
-          startAudioOff: !isCreator,
-        })
-
-      } catch (err) {
-        setError(err.message)
+      frame.on('joined-meeting', () => {
         setJoining(false)
-      }
+      })
+
+      frame.on('participant-counts-updated', (e) => {
+        setParticipants(e.participants.present)
+      })
+
+      frame.on('left-meeting', () => {
+        onLeave()
+      })
+
+      frame.on('error', (e) => {
+        setError(e.errorMsg || 'Failed to join room')
+        setJoining(false)
+      })
+
+      // Join using import.meta.env for browser env vars
+      await frame.join({
+        url: `https://${import.meta.env.VITE_DAILY_DOMAIN}/${event.daily_room_name}`,
+        token,
+      })
+
+      setCallFrame(frame)
+    } catch (err) {
+      setError(err.message)
+      setJoining(false)
     }
+  }, [event, profile, isCreator, onLeave])
 
-    join()
-
-    // Cleanup on unmount
+  useEffect(() => {
+    joinRoom()
     return () => {
-      if (frameRef.current) {
-        frameRef.current.destroy()
-        frameRef.current = null
+      if (callFrame) {
+        callFrame.destroy()
       }
     }
-  }, []) // Only run once on mount
+  }, [joinRoom])
 
   async function handleLeave() {
-    if (frameRef.current) {
-      await frameRef.current.leave()
-      frameRef.current.destroy()
-      frameRef.current = null
+    if (callFrame) {
+      await callFrame.leave()
+      callFrame.destroy()
     }
     onLeave()
   }
 
   async function handleEndForAll() {
-    if (frameRef.current) {
-      await frameRef.current.sendAppMessage({ type: 'end-event' }, '*')
-      await frameRef.current.leave()
-      frameRef.current.destroy()
-      frameRef.current = null
+    if (callFrame) {
+      await callFrame.sendAppMessage({ type: 'end-event' }, '*')
+      await callFrame.leave()
+      callFrame.destroy()
     }
     onLeave()
   }
@@ -156,127 +113,118 @@ export default function LiveRoom({ event, profile, isCreator, onLeave }) {
   return (
     <div style={{
       position: 'fixed', inset: 0, zIndex: 300,
-      background: '#09090b',
-      display: 'flex', flexDirection: 'column',
+      minHeight: '100vh', background: '#080808',
+      display: 'flex', flexDirection: 'column'
     }}>
       <link href="https://fonts.googleapis.com/css2?family=DM+Serif+Display&family=DM+Mono:wght@400;500&display=swap" rel="stylesheet" />
 
       {/* Header */}
       <div style={{
         display: 'flex', alignItems: 'center', justifyContent: 'space-between',
-        padding: '0 24px', height: 60,
-        background: 'rgba(9,9,11,0.95)',
-        borderBottom: '1px solid rgba(255,255,255,0.06)',
-        flexShrink: 0, zIndex: 10,
+        padding: '0 24px', height: 60, background: '#0a0a0a',
+        borderBottom: '1px solid #ffffff0a', flexShrink: 0
       }}>
         <div style={{ display: 'flex', alignItems: 'center', gap: 12 }}>
-          <span style={{ fontFamily: "'DM Serif Display', Georgia, serif", fontSize: 18, color: ACCENT }}>StagePass</span>
-          <span style={{ fontFamily: "'DM Mono', monospace", fontSize: 11, color: 'rgba(255,255,255,0.3)' }}>·</span>
-          <span style={{ fontFamily: "'DM Mono', monospace", fontSize: 12, color: 'rgba(255,255,255,0.5)' }}>{event.name}</span>
+          <span style={{ fontFamily: "'DM Serif Display', Georgia, serif", fontSize: 18, color: accentColor }}>Coveted Stage</span>
+          <span style={{ fontFamily: "'DM Mono', monospace", fontSize: 11, color: '#444' }}>·</span>
+          <span style={{ fontFamily: "'DM Mono', monospace", fontSize: 12, color: '#888' }}>{event.name}</span>
           {!joining && (
             <span style={{
-              background: 'rgba(232,69,69,0.15)', color: '#e84545',
-              border: '1px solid rgba(232,69,69,0.3)', borderRadius: 4,
-              fontSize: 9, fontWeight: 700, padding: '3px 8px',
-              letterSpacing: '0.14em', fontFamily: "'DM Mono', monospace"
+              background: '#e8454522', color: '#e84545',
+              border: '1px solid #e8454544', borderRadius: 4,
+              fontSize: 10, fontWeight: 700, padding: '2px 8px',
+              letterSpacing: '0.12em', fontFamily: "'DM Mono', monospace"
             }}>● LIVE</span>
           )}
         </div>
-
-        <div style={{ display: 'flex', alignItems: 'center', gap: 10 }}>
+        <div style={{ display: 'flex', alignItems: 'center', gap: 12 }}>
           {!joining && (
-            <div style={{ fontFamily: "'DM Mono', monospace", fontSize: 11, color: 'rgba(255,255,255,0.35)' }}>
+            <div style={{ fontFamily: "'DM Mono', monospace", fontSize: 11, color: '#555' }}>
               👥 {participants} live
             </div>
           )}
           {isCreator && !joining && (
             <button onClick={handleEndForAll} style={{
-              background: 'rgba(232,69,69,0.12)', color: '#e84545',
-              border: '1px solid rgba(232,69,69,0.3)', borderRadius: 6,
+              background: '#e8454518', color: '#e84545',
+              border: '1px solid #e8454544', borderRadius: 6,
               padding: '6px 14px', fontFamily: "'DM Mono', monospace",
-              fontSize: 10, cursor: 'pointer', letterSpacing: '0.1em',
-            }}>END FOR ALL</button>
+              fontSize: 11, cursor: 'pointer', letterSpacing: '0.1em'
+            }}>
+              END FOR ALL
+            </button>
           )}
           <button onClick={handleLeave} style={{
-            background: 'rgba(255,255,255,0.06)', color: 'rgba(255,255,255,0.5)',
-            border: '1px solid rgba(255,255,255,0.1)', borderRadius: 6,
+            background: '#ffffff0a', color: '#888',
+            border: '1px solid #ffffff15', borderRadius: 6,
             padding: '6px 14px', fontFamily: "'DM Mono', monospace",
-            fontSize: 10, cursor: 'pointer', letterSpacing: '0.1em',
-          }}>LEAVE</button>
+            fontSize: 11, cursor: 'pointer', letterSpacing: '0.1em'
+          }}>
+            LEAVE
+          </button>
         </div>
       </div>
 
-      {/* Video container */}
-      <div style={{ flex: 1, position: 'relative', overflow: 'hidden' }}>
+      {/* Room container */}
+      <div style={{ flex: 1, padding: '20px', position: 'relative' }}>
 
-        {/* Joining overlay */}
+        {/* Joining state */}
         {joining && !error && (
           <div style={{
-            position: 'absolute', inset: 0, zIndex: 5,
+            position: 'absolute', inset: 0,
             display: 'flex', alignItems: 'center', justifyContent: 'center',
-            flexDirection: 'column', gap: 20,
-            background: '#09090b',
+            flexDirection: 'column', gap: 20
           }}>
-            <div style={{ fontFamily: "'DM Serif Display', Georgia, serif", fontSize: 24, color: '#f4f0e8' }}>
+            <div style={{ fontFamily: "'DM Serif Display', Georgia, serif", fontSize: 22, color: '#f0ebe0' }}>
               {event.name}
             </div>
-            <div style={{ fontFamily: "'DM Mono', monospace", fontSize: 10, color: 'rgba(255,255,255,0.3)', letterSpacing: '0.2em' }}>
-              CONNECTING TO LIVE ROOM...
+            <div style={{ fontFamily: "'DM Mono', monospace", fontSize: 11, color: '#444', letterSpacing: '0.2em' }}>
+              JOINING LIVE ROOM...
             </div>
-            {/* Animated dots instead of fake progress bar */}
-            <div style={{ display: 'flex', gap: 8 }}>
-              {[0, 1, 2].map(i => (
-                <div key={i} style={{
-                  width: 8, height: 8, borderRadius: '50%',
-                  background: ACCENT,
-                  opacity: 0.3,
-                  animation: `pulse-${i} 1.2s ${i * 0.2}s ease-in-out infinite`,
-                }} />
-              ))}
-            </div>
-            <style>{`
-              @keyframes pulse-0 { 0%,100%{opacity:0.3;transform:scale(1)} 50%{opacity:1;transform:scale(1.3)} }
-              @keyframes pulse-1 { 0%,100%{opacity:0.3;transform:scale(1)} 50%{opacity:1;transform:scale(1.3)} }
-              @keyframes pulse-2 { 0%,100%{opacity:0.3;transform:scale(1)} 50%{opacity:1;transform:scale(1.3)} }
-            `}</style>
-            <div style={{ fontFamily: "'DM Mono', monospace", fontSize: 10, color: 'rgba(255,255,255,0.2)', maxWidth: 320, textAlign: 'center', lineHeight: 1.6 }}>
-              Please allow camera and microphone access if prompted.
+            <div style={{ width: 200, height: 2, background: '#1a1a1a', borderRadius: 999, overflow: 'hidden' }}>
+              <div style={{
+                width: '60%', height: '100%',
+                background: accentColor, borderRadius: 999,
+              }} />
             </div>
           </div>
         )}
 
-        {/* Error overlay */}
+        {/* Error state */}
         {error && (
           <div style={{
-            position: 'absolute', inset: 0, zIndex: 5,
+            position: 'absolute', inset: 0,
             display: 'flex', alignItems: 'center', justifyContent: 'center',
-            flexDirection: 'column', gap: 16,
-            background: '#09090b',
+            flexDirection: 'column', gap: 16
           }}>
-            <div style={{ fontSize: 36 }}>⚠️</div>
-            <div style={{ fontFamily: "'DM Serif Display', Georgia, serif", fontSize: 22, color: '#f4f0e8' }}>
+            <div style={{ fontSize: 32 }}>⚠️</div>
+            <div style={{ fontFamily: "'DM Serif Display', Georgia, serif", fontSize: 20, color: '#f0ebe0' }}>
               Couldn't join room
             </div>
-            <div style={{ fontFamily: "'DM Mono', monospace", fontSize: 11, color: 'rgba(255,255,255,0.35)', maxWidth: 360, textAlign: 'center', lineHeight: 1.7 }}>
+            <div style={{ fontFamily: "'DM Mono', monospace", fontSize: 12, color: '#555', maxWidth: 320, textAlign: 'center' }}>
               {error}
             </div>
             <button onClick={onLeave} style={{
-              marginTop: 8, background: ACCENT, color: '#080808',
-              border: 'none', borderRadius: 7, padding: '10px 24px',
+              background: accentColor, color: '#080808',
+              border: 'none', borderRadius: 6, padding: '10px 20px',
               fontFamily: "'DM Mono', monospace", fontSize: 11,
-              fontWeight: 700, cursor: 'pointer', letterSpacing: '0.12em',
-              boxShadow: `0 4px 20px ${ACCENT}50`,
-            }}>GO BACK</button>
+              fontWeight: 700, cursor: 'pointer', letterSpacing: '0.12em'
+            }}>
+              GO BACK
+            </button>
           </div>
         )}
 
-        {/* Daily iframe mounts here via ref */}
+        {/* Daily iframe container */}
         <div
-          ref={containerRef}
+          id="daily-container"
           style={{
-            position: 'absolute', inset: 0,
+            width: '100%',
+            height: '100%',
+            minHeight: 'calc(100vh - 100px)',
+            borderRadius: 12,
+            overflow: 'hidden',
             opacity: joining ? 0 : 1,
-            transition: 'opacity 0.4s ease',
+            transition: 'opacity 0.3s'
           }}
         />
       </div>

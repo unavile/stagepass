@@ -47,7 +47,7 @@ export default function ResetPassword() {
       <link href="https://fonts.googleapis.com/css2?family=DM+Serif+Display&family=DM+Mono:wght@400;500&display=swap" rel="stylesheet" />
       <div style={{ width: '100%', maxWidth: 420 }}>
         <div style={{ textAlign: 'center', marginBottom: 40 }}>
-          <div style={{ fontFamily: "'DM Serif Display', Georgia, serif", fontSize: 32, color: '#c9a84c' }}>StagePass</div>
+          <div style={{ fontFamily: "'DM Serif Display', Georgia, serif", fontSize: 32, color: '#c9a84c' }}>Coveted Stage</div>
           <div style={{ fontFamily: "'DM Mono', monospace", fontSize: 11, color: '#444', letterSpacing: '0.2em', marginTop: 4 }}>SET NEW PASSWORD</div>
         </div>
 

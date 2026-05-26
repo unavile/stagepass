@@ -42,8 +42,8 @@ exports.handler = async (event) => {
         fan_id: fanId,
         type: 'ticket_purchase',
       },
-      success_url: `${process.env.URL || 'https://myaudience.netlify.app'}/success?ticket=1&event=${eventId}`,
-      cancel_url: `${process.env.URL || 'https://myaudience.netlify.app'}`,
+      success_url: `${process.env.URL || 'https://covetedstage.com'}/success?ticket=1&event=${eventId}`,
+      cancel_url: `${process.env.URL || 'https://covetedstage.com'}`,
     })
 
     return {

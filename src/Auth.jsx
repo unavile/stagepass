@@ -1,17 +1,6 @@
 import { useState } from 'react'
 import { supabase } from './supabaseClient'
 
-async function nativeSignIn(email, password) {
-  const res = await fetch(`${import.meta.env.VITE_SUPABASE_URL}/auth/v1/token?grant_type=password`, {
-    method: 'POST',
-    headers: { 'Content-Type': 'application/json', 'apikey': import.meta.env.VITE_SUPABASE_ANON_KEY },
-    body: JSON.stringify({ email, password }),
-  })
-  const data = await res.json()
-  if (data.error || data.error_description) throw new Error(data.error_description || data.error || 'Sign in failed')
-  return data
-}
-
 const ACCENT  = '#c9a84c'
 const TEXT1   = '#f4f0e8'
 const TEXT2   = '#9a9690'
@@ -47,7 +36,7 @@ export default function Auth({ onAuth, creatorOnly = false }) {
     // ── Forgot password ──────────────────────────────────────────────────
     if (mode === 'forgot') {
       const { error } = await supabase.auth.resetPasswordForEmail(email, {
-        redirectTo: 'https://myaudience.netlify.app/reset-password',
+        redirectTo: 'https://covetedstage.com/reset-password',
       })
       if (error) setError(error.message)
       else setMessage('Check your email for a password reset link.')
@@ -108,21 +97,25 @@ export default function Auth({ onAuth, creatorOnly = false }) {
       return
     }
 
-    // ── Sign in — native fetch, pass token directly to onAuth ──────────
-    try {
-      const signInResult = await nativeSignIn(email.trim(), password)
-      // Pass token data directly to CreatorPortal — no localStorage needed
-      onAuth(signInResult)
-    } catch (err) {
-      const msg = err.message.toLowerCase()
-      if (msg.includes('invalid login') || msg.includes('invalid credentials')) {
-        setError('Incorrect email or password.')
-      } else if (msg.includes('email not confirmed')) {
+    // ── Sign in ──────────────────────────────────────────────────────────
+    const { error: loginError } = await supabase.auth.signInWithPassword({
+      email: email.trim(),
+      password,
+    })
+
+    if (loginError) {
+      if (loginError.message.toLowerCase().includes('email not confirmed')) {
         setError('Please confirm your email address before signing in. Check your inbox.')
+      } else if (loginError.message.toLowerCase().includes('invalid login')) {
+        setError('Incorrect email or password.')
       } else {
-        setError(err.message)
+        setError(loginError.message)
       }
+      setLoading(false)
+      return
     }
+
+    onAuth()
     setLoading(false)
   }
 
@@ -166,7 +159,7 @@ export default function Auth({ onAuth, creatorOnly = false }) {
 
         {/* Logo */}
         <div style={{ textAlign: 'center', marginBottom: 28 }}>
-          <div style={{ fontFamily: "'DM Serif Display', Georgia, serif", fontSize: 34, color: ACCENT, letterSpacing: '0.01em', marginBottom: 6, textShadow: `0 0 40px ${ACCENT}60` }}>StagePass</div>
+          <div style={{ fontFamily: "'DM Serif Display', Georgia, serif", fontSize: 34, color: ACCENT, letterSpacing: '0.01em', marginBottom: 6, textShadow: `0 0 40px ${ACCENT}60` }}>Coveted Stage</div>
           <div style={{ fontFamily: "'DM Mono', monospace", fontSize: 10, color: TEXT3, letterSpacing: '0.22em' }}>{titles[mode]}</div>
           {mode === 'login' && (
             <div style={{ marginTop: 10, background: ACCENT + '12', border: `1px solid ${ACCENT}30`, borderRadius: 6, padding: '5px 14px', display: 'inline-block' }}>
