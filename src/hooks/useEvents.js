@@ -31,8 +31,7 @@ export function usePublicEvents(creatorId) {
       .from('events')
       .select('*, rsvps(count)')
       .eq('creator_id', creatorId)
-      .gte('event_date', new Date().toISOString().split('T')[0])
-      .order('event_date', { ascending: true })
+      .order('event_date', { ascending: false }) // most recent first
       .then(({ data, error }) => {
         if (!error) setEvents(data || [])
         setLoading(false)
