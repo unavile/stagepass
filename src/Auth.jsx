@@ -20,9 +20,12 @@ const BORDER  = 'rgba(255,255,255,0.08)'
 const IMG_BOOTH = 'https://images.unsplash.com/photo-1520523839897-bd0b52f945a0?w=1920&q=80'
 
 const CATEGORIES = [
-  { id: 'Music',  icon: '🎵' },
-  { id: 'Dance',  icon: '💃' },
-  { id: 'Comedy', icon: '🎤' },
+  { id: 'Music',    icon: '🎵' },
+  { id: 'Dance',    icon: '💃' },
+  { id: 'Comedy',   icon: '🎤' },
+  { id: 'Modeling', icon: '✨' },
+  { id: 'Art',      icon: '🎨' },
+  { id: 'Other',    icon: '✦'  },
 ]
 
 export default function Auth({ onAuth, creatorOnly = false }) {
@@ -32,6 +35,7 @@ export default function Auth({ onAuth, creatorOnly = false }) {
   const [displayName, setDisplayName] = useState('')
   const [handle, setHandle] = useState('')
   const [category, setCategory] = useState('Music')
+  const [customCategory, setCustomCategory] = useState('')
   const [loading, setLoading] = useState(false)
   const [error, setError] = useState(null)
   const [message, setMessage] = useState(null)
@@ -70,7 +74,7 @@ export default function Auth({ onAuth, creatorOnly = false }) {
             display_name: displayName.trim(),
             handle: handle.toLowerCase().trim(),
             role,
-            category,
+            category: category === 'Other' ? (customCategory.trim() || 'Other') : category,
           }
         }
       })
@@ -94,7 +98,7 @@ export default function Auth({ onAuth, creatorOnly = false }) {
       if (data?.session) {
         // Email confirmation is OFF — user is logged in immediately
         // Update creator record with category
-        await supabase.from('creators').upsert({ id: data.user.id, category }, { onConflict: 'id' })
+        await supabase.from('creators').upsert({ id: data.user.id, category: category === 'Other' ? (customCategory.trim() || 'Other') : category }, { onConflict: 'id' })
         // onAuthStateChange will handle the rest
       } else {
         // Email confirmation is ON — switch to login and show confirmation message
@@ -182,7 +186,7 @@ export default function Auth({ onAuth, creatorOnly = false }) {
 
             {/* Category */}
             <div style={{ fontFamily: "'DM Mono', monospace", fontSize: 9, color: TEXT3, letterSpacing: '0.2em', marginBottom: 10 }}>WHAT KIND OF CREATOR ARE YOU?</div>
-            <div style={{ display: 'flex', gap: 8, marginBottom: 16 }}>
+            <div style={{ display: 'grid', gridTemplateColumns: 'repeat(3, 1fr)', gap: 8, marginBottom: 16 }}>
               {CATEGORIES.map(cat => (
                 <button key={cat.id} onClick={() => setCategory(cat.id)} style={{
                   flex: 1, padding: '10px 6px', borderRadius: 9, cursor: 'pointer',
@@ -199,6 +203,15 @@ export default function Auth({ onAuth, creatorOnly = false }) {
                 </button>
               ))}
             </div>
+            {category === 'Other' && (
+              <input
+                style={input}
+                placeholder="Describe your creative category..."
+                value={customCategory}
+                onChange={e => setCustomCategory(e.target.value)}
+                autoFocus={false}
+              />
+            )}
           </>
         )}
 

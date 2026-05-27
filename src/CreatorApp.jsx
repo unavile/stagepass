@@ -93,6 +93,7 @@ export default function CreatorApp({ session, profile, onSignOut }) {
     accentColor: profile.creators?.accent_color || '#c9a84c',
     monthlyPrice: profile.creators?.monthly_price || 5,
       category: profile.creators?.category || 'Music',
+      customCategory: '',
   }
 
   const ac = creator.accentColor

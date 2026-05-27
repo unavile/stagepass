@@ -90,7 +90,7 @@ const TABS = [
   { id: 'profile',  icon: '◉',  label: 'Me'       },
 ]
 
-const CATEGORIES = ['All', 'Music', 'Dance', 'Comedy']
+const CATEGORIES = ['All', 'Music', 'Dance', 'Comedy', 'Modeling', 'Art', 'Other']
 const typeLabels = { video: 'VIDEO', audio: 'AUDIO', event: 'EVENT', text: 'JOURNAL' }
 
 // ─── Main component (no props required — public page) ────────────────────────
@@ -333,7 +333,14 @@ export default function FanApp({ deepHandle }) {
   const subscribedCreators = allCreators.filter(c => subscribedIds.has(c.id))
   const unsubscribedCreators = allCreators
     .filter(c => !subscribedIds.has(c.id))
-    .filter(c => searchCategory === 'All' || c.category === searchCategory)
+    .filter(c => {
+      if (searchCategory === 'All') return true
+      if (searchCategory === 'Other') {
+        const known = ['Music','Dance','Comedy','Modeling','Art','Other']
+        return !known.includes(c.category) || c.category === 'Other'
+      }
+      return c.category === searchCategory
+    })
     .filter(c => {
       if (!searchQuery.trim()) return true
       const q = searchQuery.toLowerCase()

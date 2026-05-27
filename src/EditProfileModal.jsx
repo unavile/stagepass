@@ -11,9 +11,12 @@ const ACCENT_COLORS = [
 ]
 
 const CATEGORIES = [
-  { id: 'Music',  icon: '🎵' },
-  { id: 'Dance',  icon: '💃' },
-  { id: 'Comedy', icon: '🎤' },
+  { id: 'Music',    icon: '🎵' },
+  { id: 'Dance',    icon: '💃' },
+  { id: 'Comedy',   icon: '🎤' },
+  { id: 'Modeling', icon: '✨' },
+  { id: 'Art',      icon: '🎨' },
+  { id: 'Other',    icon: '✦'  },
 ]
 
 export default function EditProfileModal({ profile, creator, onClose, onSaved }) {
@@ -22,7 +25,10 @@ export default function EditProfileModal({ profile, creator, onClose, onSaved })
   const [bio, setBio] = useState(profile.bio || '')
   const [monthlyPrice, setMonthlyPrice] = useState(creator.monthlyPrice || 5)
   const [accentColor, setAccentColor] = useState(creator.accentColor || '#c9a84c')
-  const [category, setCategory] = useState(creator.category || 'Music')
+  const KNOWN = ['Music','Dance','Comedy','Modeling','Art','Other']
+  const isCustom = creator.category && !KNOWN.includes(creator.category)
+  const [category, setCategory] = useState(isCustom ? 'Other' : (creator.category || 'Music'))
+  const [customCategory, setCustomCategory] = useState(isCustom ? (creator.category || '') : '')
   const [avatarFile, setAvatarFile] = useState(null)
   const [avatarPreview, setAvatarPreview] = useState(profile.avatar_url || null)
   const [loading, setLoading] = useState(false)
@@ -76,7 +82,7 @@ export default function EditProfileModal({ profile, creator, onClose, onSaved })
         supabase.from('creators').update({
           monthly_price: parseFloat(monthlyPrice),
           accent_color: accentColor,
-          category,
+          category: category === 'Other' ? (customCategory.trim() || 'Other') : category,
         }).eq('id', profile.id),
       ])
 
@@ -131,7 +137,7 @@ export default function EditProfileModal({ profile, creator, onClose, onSaved })
 
         {/* Category */}
         <div style={{ fontFamily: "'DM Mono', monospace", fontSize: 10, color: '#555', letterSpacing: '0.15em', marginBottom: 12, marginTop: 4 }}>CATEGORY</div>
-        <div style={{ display: 'flex', gap: 8, marginBottom: 20 }}>
+        <div style={{ display: 'grid', gridTemplateColumns: 'repeat(3, 1fr)', gap: 8, marginBottom: category === 'Other' ? 8 : 20 }}>
           {CATEGORIES.map(cat => (
             <button key={cat.id} onClick={() => setCategory(cat.id)} style={{
               flex: 1, padding: '10px 8px', borderRadius: 9, cursor: 'pointer',
@@ -148,6 +154,16 @@ export default function EditProfileModal({ profile, creator, onClose, onSaved })
             </button>
           ))}
         </div>
+
+        {/* Custom category input */}
+        {category === 'Other' && (
+          <input
+            style={{ ...input, marginBottom: 20 }}
+            placeholder="Describe your creative category..."
+            value={customCategory}
+            onChange={e => setCustomCategory(e.target.value)}
+          />
+        )}
 
         {/* Subscription price */}
         <div style={{ fontFamily: "'DM Mono', monospace", fontSize: 10, color: '#555', letterSpacing: '0.15em', marginBottom: 8 }}>SUBSCRIPTION PRICE</div>
