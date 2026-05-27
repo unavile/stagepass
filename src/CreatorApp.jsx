@@ -49,6 +49,13 @@ function tabStyle(active, accent) {
   }
 }
 
+// Parse YYYY-MM-DD as local date — avoids UTC timezone shift
+function parseLocalDate(s) {
+  if (!s) return new Date()
+  const [y, m, d] = s.split('-').map(Number)
+  return new Date(y, m - 1, d)
+}
+
 export default function CreatorApp({ session, profile, onSignOut }) {
   const [tab, setTab] = useState('overview')
   const [showUpload, setShowUpload] = useState(false)
