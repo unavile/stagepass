@@ -1,10 +1,11 @@
-import { useEffect, useState, useCallback } from 'react'
+import { useEffect, useState, useCallback, useRef } from 'react'
 import DailyIframe from '@daily-co/daily-js'
 
 export default function LiveRoom({ event, profile, isCreator, onLeave }) {
   // accentColor must be declared before all hooks
   const accentColor = '#c9a84c'
 
+  const containerRef = useRef(null)
   const [callFrame, setCallFrame] = useState(null)
   const [joining, setJoining] = useState(true)
   const [error, setError] = useState(null)
@@ -25,9 +26,12 @@ export default function LiveRoom({ event, profile, isCreator, onLeave }) {
       const { token, error: tokenError } = await tokenRes.json()
       if (tokenError) throw new Error(tokenError)
 
+      // Wait for container ref to be available
+      if (!containerRef.current) throw new Error('Live room container not ready')
+
       // Create the Daily call frame inside the container div
       const frame = DailyIframe.createFrame(
-        document.getElementById('daily-container'),
+        containerRef.current,
         {
           iframeStyle: {
             width: '100%',
@@ -82,11 +86,17 @@ export default function LiveRoom({ event, profile, isCreator, onLeave }) {
       setError(err.message)
       setJoining(false)
     }
-  }, [event, profile, isCreator, onLeave])
+  }, [event, profile, isCreator, onLeave, containerRef])
 
   useEffect(() => {
-    joinRoom()
+    // Small delay to ensure DOM is ready before Daily tries to mount
+    const timer = setTimeout(() => {
+      if (containerRef.current) {
+        joinRoom()
+      }
+    }, 100)
     return () => {
+      clearTimeout(timer)
       if (callFrame) {
         callFrame.destroy()
       }
@@ -125,7 +135,7 @@ export default function LiveRoom({ event, profile, isCreator, onLeave }) {
         borderBottom: '1px solid #ffffff0a', flexShrink: 0
       }}>
         <div style={{ display: 'flex', alignItems: 'center', gap: 12 }}>
-          <span style={{ fontFamily: "'DM Serif Display', Georgia, serif", fontSize: 18, color: accentColor }}>Coveted Stage</span>
+          <span style={{ fontFamily: "'DM Serif Display', Georgia, serif", fontSize: 18, color: accentColor }}>StagePass</span>
           <span style={{ fontFamily: "'DM Mono', monospace", fontSize: 11, color: '#444' }}>·</span>
           <span style={{ fontFamily: "'DM Mono', monospace", fontSize: 12, color: '#888' }}>{event.name}</span>
           {!joining && (
@@ -216,7 +226,7 @@ export default function LiveRoom({ event, profile, isCreator, onLeave }) {
 
         {/* Daily iframe container */}
         <div
-          id="daily-container"
+          ref={containerRef}
           style={{
             width: '100%',
             height: '100%',
