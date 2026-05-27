@@ -74,6 +74,11 @@ export default function CreatorApp({ session, profile, onSignOut }) {
   const [liveEvent, setLiveEvent] = useState(null)
   const [editPost, setEditPost] = useState(null)
   const [editEvent, setEditEvent] = useState(null)
+  const [eventFilter, setEventFilter] = useState('current')
+  const todayStr = new Date().toISOString().split('T')[0]
+  const currentEvents = (events || []).filter(e => e.event_date >= todayStr)
+  const pastEvents = (events || []).filter(e => e.event_date < todayStr)
+  const filteredEvents = eventFilter === 'current' ? currentEvents : pastEvents
 
   useEffect(() => {
     const fn = () => setIsMobile(window.innerWidth < 768)
@@ -445,10 +450,10 @@ export default function CreatorApp({ session, profile, onSignOut }) {
           {/* ── EVENTS ── */}
           {tab === 'events' && (
             <div style={{ padding: p }}>
-              <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 24 }}>
+              <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 20 }}>
                 <div>
                   <div style={{ fontFamily: "'DM Serif Display', Georgia, serif", fontSize: isMobile ? 24 : 34, color: TEXT1 }}>Events</div>
-                  <div style={{ fontFamily: "'DM Mono', monospace", fontSize: 10, color: TEXT3, marginTop: 4, letterSpacing: '0.14em' }}>{events.length} SCHEDULED</div>
+                  <div style={{ fontFamily: "'DM Mono', monospace", fontSize: 10, color: TEXT3, marginTop: 4, letterSpacing: '0.14em' }}>{currentEvents.length} CURRENT · {pastEvents.length} PAST</div>
                 </div>
                 <button onClick={() => setShowNewEvent(true)} style={{
                   background: ac, color: '#080808', border: 'none', borderRadius: 7,
@@ -457,9 +462,24 @@ export default function CreatorApp({ session, profile, onSignOut }) {
                   boxShadow: `0 4px 16px ${ac}40`,
                 }}>+ NEW EVENT</button>
               </div>
+              {/* Current / Past toggle */}
+              <div style={{ display: 'flex', gap: 8, marginBottom: 20 }}>
+                {['current', 'past'].map(f => (
+                  <button key={f} onClick={() => setEventFilter(f)} style={{
+                    background: eventFilter === f ? ac : 'rgba(17,17,20,0.7)',
+                    color: eventFilter === f ? '#080808' : TEXT3,
+                    border: eventFilter === f ? 'none' : `1px solid ${BORDER}`,
+                    borderRadius: 20, padding: '6px 18px',
+                    fontFamily: "'DM Mono', monospace", fontSize: 10,
+                    fontWeight: eventFilter === f ? 700 : 400,
+                    letterSpacing: '0.1em', cursor: 'pointer',
+                    boxShadow: eventFilter === f ? `0 4px 12px ${ac}40` : 'none',
+                  }}>{f === 'current' ? 'CURRENT & UPCOMING' : 'PAST'}</button>
+                ))}
+              </div>
               {eventsLoading ? (
                 <div style={{ color: TEXT3, fontFamily: "'DM Mono', monospace", fontSize: 11 }}>Loading...</div>
-              ) : events.length === 0 ? (
+              ) : filteredEvents.length === 0 ? (
                 <div style={{ ...card({ padding: '48px', textAlign: 'center' }), border: `1px dashed ${BORDER}` }}>
                   <div style={{ fontSize: 28, marginBottom: 10, color: TEXT3 }}>◈</div>
                   <div style={{ fontSize: 13, color: TEXT3, marginBottom: 18 }}>No events scheduled yet.</div>
@@ -467,7 +487,7 @@ export default function CreatorApp({ session, profile, onSignOut }) {
                 </div>
               ) : (
                 <div style={{ display: 'flex', flexDirection: 'column', gap: 14 }}>
-                  {events.map(event => (
+                  {filteredEvents.map(event => (
                     <div key={event.id} style={{
                       background: 'rgba(17,17,20,0.72)',
                       backdropFilter: 'blur(16px)',
