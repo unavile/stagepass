@@ -47,9 +47,9 @@ exports.handler = async (event) => {
         room_name: roomName,
         is_owner: isOwner,
         user_name: userName,
-        enable_screenshare: isOwner,
-        start_video_off: !isOwner,
-        start_audio_off: !isOwner,
+        enable_screenshare: true,
+        start_video_off: false,
+        start_audio_off: false,
         exp: Math.floor(Date.now() / 1000) + 86400,
       }
     })

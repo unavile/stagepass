@@ -62,8 +62,16 @@ export default function LiveRoom({ event, profile, isCreator, onLeave }) {
         setJoining(false)
       })
 
+      // Fallback: participant-updated fires when local participant joins
+      // This catches cases where joined-meeting doesn't fire reliably
+      frame.on('participant-updated', (e) => {
+        if (e.participant?.local) {
+          setJoining(false)
+        }
+      })
+
       frame.on('participant-counts-updated', (e) => {
-        setParticipants(e.participants.present)
+        setParticipants(e.participants?.present || 0)
       })
 
       frame.on('left-meeting', () => {
@@ -89,12 +97,18 @@ export default function LiveRoom({ event, profile, isCreator, onLeave }) {
   }, [event, profile, isCreator, onLeave, containerRef])
 
   useEffect(() => {
-    // Small delay to ensure DOM is ready before Daily tries to mount
+    // Wait for DOM to be fully ready before Daily mounts
+    // 300ms gives React time to paint the container
     const timer = setTimeout(() => {
       if (containerRef.current) {
         joinRoom()
+      } else {
+        // Retry once more if container still not ready
+        setTimeout(() => {
+          if (containerRef.current) joinRoom()
+        }, 300)
       }
-    }, 100)
+    }, 300)
     return () => {
       clearTimeout(timer)
       if (callFrame) {
@@ -135,7 +149,7 @@ export default function LiveRoom({ event, profile, isCreator, onLeave }) {
         borderBottom: '1px solid #ffffff0a', flexShrink: 0
       }}>
         <div style={{ display: 'flex', alignItems: 'center', gap: 12 }}>
-          <span style={{ fontFamily: "'DM Serif Display', Georgia, serif", fontSize: 18, color: accentColor }}>StagePass</span>
+          <span style={{ fontFamily: "'DM Serif Display', Georgia, serif", fontSize: 18, color: accentColor }}>Coveted Stage</span>
           <span style={{ fontFamily: "'DM Mono', monospace", fontSize: 11, color: '#444' }}>·</span>
           <span style={{ fontFamily: "'DM Mono', monospace", fontSize: 12, color: '#888' }}>{event.name}</span>
           {!joining && (
