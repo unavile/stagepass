@@ -636,7 +636,16 @@ export default function FanApp() {
                           <div style={{ fontFamily: "'DM Serif Display', Georgia, serif", fontSize: 17, color: TEXT1, marginBottom: 2 }}>{c.profiles?.display_name || 'Creator'}</div>
                           <div style={{ fontFamily: "'DM Mono', monospace", fontSize: 10, color: ACCENT, marginBottom: 4, letterSpacing: '0.08em' }}>@{c.profiles?.handle || 'creator'}</div>
                           {c.category && <div style={{ fontFamily: "'DM Mono', monospace", fontSize: 9, color: TEXT3, marginBottom: 6, letterSpacing: '0.1em' }}>{c.category.toUpperCase()}</div>}
-                          {c.profiles?.bio && <div style={{ fontSize: 11, color: TEXT3, lineHeight: 1.6 }}>{c.profiles.bio}</div>}
+                          {c.profiles?.bio && (
+                          <div style={{
+                            fontSize: 11, color: TEXT3, lineHeight: 1.6,
+                            display: '-webkit-box',
+                            WebkitLineClamp: 3,
+                            WebkitBoxOrient: 'vertical',
+                            overflow: 'hidden',
+                            textOverflow: 'ellipsis',
+                          }}>{c.profiles.bio}</div>
+                        )}
                         </div>
                       </div>
                       <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', paddingTop: 12, borderTop: `1px solid ${BORDER2}` }}>
@@ -687,7 +696,16 @@ export default function FanApp() {
                           <div style={{ fontFamily: "'DM Serif Display', Georgia, serif", fontSize: 17, color: TEXT1, marginBottom: 2 }}>{c.profiles?.display_name || 'Creator'}</div>
                           <div style={{ fontFamily: "'DM Mono', monospace", fontSize: 10, color: ACCENT, marginBottom: 4, letterSpacing: '0.08em' }}>@{c.profiles?.handle}</div>
                           {c.category && <div style={{ fontFamily: "'DM Mono', monospace", fontSize: 9, color: TEXT3, marginBottom: 6, letterSpacing: '0.1em' }}>{c.category.toUpperCase()}</div>}
-                          {c.profiles?.bio && <div style={{ fontSize: 11, color: TEXT3, lineHeight: 1.6 }}>{c.profiles.bio}</div>}
+                          {c.profiles?.bio && (
+                          <div style={{
+                            fontSize: 11, color: TEXT3, lineHeight: 1.6,
+                            display: '-webkit-box',
+                            WebkitLineClamp: 3,
+                            WebkitBoxOrient: 'vertical',
+                            overflow: 'hidden',
+                            textOverflow: 'ellipsis',
+                          }}>{c.profiles.bio}</div>
+                        )}
                         </div>
                       </div>
                       <div style={{ paddingTop: 12, borderTop: `1px solid ${BORDER2}` }}>
