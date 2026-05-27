@@ -5,6 +5,9 @@ import { useFanEvents } from './hooks/useFanEvents'
 import LiveRoom from './LiveRoom'
 import FanLoginModal from './FanLoginModal'
 
+// Parse YYYY-MM-DD as local date — avoids UTC timezone shift
+function parseLocalDate(s) { if (!s) return new Date(); const [y,m,d] = s.split('-').map(Number); return new Date(y, m-1, d) }
+
 // ─── Design tokens ──────────────────────────────────────────────────────────
 const BG      = '#09090b'
 const BG2     = '#111114'
@@ -54,7 +57,7 @@ function isEventActive(event) {
   if (!event?.event_date) return false
   const today = new Date()
   today.setHours(0, 0, 0, 0)
-  const eventDate = new Date(event.event_date)
+  const eventDate = parseLocalDate(event.event_date)
   eventDate.setHours(0, 0, 0, 0)
   const diffDays = Math.floor((today - eventDate) / (1000 * 60 * 60 * 24))
   return diffDays >= 0 && diffDays <= 1
@@ -438,7 +441,7 @@ export default function FanApp() {
                   <div>
                     <div style={{ fontFamily: "'DM Serif Display', Georgia, serif", fontSize: 16, color: TEXT1, marginBottom: 2 }}>{event.name}</div>
                     <div style={{ fontFamily: "'DM Mono', monospace", fontSize: 13, color: ACCENT, fontWeight: 700 }}>
-                      {new Date(event.event_date).toLocaleDateString('en-US', { month: 'short', day: 'numeric', year: 'numeric' })}
+                      {parseLocalDate(event.event_date).toLocaleDateString('en-US', { month: 'short', day: 'numeric', year: 'numeric' })}
                     </div>
                   </div>
                   <span style={{ background: ACCENT + '18', color: ACCENT, border: `1px solid ${ACCENT}40`, borderRadius: 5, fontSize: 9, fontWeight: 700, padding: '3px 8px', letterSpacing: '0.12em', fontFamily: "'DM Mono', monospace", flexShrink: 0 }}>
@@ -757,7 +760,7 @@ export default function FanApp() {
                           <div style={{ flex: 1, minWidth: 0, marginRight: 10 }}>
                             <div style={{ fontFamily: "'DM Serif Display', Georgia, serif", fontSize: 17, color: TEXT1, marginBottom: 3 }}>{event.name}</div>
                             <div style={{ fontFamily: "'DM Mono', monospace", fontSize: 13, color: ACCENT, fontWeight: 700 }}>
-                              {new Date(event.event_date).toLocaleDateString('en-US', { weekday: 'short', month: 'short', day: 'numeric' })}
+                              {parseLocalDate(event.event_date).toLocaleDateString('en-US', { weekday: 'short', month: 'short', day: 'numeric' })}
                             </div>
                           </div>
                           <div style={{ display: 'flex', flexDirection: 'column', gap: 5, alignItems: 'flex-end', flexShrink: 0 }}>
