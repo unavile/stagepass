@@ -94,7 +94,7 @@ const CATEGORIES = ['All', 'Music', 'Dance', 'Comedy']
 const typeLabels = { video: 'VIDEO', audio: 'AUDIO', event: 'EVENT', text: 'JOURNAL' }
 
 // ─── Main component (no props required — public page) ────────────────────────
-export default function FanApp() {
+export default function FanApp({ deepHandle }) {
   // Optional fan session — fans can browse without logging in
   const [fanSession, setFanSession] = useState(null)
   const [fanProfile, setFanProfile] = useState(null)
@@ -196,6 +196,15 @@ export default function FanApp() {
         setCreatorLoading(false)
       })
   }, [])
+
+  // ── Deep link: auto-open creator if handle in URL ────────────────────────
+  useEffect(() => {
+    if (!deepHandle || creatorLoading || allCreators.length === 0) return
+    const match = allCreators.find(c =>
+      c.profiles?.handle?.toLowerCase() === deepHandle.toLowerCase()
+    )
+    if (match) selectCreator(match)
+  }, [deepHandle, creatorLoading, allCreators])
 
   // ── Load subscriptions when fan logs in ─────────────────────────────────
   useEffect(() => {

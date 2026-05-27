@@ -8,18 +8,25 @@ import Success from './Success'
 import ResetPassword from './ResetPassword'
 
 const path = window.location.pathname.toLowerCase()
+const RESERVED = ['success', 'reset-password', 'creator', 'admin', '']
+
+// Extract segment after leading slash e.g. /maravoss → maravoss
+const segment = path.replace(/^\//, '').split('/')[0].trim()
 
 let Root
-if (path === '/success') {
+if (segment === 'success') {
   Root = <Success />
-} else if (path === '/reset-password') {
+} else if (segment === 'reset-password') {
   Root = <ResetPassword />
-} else if (path === '/creator' || path === '/creator/') {
+} else if (segment === 'creator') {
   Root = <CreatorPortal />
-} else if (path === '/admin' || path === '/admin/') {
+} else if (segment === 'admin') {
   Root = <AdminPortal />
+} else if (segment && !RESERVED.includes(segment)) {
+  // Looks like a creator handle — open fan portal with that creator pre-selected
+  Root = <App deepHandle={segment} />
 } else {
-  Root = <App />
+  Root = <App deepHandle={null} />
 }
 
 createRoot(document.getElementById('root')).render(
