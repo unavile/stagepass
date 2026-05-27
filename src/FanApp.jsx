@@ -640,7 +640,7 @@ export default function FanApp() {
                           <div style={{
                             fontSize: 11, color: TEXT3, lineHeight: 1.6,
                             display: '-webkit-box',
-                            WebkitLineClamp: 3,
+                            WebkitLineClamp: 2,
                             WebkitBoxOrient: 'vertical',
                             overflow: 'hidden',
                             textOverflow: 'ellipsis',
@@ -700,7 +700,7 @@ export default function FanApp() {
                           <div style={{
                             fontSize: 11, color: TEXT3, lineHeight: 1.6,
                             display: '-webkit-box',
-                            WebkitLineClamp: 3,
+                            WebkitLineClamp: 2,
                             WebkitBoxOrient: 'vertical',
                             overflow: 'hidden',
                             textOverflow: 'ellipsis',
