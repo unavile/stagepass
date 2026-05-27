@@ -53,24 +53,37 @@ export default function NewEventModal({ creatorId, accentColor, onClose, onEvent
         dailyRoomName = data.roomName
       }
 
-      const { error: insertError } = await supabase.from('events').insert({
-        creator_id: creatorId,
-        name: name.trim(),
-        description: description.trim(),
-        venue: venue.trim() || null,
-        event_date: eventDate,
-        event_type: eventType,
-        stream_url: null,
-        capacity: capacity ? parseInt(capacity) : null,
-        is_free: accessType === 'free',
-        access_type: accessType,
-        ticket_price: accessType === 'ticketed' ? parseFloat(ticketPrice) : null,
-        daily_room_name: dailyRoomName,
-        duration_minutes: parseInt(duration) || 60,
-        start_time: startTime,
+      const sbUrl = import.meta.env.VITE_SUPABASE_URL
+      const sbKey = import.meta.env.VITE_SUPABASE_ANON_KEY
+      const insertRes = await fetch(`${sbUrl}/rest/v1/events`, {
+        method: 'POST',
+        headers: {
+          'apikey': sbKey,
+          'Authorization': `Bearer ${sbKey}`,
+          'Content-Type': 'application/json',
+          'Prefer': 'return=minimal',
+        },
+        body: JSON.stringify({
+          creator_id: creatorId,
+          name: name.trim(),
+          description: description.trim(),
+          venue: venue.trim() || null,
+          event_date: eventDate,
+          event_type: eventType,
+          stream_url: null,
+          capacity: capacity ? parseInt(capacity) : null,
+          is_free: accessType === 'free',
+          access_type: accessType,
+          ticket_price: accessType === 'ticketed' ? parseFloat(ticketPrice) : null,
+          daily_room_name: dailyRoomName,
+          duration_minutes: parseInt(duration) || 60,
+          start_time: startTime,
+        }),
       })
-
-      if (insertError) throw new Error(insertError.message)
+      if (!insertRes.ok) {
+        const errData = await insertRes.json().catch(() => ({}))
+        throw new Error(errData.message || `Failed to create event (${insertRes.status})`)
+      }
       onEventCreated?.()
       onClose()
     } catch (err) {
@@ -159,7 +172,8 @@ export default function NewEventModal({ creatorId, accentColor, onClose, onEvent
         )}
 
         {/* Date */}
-        <input style={input} placeholder="Enter Event Date" type="date" value={eventDate} onChange={e => setEventDate(e.target.value)} />
+        <div style={{ fontFamily: "'DM Mono', monospace", fontSize: 10, color: '#555', letterSpacing: '0.14em', marginBottom: 8 }}>SELECT DATE</div>
+        <input style={input} type="date" value={eventDate} onChange={e => setEventDate(e.target.value)} />
 
         {/* Time + duration — virtual only */}
         {eventType === 'virtual' && (

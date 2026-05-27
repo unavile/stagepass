@@ -115,7 +115,7 @@ export default function EditEventModal({ event, accentColor, accessToken, onClos
         )}
 
         {/* Date */}
-        <div style={{ fontFamily: "'DM Mono', monospace", fontSize: 10, color: '#555', letterSpacing: '0.14em', marginBottom: 8 }}>DATE</div>
+        <div style={{ fontFamily: "'DM Mono', monospace", fontSize: 10, color: '#555', letterSpacing: '0.14em', marginBottom: 8 }}>SELECT DATE</div>
         <input style={input} type="date" value={eventDate} onChange={e => setEventDate(e.target.value)} />
 
         {/* Time + duration — virtual only */}
