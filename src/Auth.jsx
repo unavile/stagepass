@@ -97,9 +97,20 @@ export default function Auth({ onAuth, creatorOnly = false }) {
 
       if (data?.session) {
         // Email confirmation is OFF — user is logged in immediately
-        // Update creator record with category
-        await supabase.from('creators').upsert({ id: data.user.id, category: category === 'Other' ? (customCategory.trim() || 'Other') : category }, { onConflict: 'id' })
-        // onAuthStateChange will handle the rest
+        // Update creator record with category then sign in natively
+        const finalCategory = category === 'Other' ? (customCategory.trim() || 'Other') : category
+        await supabase.from('creators').upsert({ id: data.user.id, category: finalCategory }, { onConflict: 'id' })
+        // Use native sign-in to get token and pass directly to portal
+        try {
+          const signInResult = await nativeSignIn(email.trim(), password)
+          onAuth(signInResult)
+        } catch {
+          // Fallback: switch to login so user can sign in manually
+          setEmail(email.trim())
+          setPassword('')
+          setMode('login')
+          setMessage('Account created! Please sign in below.')
+        }
       } else {
         // Email confirmation is ON — switch to login and show confirmation message
         setEmail(email.trim()) // keep email pre-filled
