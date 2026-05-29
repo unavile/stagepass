@@ -303,11 +303,33 @@ export default function AdminPortal() {
   async function handleSendNotification() {
     if (!notifyMessage.trim()) return
     setActionLoading(true)
+    setActionResult(null)
+
     const targets = notifyAll ? creators : [actionCreator].filter(Boolean)
-    const inserts = targets.map(c => ({ creator_id: c.id, message: notifyMessage.trim() }))
-    await sbFetch('admin_notifications', { method: 'POST', body: JSON.stringify(inserts), headers: { 'Prefer': 'return=minimal' } })
-    setActionResult({ type: 'success', message: `Notification sent to ${notifyAll ? `all ${creators.length} creators` : actionCreator?.profiles?.display_name}.` })
-    setNotifyMessage(''); setActionCreator(null); setActionLoading(false)
+    const creatorIds = targets.map(c => c.id)
+    const recipientName = notifyAll
+      ? `all ${creators.length} creators`
+      : actionCreator?.profiles?.display_name
+
+    try {
+      const res = await fetch('/.netlify/functions/send-notification', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ creatorIds, message: notifyMessage.trim() }),
+      })
+      const data = await res.json()
+      if (!res.ok || data.error) {
+        throw new Error(data.error || 'Failed to send notification')
+      }
+      setActionResult({ type: 'success', message: `✓ Notification sent to ${recipientName}.` })
+      setNotifyMessage('')
+      setActionCreator(null)
+    } catch (err) {
+      console.error('Send notification error:', err)
+      setActionResult({ type: 'error', message: `Failed to send: ${err.message}` })
+    }
+
+    setActionLoading(false)
   }
 
   // ── Creator events functions ─────────────────────────────────────────────
