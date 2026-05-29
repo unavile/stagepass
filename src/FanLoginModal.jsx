@@ -127,27 +127,40 @@ export default function FanLoginModal({ onSuccess, onClose, initialMessage }) {
           role: 'fan',
         })
 
-        // Send welcome email (fire and forget — don't block signup on failure)
-        fetch('/.netlify/functions/send-welcome-email', {
-          method: 'POST',
-          headers: { 'Content-Type': 'application/json' },
-          body: JSON.stringify({
-            email: email.trim(),
-            displayName: displayName.trim(),
-            role: 'fan',
-          }),
-        }).catch(e => console.warn('Welcome email failed:', e))
+        // Send welcome email — await so server-side confirmation runs
+        const fanUserId = signUpResult.user?.id || signUpResult.id
+        try {
+          const welcomeRes = await fetch('/.netlify/functions/send-welcome-email', {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({
+              email: email.trim(),
+              displayName: displayName.trim(),
+              role: 'fan',
+              userId: fanUserId,
+            }),
+          })
+          const welcomeData = await welcomeRes.json().catch(() => ({}))
+          if (!welcomeRes.ok && welcomeData.error === 'invalid_email') {
+            setError(welcomeData.message || 'That email address appears to be invalid.')
+            setLoading(false)
+            return
+          }
+        } catch (e) {
+          console.warn('Welcome email failed:', e)
+        }
 
-        if (signUpResult.access_token) {
-          // Email confirmation OFF — logged in immediately
-          storeSession(signUpResult)
+        // Sign in immediately — email confirmed server-side by send-welcome-email
+        try {
+          const signInResult = await nativeSignIn(email.trim(), password)
+          storeSession(signInResult)
           onSuccess()
-        } else {
-          // Email confirmation ON — ask to confirm then sign in
+        } catch {
+          // Fallback: ask them to sign in manually
           setEmail(email.trim())
           setPassword('')
           setMode('login')
-          setMessage('Account created! Check your email to confirm, then sign in below.')
+          setMessage('Account created! Please sign in below.')
         }
         setLoading(false)
         return

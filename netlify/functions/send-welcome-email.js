@@ -137,7 +137,7 @@ exports.handler = async (event) => {
     }
 
     // ── Confirm email server-side now that delivery succeeded ────────────
-    if (isCreator && userId && sbUrl && sbKey) {
+    if (userId && sbUrl && sbKey) { // confirm both fans and creators
       try {
         const confirmRes = await fetch(`${sbUrl}/auth/v1/admin/users/${userId}`, {
           method: 'PUT',
