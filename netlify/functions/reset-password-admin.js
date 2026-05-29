@@ -48,6 +48,7 @@ exports.handler = async (event) => {
       body: JSON.stringify({
         email,
         gotrue_meta_security: {},
+        redirect_to: 'https://covetedstage.com/reset-password',
       }),
     })
 
