@@ -122,6 +122,7 @@ export default function FanApp({ deepHandle }) {
   const [showLoginModal, setShowLoginModal] = useState(false)
   const [loginModalMessage, setLoginModalMessage] = useState('')
   const [pendingAction, setPendingAction] = useState(null) // 'subscribe' | 'buyTicket' | 'rsvp'
+  const [pendingAction, setPendingAction] = useState(null) // 'subscribe' | 'buyTicket' | 'rsvp'
   const [fanEventFilter, setFanEventFilter] = useState('current')
   const [creatorEventFilter, setCreatorEventFilter] = useState('current')
 
@@ -129,7 +130,7 @@ export default function FanApp({ deepHandle }) {
   const [liveEvent, setLiveEvent] = useState(null)
 
   const { events: creatorEvents } = usePublicEvents(selected?.id)
-  const { events: fanEvents, loading: fanEventsLoading, refetch: refetchFanEvents } = useFanEvents(fanSession?.user?.id)
+  const { events: fanEvents, loading: fanEventsLoading, refetch: refetchFanEvents } = useFanEvents(fanSession?.user?.id, fanSession?.access_token)
 
   // ── Fan session — always starts as guest, only activated on explicit sign-in ─
   useEffect(() => {

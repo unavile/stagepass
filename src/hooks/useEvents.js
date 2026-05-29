@@ -1,18 +1,33 @@
 import { useState, useEffect } from 'react'
-import { supabase } from '../supabaseClient'
 
-export function useEvents(creatorId) {
+const SB_URL = import.meta.env.VITE_SUPABASE_URL
+const SB_KEY = import.meta.env.VITE_SUPABASE_ANON_KEY
+
+function sbHeaders(accessToken) {
+  return {
+    'apikey': SB_KEY,
+    'Authorization': `Bearer ${accessToken || SB_KEY}`,
+    'Content-Type': 'application/json',
+  }
+}
+
+// ── Creator portal: fetch events for a creator (authenticated) ────────────────
+export function useEvents(creatorId, accessToken) {
   const [events, setEvents] = useState([])
   const [loading, setLoading] = useState(true)
 
   async function fetchEvents() {
     if (!creatorId) { setLoading(false); return }
-    const { data, error } = await supabase
-      .from('events')
-      .select('*, rsvps(id, fan_id, profiles(display_name, handle))')
-      .eq('creator_id', creatorId)
-      .order('event_date', { ascending: true })
-    if (!error) setEvents(data || [])
+    try {
+      const res = await fetch(
+        `${SB_URL}/rest/v1/events?creator_id=eq.${creatorId}&select=*,rsvps(id,fan_id,profiles(display_name,handle))&order=event_date.asc`,
+        { headers: sbHeaders(accessToken) }
+      )
+      const data = await res.json()
+      if (Array.isArray(data)) setEvents(data)
+    } catch (e) {
+      console.error('useEvents fetchEvents error:', e)
+    }
     setLoading(false)
   }
 
@@ -20,20 +35,25 @@ export function useEvents(creatorId) {
   return { events, loading, refetch: fetchEvents }
 }
 
+// ── Fan portal: fetch public events for a creator (anon) ─────────────────────
 export function usePublicEvents(creatorId) {
   const [events, setEvents] = useState([])
-  const [loading, setLoading] = useState(false) // false by default — no creatorId on mount
+  const [loading, setLoading] = useState(false)
 
   useEffect(() => {
     if (!creatorId) { setEvents([]); return }
     setLoading(true)
-    supabase
-      .from('events')
-      .select('*, rsvps(count)')
-      .eq('creator_id', creatorId)
-      .order('event_date', { ascending: false }) // most recent first
-      .then(({ data, error }) => {
-        if (!error) setEvents(data || [])
+    fetch(
+      `${SB_URL}/rest/v1/events?creator_id=eq.${creatorId}&select=*,rsvps(count)&order=event_date.desc`,
+      { headers: sbHeaders() }
+    )
+      .then(r => r.json())
+      .then(data => {
+        if (Array.isArray(data)) setEvents(data)
+        setLoading(false)
+      })
+      .catch(e => {
+        console.error('usePublicEvents error:', e)
         setLoading(false)
       })
   }, [creatorId])
