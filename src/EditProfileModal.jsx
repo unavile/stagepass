@@ -1,5 +1,4 @@
 import { useState, useRef } from 'react'
-import { supabase } from './supabaseClient'
 
 const ACCENT_COLORS = [
   { label: 'Gold',   value: '#c9a84c' },
@@ -19,11 +18,11 @@ const CATEGORIES = [
   { id: 'Other',    icon: '✦'  },
 ]
 
-export default function EditProfileModal({ profile, creator, onClose, onSaved }) {
+export default function EditProfileModal({ profile, creator, accessToken, onClose, onSaved }) {
   const [displayName, setDisplayName] = useState(profile.display_name || '')
   const [handle, setHandle] = useState(profile.handle || '')
   const [bio, setBio] = useState(profile.bio || '')
-  const [monthlyPrice, setMonthlyPrice] = useState(creator.monthlyPrice || 5)
+  const [monthlyPrice, setMonthlyPrice] = useState(creator.monthlyPrice != null ? creator.monthlyPrice : 5)
   const [accentColor, setAccentColor] = useState(creator.accentColor || '#c9a84c')
   const KNOWN = ['Music','Dance','Comedy','Modeling','Art','Other']
   const isCustom = creator.category && !KNOWN.includes(creator.category)
@@ -51,16 +50,30 @@ export default function EditProfileModal({ profile, creator, onClose, onSaved })
     setError(null)
   }
 
-  async function uploadAvatar() {
+  async function uploadAvatar(accessToken) {
     if (!avatarFile) return profile.avatar_url
     const ext = avatarFile.name.split('.').pop()
     const path = `${profile.id}/avatar.${ext}`
-    const { error: uploadError } = await supabase.storage
-      .from('avatars')
-      .upload(path, avatarFile, { upsert: true, cacheControl: '3600' })
-    if (uploadError) throw new Error(uploadError.message)
-    const { data } = supabase.storage.from('avatars').getPublicUrl(path)
-    return data.publicUrl
+    const sbUrl = import.meta.env.VITE_SUPABASE_URL
+    const sbKey = import.meta.env.VITE_SUPABASE_ANON_KEY
+    const uploadRes = await fetch(
+      `${sbUrl}/storage/v1/object/avatars/${path}`,
+      {
+        method: 'POST',
+        headers: {
+          'apikey': sbKey,
+          'Authorization': `Bearer ${accessToken || sbKey}`,
+          'x-upsert': 'true',
+          'Cache-Control': '3600',
+        },
+        body: avatarFile,
+      }
+    )
+    if (!uploadRes.ok) {
+      const err = await uploadRes.json().catch(() => ({}))
+      throw new Error(err.message || 'Avatar upload failed')
+    }
+    return `${sbUrl}/storage/v1/object/public/avatars/${path}`
   }
 
   async function handleSave() {
@@ -70,24 +83,35 @@ export default function EditProfileModal({ profile, creator, onClose, onSaved })
     setError(null)
 
     try {
-      const avatarUrl = await uploadAvatar()
+      const avatarUrl = await uploadAvatar(accessToken)
 
-      const [{ error: profileError }, { error: creatorError }] = await Promise.all([
-        supabase.from('profiles').update({
-          display_name: displayName.trim(),
-          handle: handle.toLowerCase().trim(),
-          bio: bio.trim(),
-          avatar_url: avatarUrl,
-        }).eq('id', profile.id),
-        supabase.from('creators').update({
-          monthly_price: parseFloat(monthlyPrice),
-          accent_color: accentColor,
-          category: category === 'Other' ? (customCategory.trim() || 'Other') : category,
-        }).eq('id', profile.id),
+      const sbUrl = import.meta.env.VITE_SUPABASE_URL
+      const sbKey = import.meta.env.VITE_SUPABASE_ANON_KEY
+      const authHeader = { 'apikey': sbKey, 'Authorization': `Bearer ${accessToken || sbKey}`, 'Content-Type': 'application/json', 'Prefer': 'return=minimal' }
+
+      const [profileRes, creatorRes] = await Promise.all([
+        fetch(`${sbUrl}/rest/v1/profiles?id=eq.${profile.id}`, {
+          method: 'PATCH', headers: authHeader,
+          body: JSON.stringify({
+            display_name: displayName.trim(),
+            handle: handle.toLowerCase().trim(),
+            bio: bio.trim(),
+            avatar_url: avatarUrl,
+          }),
+        }),
+        fetch(`${sbUrl}/rest/v1/creators?id=eq.${profile.id}`, {
+          method: 'PATCH', headers: authHeader,
+          body: JSON.stringify({
+            monthly_price: parseFloat(monthlyPrice) || 0,
+            accent_color: accentColor,
+            category: category === 'Other' ? (customCategory.trim() || 'Other') : category,
+          }),
+        }),
       ])
 
-      if (profileError || creatorError) {
-        setError(profileError?.message || creatorError?.message)
+      if (!profileRes.ok || !creatorRes.ok) {
+        const err = await (profileRes.ok ? creatorRes : profileRes).json().catch(() => ({}))
+        setError(err.message || 'Failed to save profile')
         setLoading(false)
         return
       }
@@ -169,8 +193,11 @@ export default function EditProfileModal({ profile, creator, onClose, onSaved })
         <div style={{ fontFamily: "'DM Mono', monospace", fontSize: 10, color: '#555', letterSpacing: '0.15em', marginBottom: 8 }}>SUBSCRIPTION PRICE</div>
         <div style={{ display: 'flex', alignItems: 'center', gap: 10, marginBottom: 16 }}>
           <span style={{ color: '#555', fontSize: 18, fontFamily: "'DM Mono', monospace" }}>$</span>
-          <input style={{ ...input, marginBottom: 0, width: 100 }} type="number" min="1" max="99" step="1" value={monthlyPrice} onChange={e => setMonthlyPrice(e.target.value)} />
+          <input style={{ ...input, marginBottom: 0, width: 100 }} type="number" min="0" max="999" step="1" value={monthlyPrice} onChange={e => setMonthlyPrice(e.target.value)} />
           <span style={{ color: '#555', fontSize: 13, fontFamily: "'DM Mono', monospace" }}>/ month</span>
+        </div>
+        <div style={{ fontFamily: "'DM Mono', monospace", fontSize: 10, color: '#444', marginBottom: 8, marginTop: -8 }}>
+          Set to $0 for a free subscription tier
         </div>
 
         {/* Accent color */}
