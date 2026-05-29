@@ -158,7 +158,12 @@ export default function CreatorPortal() {
     <CreatorApp
       session={session}
       profile={profile}
-      onSignOut={() => supabase.auth.signOut()}
+      onSignOut={() => {
+        clearCreatorSession()
+        supabase.auth.signOut()  // best-effort, may be no-op
+        setSession(null)
+        setProfile(null)
+      }}
     />
   )
 }
