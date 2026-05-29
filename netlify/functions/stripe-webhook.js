@@ -13,8 +13,11 @@ function sbHeaders() {
   }
 }
 
-async function sbUpsert(table, data) {
-  const res = await fetch(`${SB_URL}/rest/v1/${table}`, {
+async function sbUpsert(table, data, onConflict) {
+  const url = onConflict
+    ? `${SB_URL}/rest/v1/${table}?on_conflict=${encodeURIComponent(onConflict)}`
+    : `${SB_URL}/rest/v1/${table}`
+  const res = await fetch(url, {
     method: 'POST',
     headers: sbHeaders(),
     body: JSON.stringify(data),
@@ -75,8 +78,8 @@ exports.handler = async (event) => {
           stripe_session_id: session.id,
           amount: session.amount_total / 100,
           status: 'paid',
-        })
-        await sbUpsert('rsvps', { event_id, fan_id })
+        }, 'event_id,fan_id')
+        await sbUpsert('rsvps', { event_id, fan_id }, 'event_id,fan_id')
         console.log('Ticket purchase + RSVP recorded')
       } catch (err) {
         console.error('Ticket purchase error:', err.message)
@@ -102,7 +105,7 @@ exports.handler = async (event) => {
         creator_id,
         stripe_subscription_id: session.subscription,
         status: 'active',
-      })
+      }, 'fan_id,creator_id')
       console.log('Subscription created successfully')
     } catch (err) {
       console.error('Subscription upsert error:', err.message)
