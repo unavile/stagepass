@@ -60,12 +60,12 @@ export default function CreatorApp({ session, profile, onSignOut }) {
   const [tab, setTab] = useState('overview')
   const [showUpload, setShowUpload] = useState(false)
   const [isMobile, setIsMobile] = useState(window.innerWidth < 768)
-  const { posts: hookPosts, loading: postsLoading, refetch } = usePosts(session.user.id)
+  const { posts: hookPosts, loading: postsLoading, refetch } = usePosts(session.user.id, session.access_token)
   const [postsOverride, setPostsOverride] = useState(null)
   const posts = postsOverride || hookPosts
   function setPosts(data) { setPostsOverride(data) }
-  const { subscribers, loading: subsLoading } = useSubscribers(session.user.id)
-  const { events: hookEvents, loading: eventsLoading, refetch: refetchEvents } = useEvents(session.user.id)
+  const { subscribers, loading: subsLoading } = useSubscribers(session.user.id, session.access_token)
+  const { events: hookEvents, loading: eventsLoading, refetch: refetchEvents } = useEvents(session.user.id, session.access_token)
   const [eventsOverride, setEventsOverride] = useState(null)
   const events = eventsOverride || hookEvents
   function setEvents(data) { setEventsOverride(data) }
