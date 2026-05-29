@@ -24,9 +24,27 @@ export default function CreatorPortal() {
   const [profile, setProfile] = useState(null)
   const [profileLoading, setProfileLoading] = useState(false)
 
+  const SESSION_KEY = 'cs-creator-session'
+
+  function storeCreatorSession(tokenData) {
+    try {
+      localStorage.setItem(SESSION_KEY, JSON.stringify({
+        user: tokenData.user,
+        access_token: tokenData.access_token,
+        refresh_token: tokenData.refresh_token,
+        expires_at: tokenData.expires_at || Math.floor(Date.now() / 1000) + (tokenData.expires_in || 3600),
+      }))
+    } catch (e) { console.error('storeCreatorSession error:', e) }
+  }
+
+  function clearCreatorSession() {
+    try { localStorage.removeItem(SESSION_KEY) } catch (e) {}
+  }
+
   // Called by Auth after successful login with token data
   function handleAuthSuccess(tokenData) {
     if (tokenData?.access_token && tokenData?.user) {
+      storeCreatorSession(tokenData)
       setSession({
         user: tokenData.user,
         access_token: tokenData.access_token,
@@ -37,15 +55,40 @@ export default function CreatorPortal() {
   }
 
   useEffect(() => {
+    // ── Restore session from localStorage on mount (survives refresh) ──────
+    try {
+      const stored = localStorage.getItem(SESSION_KEY)
+      if (stored) {
+        const tokenData = JSON.parse(stored)
+        const expiresAt = tokenData.expires_at || 0
+        const nowSecs = Math.floor(Date.now() / 1000)
+        if (tokenData?.access_token && tokenData?.user && expiresAt > nowSecs) {
+          // Session still valid — restore it
+          setSession({
+            user: tokenData.user,
+            access_token: tokenData.access_token,
+            refresh_token: tokenData.refresh_token,
+          })
+          setSessionChecked(true)
+          return // skip showing login
+        } else {
+          // Expired — clear it
+          clearCreatorSession()
+        }
+      }
+    } catch (e) { console.error('Session restore error:', e) }
+
+    setSessionChecked(true) // No stored session — show login
+
     // Listen only for sign-out
     const { data: { subscription } } = supabase.auth.onAuthStateChange((event) => {
       if (event === 'SIGNED_OUT') {
+        clearCreatorSession()
         setSession(null)
         setProfile(null)
         setSessionChecked(true)
       }
     })
-    setSessionChecked(true) // No stored session on mount — show login immediately
     return () => subscription.unsubscribe()
   }, [])
 
@@ -99,7 +142,7 @@ export default function CreatorPortal() {
           Sign up with a new account to become a creator.
         </div>
         <button
-          onClick={() => supabase.auth.signOut()}
+          onClick={() => { clearCreatorSession(); supabase.auth.signOut() }}
           style={{
             background: '#c9a84c', color: '#080808',
             border: 'none', borderRadius: 7, padding: '10px 20px',
