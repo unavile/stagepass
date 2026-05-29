@@ -8,13 +8,22 @@ import Success from './Success'
 import ResetPassword from './ResetPassword'
 
 const path = window.location.pathname.toLowerCase()
+const hash = window.location.hash
 const RESERVED = ['success', 'reset-password', 'creator', 'admin', '']
 
 // Extract segment after leading slash e.g. /maravoss → maravoss
 const segment = path.replace(/^\//, '').split('/')[0].trim()
 
+// ── If the URL has a recovery token hash, always show ResetPassword ───────────
+// Supabase redirects to covetedstage.com/#access_token=...&type=recovery
+// regardless of path, so catch it before path-based routing
+const hashParams = new URLSearchParams(hash.substring(1))
+const isRecovery = hashParams.get('type') === 'recovery' && hashParams.get('access_token')
+
 let Root
-if (segment === 'success') {
+if (isRecovery) {
+  Root = <ResetPassword />
+} else if (segment === 'success') {
   Root = <Success />
 } else if (segment === 'reset-password') {
   Root = <ResetPassword />
