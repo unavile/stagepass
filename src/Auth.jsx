@@ -113,9 +113,20 @@ export default function Auth({ onAuth, creatorOnly = false }) {
       }).catch(e => console.warn('Welcome email failed:', e))
 
       if (data?.session) {
-        // Email confirmation is OFF — upsert category then show check-email screen
+        // Email confirmation is OFF — upsert category via native fetch (Supabase JS hangs on Netlify)
         const finalCategory = category === 'Other' ? (customCategory.trim() || 'Other') : category
-        await supabase.from('creators').upsert({ id: data.user.id, category: finalCategory }, { onConflict: 'id' })
+        try {
+          await fetch(`${import.meta.env.VITE_SUPABASE_URL}/rest/v1/creators?id=eq.${data.user.id}`, {
+            method: 'PATCH',
+            headers: {
+              'apikey': import.meta.env.VITE_SUPABASE_ANON_KEY,
+              'Authorization': `Bearer ${data.session.access_token}`,
+              'Content-Type': 'application/json',
+              'Prefer': 'return=minimal',
+            },
+            body: JSON.stringify({ category: finalCategory }),
+          })
+        } catch (e) { console.warn('Category upsert failed:', e) }
       }
       // Always show check-email screen for consistent onboarding experience
       setSignupEmail(email.trim())
