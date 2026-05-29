@@ -44,6 +44,8 @@ export default function Auth({ onAuth, creatorOnly = false }) {
   const [error, setError] = useState(null)
   const [message, setMessage] = useState(null)
   const [showPassword, setShowPassword] = useState(false)
+  const [emailSent, setEmailSent] = useState(false)
+  const [signupEmail, setSignupEmail] = useState('')
 
   const role = 'creator' // always creator in this portal
 
@@ -111,28 +113,13 @@ export default function Auth({ onAuth, creatorOnly = false }) {
       }).catch(e => console.warn('Welcome email failed:', e))
 
       if (data?.session) {
-        // Email confirmation is OFF — user is logged in immediately
-        // Update creator record with category then sign in natively
+        // Email confirmation is OFF — upsert category then show check-email screen
         const finalCategory = category === 'Other' ? (customCategory.trim() || 'Other') : category
         await supabase.from('creators').upsert({ id: data.user.id, category: finalCategory }, { onConflict: 'id' })
-        // Use native sign-in to get token and pass directly to portal
-        try {
-          const signInResult = await nativeSignIn(email.trim(), password)
-          onAuth(signInResult)
-        } catch {
-          // Fallback: switch to login so user can sign in manually
-          setEmail(email.trim())
-          setPassword('')
-          setMode('login')
-          setMessage('Account created! Please sign in below.')
-        }
-      } else {
-        // Email confirmation is ON — switch to login and show confirmation message
-        setEmail(email.trim()) // keep email pre-filled
-        setPassword('')
-        setMode('login')
-        setMessage('Account created! Check your email to confirm, then sign in below.')
       }
+      // Always show check-email screen for consistent onboarding experience
+      setSignupEmail(email.trim())
+      setEmailSent(true)
 
       setLoading(false)
       return
@@ -192,6 +179,43 @@ export default function Auth({ onAuth, creatorOnly = false }) {
         borderRadius: 18, padding: '40px 36px',
         boxShadow: '0 24px 80px rgba(0,0,0,0.6), 0 0 0 1px rgba(255,255,255,0.04)',
       }}>
+
+        {/* ── Check email screen ── */}
+        {emailSent ? (
+          <div style={{ textAlign: 'center' }}>
+            <div style={{ fontSize: 48, marginBottom: 16 }}>📬</div>
+            <div style={{ fontFamily: "'DM Serif Display', Georgia, serif", fontSize: 26, color: TEXT1, marginBottom: 12 }}>
+              Check your inbox
+            </div>
+            <div style={{ fontFamily: "'DM Mono', monospace", fontSize: 12, color: TEXT2, lineHeight: 1.8, marginBottom: 8 }}>
+              We sent a confirmation link to
+            </div>
+            <div style={{ fontFamily: "'DM Mono', monospace", fontSize: 13, color: ACCENT, marginBottom: 20 }}>
+              {signupEmail}
+            </div>
+            <div style={{ fontFamily: "'DM Mono', monospace", fontSize: 11, color: TEXT3, lineHeight: 1.9, marginBottom: 28 }}>
+              Click the link in that email to activate your account,<br />
+              then come back here to sign in.
+            </div>
+            <button
+              onClick={() => { setEmailSent(false); setMode('login'); setEmail(signupEmail) }}
+              style={{
+                width: '100%', background: ACCENT, color: '#080808',
+                border: 'none', borderRadius: 8, padding: '13px',
+                fontFamily: "'DM Mono', monospace", fontSize: 12, fontWeight: 700,
+                letterSpacing: '0.14em', cursor: 'pointer', marginBottom: 14,
+                boxShadow: `0 4px 20px ${ACCENT}45`,
+              }}
+            >
+              GO TO LOGIN →
+            </button>
+            <div style={{ fontFamily: "'DM Mono', monospace", fontSize: 10, color: TEXT3, lineHeight: 1.8 }}>
+              Didn't receive it? Check your spam folder,<br />
+              or <span onClick={() => { setEmailSent(false); setMode('signup') }} style={{ color: ACCENT, cursor: 'pointer' }}>try signing up again</span>.
+            </div>
+          </div>
+        ) : (
+          <>
 
         {/* Logo */}
         <div style={{ textAlign: 'center', marginBottom: 28 }}>
@@ -311,6 +335,7 @@ export default function Auth({ onAuth, creatorOnly = false }) {
           </a>
         </div>
       </div>
+        )}
     </div>
   )
 }
