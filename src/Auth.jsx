@@ -102,7 +102,9 @@ export default function Auth({ onAuth, creatorOnly = false }) {
       // The Supabase database trigger handles profile + creator record creation
       // automatically when the user confirms their email — no manual insert needed
 
-      // Send welcome email — await so we can catch invalid email errors
+      // ── Send welcome email via Resend (awaited) ──────────────────────────
+      // Resend delivery success → email confirmed server-side (no Supabase email needed)
+      // Resend delivery failure → account deleted, error shown to user
       try {
         const welcomeRes = await fetch('/.netlify/functions/send-welcome-email', {
           method: 'POST',
@@ -116,17 +118,16 @@ export default function Auth({ onAuth, creatorOnly = false }) {
         })
         const welcomeData = await welcomeRes.json().catch(() => ({}))
         if (!welcomeRes.ok && welcomeData.error === 'invalid_email') {
-          // Account was deleted server-side — show error to user
           setError(welcomeData.message || 'That email address appears to be invalid.')
           setLoading(false)
           return
         }
       } catch (e) {
-        console.warn('Welcome email failed:', e)
+        console.warn('Welcome email error:', e)
       }
 
+      // Upsert category if session exists
       if (data?.session) {
-        // Email confirmation is OFF — upsert category via native fetch (Supabase JS hangs on Netlify)
         const finalCategory = category === 'Other' ? (customCategory.trim() || 'Other') : category
         try {
           await fetch(`${import.meta.env.VITE_SUPABASE_URL}/rest/v1/creators?id=eq.${data.user.id}`, {
@@ -141,7 +142,7 @@ export default function Auth({ onAuth, creatorOnly = false }) {
           })
         } catch (e) { console.warn('Category upsert failed:', e) }
       }
-      // Always show check-email screen for consistent onboarding experience
+
       setSignupEmail(email.trim())
       setEmailSent(true)
 
