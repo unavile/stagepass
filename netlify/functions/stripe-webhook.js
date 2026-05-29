@@ -1,13 +1,49 @@
 const Stripe = require('stripe')
-const { createClient } = require('@supabase/supabase-js')
 
+// ── Native Supabase REST helpers (no JS client = no WebSocket crash) ─────────
+const SB_URL = process.env.SUPABASE_URL
+const SB_KEY = process.env.SUPABASE_SERVICE_ROLE_KEY
+
+function sbHeaders() {
+  return {
+    'Content-Type': 'application/json',
+    'apikey': SB_KEY,
+    'Authorization': `Bearer ${SB_KEY}`,
+    'Prefer': 'resolution=merge-duplicates',
+  }
+}
+
+async function sbUpsert(table, data) {
+  const res = await fetch(`${SB_URL}/rest/v1/${table}`, {
+    method: 'POST',
+    headers: sbHeaders(),
+    body: JSON.stringify(data),
+  })
+  if (!res.ok) {
+    const err = await res.text()
+    throw new Error(`Supabase upsert ${table} failed: ${err}`)
+  }
+  return res
+}
+
+async function sbUpdate(table, data, filterCol, filterVal) {
+  const res = await fetch(`${SB_URL}/rest/v1/${table}?${filterCol}=eq.${filterVal}`, {
+    method: 'PATCH',
+    headers: sbHeaders(),
+    body: JSON.stringify(data),
+  })
+  if (!res.ok) {
+    const err = await res.text()
+    throw new Error(`Supabase update ${table} failed: ${err}`)
+  }
+  return res
+}
+
+// ── Handler ───────────────────────────────────────────────────────────────────
 exports.handler = async (event) => {
   const stripe = new Stripe(process.env.STRIPE_SECRET_KEY)
-  const supabase = createClient(
-    process.env.SUPABASE_URL,
-    process.env.SUPABASE_SERVICE_ROLE_KEY
-  )
 
+  // Verify Stripe signature
   let stripeEvent
   try {
     stripeEvent = stripe.webhooks.constructEvent(
@@ -22,71 +58,72 @@ exports.handler = async (event) => {
 
   console.log('Stripe event type:', stripeEvent.type)
 
+  // ── checkout.session.completed ─────────────────────────────────────────────
   if (stripeEvent.type === 'checkout.session.completed') {
     const session = stripeEvent.data.object
     console.log('Session metadata:', JSON.stringify(session.metadata))
-    console.log('Session subscription:', session.subscription)
 
-    const { fan_id, creator_id } = session.metadata
+    // ── Ticket purchase ────────────────────────────────────────────────────
+    if (session.metadata?.type === 'ticket_purchase') {
+      const { event_id, fan_id } = session.metadata
+      console.log('Ticket purchase — event:', event_id, 'fan:', fan_id)
+
+      try {
+        await sbUpsert('ticket_purchases', {
+          event_id,
+          fan_id,
+          stripe_session_id: session.id,
+          amount: session.amount_total / 100,
+          status: 'paid',
+        })
+        await sbUpsert('rsvps', { event_id, fan_id })
+        console.log('Ticket purchase + RSVP recorded')
+      } catch (err) {
+        console.error('Ticket purchase error:', err.message)
+        return { statusCode: 500, body: err.message }
+      }
+
+      return { statusCode: 200, body: JSON.stringify({ received: true }) }
+    }
+
+    // ── Subscription purchase ──────────────────────────────────────────────
+    const { fan_id, creator_id } = session.metadata || {}
 
     if (!fan_id || !creator_id) {
-      console.error('Missing metadata - fan_id:', fan_id, 'creator_id:', creator_id)
+      console.error('Missing metadata — fan_id:', fan_id, 'creator_id:', creator_id)
       return { statusCode: 400, body: 'Missing metadata' }
     }
 
-    console.log('Upserting subscription for fan:', fan_id, 'creator:', creator_id)
+    console.log('Upserting subscription — fan:', fan_id, 'creator:', creator_id)
 
-    const { data, error } = await supabase
-      .from('subscriptions')
-      .upsert({
+    try {
+      await sbUpsert('subscriptions', {
         fan_id,
         creator_id,
         stripe_subscription_id: session.subscription,
         status: 'active',
-      }, { onConflict: 'fan_id,creator_id' })
-
-    console.log('Upsert result - data:', JSON.stringify(data), 'error:', JSON.stringify(error))
-
-    if (error) {
-      console.error('Supabase upsert error:', error.message, error.details, error.hint)
-      return { statusCode: 500, body: `Database error: ${error.message}` }
+      })
+      console.log('Subscription created successfully')
+    } catch (err) {
+      console.error('Subscription upsert error:', err.message)
+      return { statusCode: 500, body: err.message }
     }
-
-    console.log('Subscription created successfully')
-  }
-  // Inside the checkout.session.completed handler, after the existing subscription logic:
-  if (session.metadata?.type === 'ticket_purchase') {
-    const { event_id, fan_id } = session.metadata
-    // Record ticket purchase and auto-RSVP the fan
-    const { createClient } = require('@supabase/supabase-js')
-    const supabase = createClient(process.env.SUPABASE_URL, process.env.SUPABASE_SERVICE_ROLE_KEY)
-    
-    await supabase.from('ticket_purchases').upsert({
-      event_id,
-      fan_id,
-      stripe_session_id: session.id,
-      amount: session.amount_total / 100,
-      status: 'paid',
-    }, { onConflict: 'event_id,fan_id' })
-
-    // Auto-RSVP the fan to the event
-    await supabase.from('rsvps').upsert(
-      { event_id, fan_id },
-      { onConflict: 'event_id,fan_id' }
-    )
   }
 
-  if (stripeEvent.type === 'customer.subscription.deleted' ||
-      stripeEvent.type === 'customer.subscription.paused') {
+  // ── customer.subscription.deleted / paused ─────────────────────────────────
+  if (
+    stripeEvent.type === 'customer.subscription.deleted' ||
+    stripeEvent.type === 'customer.subscription.paused'
+  ) {
     const subscription = stripeEvent.data.object
-    const { error } = await supabase
-      .from('subscriptions')
-      .update({ status: 'cancelled' })
-      .eq('stripe_subscription_id', subscription.id)
+    console.log('Cancelling subscription:', subscription.id)
 
-    if (error) {
-      console.error('Cancel subscription error:', error.message)
-      return { statusCode: 500, body: `Database error: ${error.message}` }
+    try {
+      await sbUpdate('subscriptions', { status: 'cancelled' }, 'stripe_subscription_id', subscription.id)
+      console.log('Subscription cancelled')
+    } catch (err) {
+      console.error('Cancel subscription error:', err.message)
+      return { statusCode: 500, body: err.message }
     }
   }
 
