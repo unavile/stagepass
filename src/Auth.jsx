@@ -334,8 +334,9 @@ export default function Auth({ onAuth, creatorOnly = false }) {
             🎧 Looking for the fan page? <span style={{ color: ACCENT }}>Click here →</span>
           </a>
         </div>
-      </div>
+          </>
         )}
+      </div>
     </div>
   )
 }
