@@ -12,14 +12,45 @@ exports.handler = async (event) => {
   if (event.httpMethod !== 'POST') return { statusCode: 405, headers, body: 'Method not allowed' }
 
   try {
-    const { email, displayName, role } = JSON.parse(event.body)
+    const { email, displayName, role, userId } = JSON.parse(event.body)
 
     if (!email || !displayName || !role) {
       return { statusCode: 400, headers, body: JSON.stringify({ error: 'Missing required fields' }) }
     }
 
     const resendKey = process.env.RESEND_API_KEY
+    const sbUrl = process.env.SUPABASE_URL
+    const sbKey = process.env.SUPABASE_SERVICE_ROLE_KEY
     const isCreator = role === 'creator'
+
+    // ── Generate email confirmation link if userId provided ───────────────
+    let confirmationLink = null
+    if (userId && sbUrl && sbKey) {
+      try {
+        const linkRes = await fetch(`${sbUrl}/auth/v1/admin/generate_link`, {
+          method: 'POST',
+          headers: {
+            'apikey': sbKey,
+            'Authorization': `Bearer ${sbKey}`,
+            'Content-Type': 'application/json',
+          },
+          body: JSON.stringify({
+            type: 'signup',
+            email,
+            options: {
+              redirect_to: 'https://covetedstage.com/creator',
+            },
+          }),
+        })
+        if (linkRes.ok) {
+          const linkData = await linkRes.json()
+          confirmationLink = linkData.action_link || linkData.properties?.action_link
+          console.log('Confirmation link generated:', confirmationLink ? 'yes' : 'no')
+        }
+      } catch (e) {
+        console.warn('Could not generate confirmation link:', e.message)
+      }
+    }
 
     const subject = isCreator
       ? `Welcome to Coveted Stage, ${displayName}! 🎙`
@@ -47,9 +78,19 @@ exports.handler = async (event) => {
           </div>
         </div>
 
+        ${confirmationLink ? `
+        <div style="margin-bottom: 24px;">
+          <div style="font-size: 11px; color: #555; letter-spacing: 0.15em; margin-bottom: 10px;">STEP 1 — CONFIRM YOUR EMAIL</div>
+          <a href="${confirmationLink}" style="display: inline-block; background: #c9a84c; color: #080808; text-decoration: none; padding: 14px 28px; border-radius: 8px; font-weight: bold; font-size: 13px; letter-spacing: 0.08em;">
+            CONFIRM EMAIL & GO TO PORTAL →
+          </a>
+          <div style="font-size: 11px; color: #555; margin-top: 10px;">This link expires in 24 hours.</div>
+        </div>
+        ` : `
         <a href="https://covetedstage.com/creator" style="display: inline-block; background: #c9a84c; color: #080808; text-decoration: none; padding: 14px 28px; border-radius: 8px; font-weight: bold; font-size: 13px; letter-spacing: 0.08em; margin-bottom: 28px;">
           GO TO MY CREATOR PORTAL →
         </a>
+        `}
 
         <p style="color: #444; font-size: 12px; line-height: 1.7; border-top: 1px solid #1a1a1a; padding-top: 20px; margin-top: 8px;">
           Questions? Reply to this email or visit <a href="https://covetedstage.com" style="color: #c9a84c;">covetedstage.com</a><br>

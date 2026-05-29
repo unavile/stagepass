@@ -76,6 +76,7 @@ export default function Auth({ onAuth, creatorOnly = false }) {
         email: email.trim(),
         password,
         options: {
+          emailRedirectTo: 'https://covetedstage.com/creator',
           data: {
             display_name: displayName.trim(),
             handle: handle.toLowerCase().trim(),
@@ -101,7 +102,7 @@ export default function Auth({ onAuth, creatorOnly = false }) {
       // The Supabase database trigger handles profile + creator record creation
       // automatically when the user confirms their email — no manual insert needed
 
-      // Send welcome email (fire and forget — don't block signup on failure)
+      // Send welcome email with confirmation link (fire and forget)
       fetch('/.netlify/functions/send-welcome-email', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
@@ -109,6 +110,7 @@ export default function Auth({ onAuth, creatorOnly = false }) {
           email: email.trim(),
           displayName: displayName.trim(),
           role: 'creator',
+          userId: data?.user?.id,
         }),
       }).catch(e => console.warn('Welcome email failed:', e))
 
@@ -145,7 +147,7 @@ export default function Auth({ onAuth, creatorOnly = false }) {
       if (msg.includes('invalid login') || msg.includes('invalid credentials')) {
         setError('Incorrect email or password.')
       } else if (msg.includes('email not confirmed')) {
-        setError('Please confirm your email address before signing in. Check your inbox.')
+        setError('Please confirm your email before signing in. Check your inbox for a confirmation link from Coveted Stage.')
       } else {
         setError(err.message)
       }
