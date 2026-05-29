@@ -75,6 +75,9 @@ export default function CreatorApp({ session, profile, onSignOut }) {
   const [editPost, setEditPost] = useState(null)
   const [editEvent, setEditEvent] = useState(null)
   const [eventFilter, setEventFilter] = useState('current')
+  const [notifications, setNotifications] = useState([])
+  const [notifsLoading, setNotifsLoading] = useState(false)
+  const [openNotif, setOpenNotif] = useState(null) // id of expanded notification
   const todayStr = new Date().toISOString().split('T')[0]
   const currentEvents = (events || []).filter(e => e.event_date >= todayStr)
   const pastEvents = (events || []).filter(e => e.event_date < todayStr)
@@ -118,6 +121,64 @@ export default function CreatorApp({ session, profile, onSignOut }) {
     const data = await res.json()
     if (Array.isArray(data)) setEvents(data)
   }
+  async function fetchNotifications() {
+    setNotifsLoading(true)
+    const sbUrl = import.meta.env.VITE_SUPABASE_URL
+    const sbKey = import.meta.env.VITE_SUPABASE_ANON_KEY
+    const res = await fetch(
+      `${sbUrl}/rest/v1/admin_notifications?creator_id=eq.${session.user.id}&order=created_at.desc`,
+      { headers: { 'apikey': sbKey, 'Authorization': `Bearer ${session.access_token}` } }
+    )
+    const data = await res.json()
+    if (Array.isArray(data)) setNotifications(data)
+    setNotifsLoading(false)
+  }
+
+  async function markNotifRead(notifId) {
+    const sbUrl = import.meta.env.VITE_SUPABASE_URL
+    const sbKey = import.meta.env.VITE_SUPABASE_ANON_KEY
+    await fetch(
+      `${sbUrl}/rest/v1/admin_notifications?id=eq.${notifId}`,
+      {
+        method: 'PATCH',
+        headers: {
+          'apikey': sbKey,
+          'Authorization': `Bearer ${session.access_token}`,
+          'Content-Type': 'application/json',
+          'Prefer': 'return=minimal',
+        },
+        body: JSON.stringify({ read: true }),
+      }
+    )
+    setNotifications(prev => prev.map(n => n.id === notifId ? { ...n, read: true } : n))
+  }
+
+  async function markAllRead() {
+    const sbUrl = import.meta.env.VITE_SUPABASE_URL
+    const sbKey = import.meta.env.VITE_SUPABASE_ANON_KEY
+    await fetch(
+      `${sbUrl}/rest/v1/admin_notifications?creator_id=eq.${session.user.id}&read=eq.false`,
+      {
+        method: 'PATCH',
+        headers: {
+          'apikey': sbKey,
+          'Authorization': `Bearer ${session.access_token}`,
+          'Content-Type': 'application/json',
+          'Prefer': 'return=minimal',
+        },
+        body: JSON.stringify({ read: true }),
+      }
+    )
+    setNotifications(prev => prev.map(n => ({ ...n, read: true })))
+  }
+
+  // Load notifications on mount and when switching to inbox tab
+  useEffect(() => {
+    fetchNotifications()
+  }, [])
+
+  const unreadCount = notifications.filter(n => !n.read).length
+
   const monthlyRevenue = subscribers.length * creator.monthlyPrice
   const netRevenue = (monthlyRevenue * 0.92).toFixed(2)
   const platformFee = (monthlyRevenue * 0.08).toFixed(2)
@@ -128,6 +189,7 @@ export default function CreatorApp({ session, profile, onSignOut }) {
     { id: 'subscribers', label: 'Subscribers', icon: '◎' },
     { id: 'events',      label: 'Events',      icon: '◈' },
     { id: 'earnings',    label: 'Earnings',    icon: '◇' },
+    { id: 'inbox',       label: 'Inbox',       icon: '✉' },
   ]
 
   const typeLabels = { video: 'VIDEO', audio: 'AUDIO', event: 'EVENT', text: 'JOURNAL' }
@@ -604,6 +666,110 @@ export default function CreatorApp({ session, profile, onSignOut }) {
             </div>
           )}
 
+          {/* ── INBOX ── */}
+          {tab === 'inbox' && (
+            <div style={{ padding: p }}>
+              <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: 24, flexWrap: 'wrap', gap: 12 }}>
+                <div style={{ fontFamily: "'DM Serif Display', Georgia, serif", fontSize: isMobile ? 24 : 34, color: TEXT1 }}>
+                  Inbox
+                  {unreadCount > 0 && (
+                    <span style={{
+                      marginLeft: 12, background: '#e84545', color: '#fff',
+                      borderRadius: 12, fontSize: 12, fontWeight: 700,
+                      padding: '2px 9px', fontFamily: "'DM Mono', monospace",
+                      verticalAlign: 'middle',
+                    }}>{unreadCount} unread</span>
+                  )}
+                </div>
+                {unreadCount > 0 && (
+                  <button onClick={markAllRead} style={{
+                    background: 'none', border: `1px solid ${BORDER2}`,
+                    borderRadius: 7, padding: '7px 14px',
+                    fontFamily: "'DM Mono', monospace", fontSize: 10,
+                    color: TEXT3, cursor: 'pointer', letterSpacing: '0.1em',
+                  }}>MARK ALL AS READ</button>
+                )}
+              </div>
+
+              {notifsLoading ? (
+                <div style={{ color: TEXT3, fontSize: 12, fontFamily: "'DM Mono', monospace", letterSpacing: '0.1em' }}>LOADING...</div>
+              ) : notifications.length === 0 ? (
+                <div style={{
+                  ...card({ padding: '40px 24px' }),
+                  textAlign: 'center',
+                }}>
+                  <div style={{ fontSize: 32, marginBottom: 12 }}>✉</div>
+                  <div style={{ fontSize: 13, color: TEXT2, marginBottom: 6 }}>No notifications yet</div>
+                  <div style={{ fontSize: 11, color: TEXT3 }}>Messages from the Coveted Stage team will appear here.</div>
+                </div>
+              ) : (
+                <div style={{ display: 'flex', flexDirection: 'column', gap: 10 }}>
+                  {notifications.map(n => (
+                    <div
+                      key={n.id}
+                      onClick={() => {
+                        setOpenNotif(openNotif === n.id ? null : n.id)
+                        if (!n.read) markNotifRead(n.id)
+                      }}
+                      style={{
+                        ...card({ padding: '16px 20px' }),
+                        cursor: 'pointer',
+                        borderLeft: n.read ? `3px solid transparent` : `3px solid ${ac}`,
+                        transition: 'border-color 0.2s',
+                      }}
+                    >
+                      {/* Row: icon + preview + date + unread dot */}
+                      <div style={{ display: 'flex', alignItems: 'flex-start', gap: 14 }}>
+                        <div style={{
+                          width: 36, height: 36, borderRadius: '50%', flexShrink: 0,
+                          background: n.read ? BORDER2 : ac + '20',
+                          border: `1px solid ${n.read ? BORDER2 : ac + '50'}`,
+                          display: 'flex', alignItems: 'center', justifyContent: 'center',
+                          fontSize: 14,
+                        }}>✦</div>
+                        <div style={{ flex: 1, minWidth: 0 }}>
+                          <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', gap: 8, marginBottom: 4 }}>
+                            <div style={{
+                              fontSize: 11, fontFamily: "'DM Mono', monospace",
+                              letterSpacing: '0.1em', color: n.read ? TEXT3 : ac,
+                            }}>
+                              COVETED STAGE
+                              {!n.read && (
+                                <span style={{
+                                  marginLeft: 8, background: ac, borderRadius: 8,
+                                  fontSize: 8, color: '#080808', fontWeight: 700,
+                                  padding: '1px 6px',
+                                }}>NEW</span>
+                              )}
+                            </div>
+                            <div style={{ fontSize: 10, color: TEXT3, fontFamily: "'DM Mono', monospace", flexShrink: 0 }}>
+                              {n.created_at ? new Date(n.created_at).toLocaleDateString('en-US', { month: 'short', day: 'numeric', year: 'numeric' }) : ''}
+                            </div>
+                          </div>
+                          {/* Preview or full message */}
+                          <div style={{
+                            fontSize: 13, color: n.read ? TEXT2 : TEXT1,
+                            lineHeight: 1.65,
+                            ...(openNotif !== n.id ? {
+                              overflow: 'hidden', textOverflow: 'ellipsis',
+                              display: '-webkit-box', WebkitLineClamp: 2,
+                              WebkitBoxOrient: 'vertical',
+                            } : {})
+                          }}>{n.message}</div>
+                          {openNotif === n.id && (
+                            <div style={{ marginTop: 10, fontSize: 10, color: TEXT3, fontFamily: "'DM Mono', monospace", letterSpacing: '0.08em' }}>
+                              CLICK TO COLLAPSE
+                            </div>
+                          )}
+                        </div>
+                      </div>
+                    </div>
+                  ))}
+                </div>
+              )}
+            </div>
+          )}
+
           </div>
         </div>
       </div>
@@ -618,7 +784,7 @@ export default function CreatorApp({ session, profile, onSignOut }) {
           display: 'flex', zIndex: 100, height: 64,
         }}>
           {TABS.map(t => (
-            <button key={t.id} onClick={() => setTab(t.id)} style={{
+            <button key={t.id} onClick={() => { setTab(t.id); if (t.id === 'inbox') fetchNotifications() }} style={{
               flex: 1, display: 'flex', flexDirection: 'column',
               alignItems: 'center', justifyContent: 'center', gap: 4,
               background: 'none', border: 'none',
@@ -626,9 +792,18 @@ export default function CreatorApp({ session, profile, onSignOut }) {
               color: tab === t.id ? ac : TEXT3,
               cursor: 'pointer', fontFamily: "'DM Mono', monospace",
               fontSize: 8, letterSpacing: '0.08em', transition: 'color 0.15s',
+              position: 'relative',
             }}>
               <span style={{ fontSize: 15 }}>{t.icon}</span>
               {t.label.toUpperCase().slice(0, 4)}
+              {t.id === 'inbox' && unreadCount > 0 && (
+                <span style={{
+                  position: 'absolute', top: 6, right: '50%', marginRight: -18,
+                  background: '#e84545', color: '#fff', borderRadius: 8,
+                  fontSize: 8, fontWeight: 700, padding: '1px 4px',
+                  fontFamily: "'DM Mono', monospace",
+                }}>{unreadCount}</span>
+              )}
             </button>
           ))}
           <button onClick={onSignOut} style={{
