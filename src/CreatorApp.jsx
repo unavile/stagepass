@@ -125,12 +125,23 @@ export default function CreatorApp({ session, profile, onSignOut }) {
     setNotifsLoading(true)
     const sbUrl = import.meta.env.VITE_SUPABASE_URL
     const sbKey = import.meta.env.VITE_SUPABASE_ANON_KEY
-    const res = await fetch(
-      `${sbUrl}/rest/v1/admin_notifications?creator_id=eq.${session.user.id}&order=created_at.desc`,
-      { headers: { 'apikey': sbKey, 'Authorization': `Bearer ${session.access_token}` } }
-    )
-    const data = await res.json()
-    if (Array.isArray(data)) setNotifications(data)
+    try {
+      const res = await fetch(
+        `${sbUrl}/rest/v1/admin_notifications?creator_id=eq.${session.user.id}&order=created_at.desc`,
+        { headers: { 'apikey': sbKey, 'Authorization': `Bearer ${session.access_token}` } }
+      )
+      const data = await res.json()
+      console.log('fetchNotifications status:', res.status, 'data:', JSON.stringify(data))
+      if (Array.isArray(data)) {
+        setNotifications(data)
+      } else {
+        console.error('fetchNotifications unexpected response:', data)
+        setNotifications([])
+      }
+    } catch (err) {
+      console.error('fetchNotifications error:', err)
+      setNotifications([])
+    }
     setNotifsLoading(false)
   }
 
