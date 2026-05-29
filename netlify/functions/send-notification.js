@@ -2,18 +2,20 @@
 // Called by AdminPortal to insert notifications into admin_notifications
 // Uses service role key to bypass RLS
 
+const headers = {
+  'Access-Control-Allow-Origin': '*',
+  'Access-Control-Allow-Headers': 'Content-Type',
+  'Access-Control-Allow-Methods': 'POST, OPTIONS',
+}
+
 exports.handler = async (event) => {
-  if (event.httpMethod !== 'POST') {
-    return { statusCode: 405, body: 'Method not allowed' }
-  }
-
-  const headers = {
-    'Access-Control-Allow-Origin': '*',
-    'Access-Control-Allow-Headers': 'Content-Type',
-  }
-
+  // Handle CORS preflight FIRST — before any other check
   if (event.httpMethod === 'OPTIONS') {
     return { statusCode: 200, headers, body: '' }
+  }
+
+  if (event.httpMethod !== 'POST') {
+    return { statusCode: 405, headers, body: 'Method not allowed' }
   }
 
   try {
