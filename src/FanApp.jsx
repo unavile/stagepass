@@ -121,6 +121,7 @@ export default function FanApp({ deepHandle }) {
   // Login modal
   const [showLoginModal, setShowLoginModal] = useState(false)
   const [loginModalMessage, setLoginModalMessage] = useState('')
+  const [pendingAction, setPendingAction] = useState(null) // 'subscribe' | 'buyTicket' | 'rsvp'
   const [fanEventFilter, setFanEventFilter] = useState('current')
   const [creatorEventFilter, setCreatorEventFilter] = useState('current')
 
@@ -251,6 +252,7 @@ export default function FanApp({ deepHandle }) {
   async function handleSubscribe() {
     if (!fanSession) {
       setLoginModalMessage('Sign in to subscribe to this creator.')
+      setPendingAction('subscribe')
       setShowLoginModal(true)
       return
     }
@@ -278,11 +280,49 @@ export default function FanApp({ deepHandle }) {
   }
 
   async function handleUnsubscribe() {
-    if (!fanSession) return
-    await supabase.from('subscriptions').update({ status: 'cancelled' })
-      .eq('fan_id', fanSession.user.id).eq('creator_id', selected.id)
-    setSubscribed(false)
-    setSubscribedIds(prev => { const n = new Set(prev); n.delete(selected.id); return n })
+    if (!fanSession || !selected) return
+    try {
+      const sbUrl = import.meta.env.VITE_SUPABASE_URL
+      const sbKey = import.meta.env.VITE_SUPABASE_ANON_KEY
+
+      // 1. Fetch the stripe_subscription_id for this subscription
+      const res = await fetch(
+        `${sbUrl}/rest/v1/subscriptions?fan_id=eq.${fanSession.user.id}&creator_id=eq.${selected.id}&status=eq.active&select=stripe_subscription_id&limit=1`,
+        { headers: { 'apikey': sbKey, 'Authorization': `Bearer ${fanSession.access_token}` } }
+      )
+      const rows = await res.json()
+      const stripeSubId = rows?.[0]?.stripe_subscription_id
+
+      // 2. Cancel in Stripe (via netlify function) if we have a stripe sub id
+      if (stripeSubId) {
+        await fetch('/.netlify/functions/cancel-subscription', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ stripeSubscriptionId: stripeSubId }),
+        })
+      }
+
+      // 3. Update status in Supabase via native fetch
+      await fetch(
+        `${sbUrl}/rest/v1/subscriptions?fan_id=eq.${fanSession.user.id}&creator_id=eq.${selected.id}`,
+        {
+          method: 'PATCH',
+          headers: {
+            'apikey': sbKey,
+            'Authorization': `Bearer ${fanSession.access_token}`,
+            'Content-Type': 'application/json',
+            'Prefer': 'return=minimal',
+          },
+          body: JSON.stringify({ status: 'cancelled' }),
+        }
+      )
+
+      // 4. Update local state
+      setSubscribed(false)
+      setSubscribedIds(prev => { const n = new Set(prev); n.delete(selected.id); return n })
+    } catch (err) {
+      console.error('Unsubscribe error:', err)
+    }
   }
 
   async function handleBuyTicket(event) {
@@ -932,13 +972,39 @@ export default function FanApp({ deepHandle }) {
                   const profile = profiles?.[0]
                   // Reject creator accounts — they belong on /creator not the fan portal
                   if (profile?.role === 'creator') {
-                    setError && setError('This is a creator account. Please visit /creator to log in.')
-                    const projectRef = import.meta.env.VITE_SUPABASE_URL.split('//')[1].split('.')[0]
-                    localStorage.removeItem(`sb-${projectRef}-auth-token`)
+                    const projectRef2 = import.meta.env.VITE_SUPABASE_URL.split('//')[1].split('.')[0]
+                    localStorage.removeItem(`sb-${projectRef2}-auth-token`)
                     return
                   }
-                  setFanSession({ user: tokenData.user, access_token: tokenData.access_token })
+                  const newSession = { user: tokenData.user, access_token: tokenData.access_token }
+                  setFanSession(newSession)
                   if (profile) setFanProfile(profile)
+
+                  // ── Resume whatever the fan was trying to do before login ──
+                  if (pendingAction === 'subscribe' && selected) {
+                    setPendingAction(null)
+                    // Kick off checkout with the newly established session
+                    try {
+                      const checkoutRes = await fetch('/.netlify/functions/create-checkout', {
+                        method: 'POST',
+                        headers: { 'Content-Type': 'application/json' },
+                        body: JSON.stringify({
+                          creatorId: selected.id,
+                          creatorName: selected.profiles?.display_name,
+                          monthlyPrice: selected.monthly_price,
+                          fanId: tokenData.user.id,
+                          fanEmail: tokenData.user.email,
+                        })
+                      })
+                      const { url: checkoutUrl, error: checkoutError } = await checkoutRes.json()
+                      if (checkoutError) throw new Error(checkoutError)
+                      window.location.href = checkoutUrl
+                    } catch (err) {
+                      console.error('Post-login checkout error:', err)
+                    }
+                  } else {
+                    setPendingAction(null)
+                  }
                 }
               }
             } catch (e) {
