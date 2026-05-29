@@ -1,6 +1,6 @@
 // netlify/functions/reset-password-admin.js
-// Uses Supabase Admin generateLink API to create a recovery link
-// with a specific redirect_to URL, then sends it via Supabase's email
+// Uses admin generate_link to get a recovery URL with correct redirect_to,
+// then sends it via Resend email API
 
 const headers = {
   'Access-Control-Allow-Origin': '*',
@@ -18,64 +18,87 @@ exports.handler = async (event) => {
 
     const sbUrl = process.env.SUPABASE_URL
     const sbKey = process.env.SUPABASE_SERVICE_ROLE_KEY
+    const resendKey = process.env.RESEND_API_KEY
 
-    // ── Step 1: Fetch creator's email from auth.users ─────────────────────
+    // ── Step 1: Fetch creator's email ─────────────────────────────────────
     const userRes = await fetch(`${sbUrl}/auth/v1/admin/users/${creatorId}`, {
       method: 'GET',
-      headers: {
-        'apikey': sbKey,
-        'Authorization': `Bearer ${sbKey}`,
-        'Content-Type': 'application/json',
-      },
+      headers: { 'apikey': sbKey, 'Authorization': `Bearer ${sbKey}` },
     })
-
     if (!userRes.ok) {
-      const errText = await userRes.text()
-      console.error('Admin user fetch failed:', errText)
-      return { statusCode: 500, headers, body: JSON.stringify({ error: `Could not fetch creator: ${errText}` }) }
+      const err = await userRes.text()
+      return { statusCode: 500, headers, body: JSON.stringify({ error: `Could not fetch creator: ${err}` }) }
     }
-
     const user = await userRes.json()
     const email = user.email
     if (!email) return { statusCode: 400, headers, body: JSON.stringify({ error: 'No email found for this creator' }) }
 
     console.log('Generating recovery link for:', email)
 
-    // ── Step 2: Generate a recovery link via admin API ────────────────────
-    // This honours redirect_to reliably unlike /auth/v1/recover
+    // ── Step 2: Generate recovery link with correct redirect_to ───────────
     const generateRes = await fetch(`${sbUrl}/auth/v1/admin/generate_link`, {
       method: 'POST',
-      headers: {
-        'apikey': sbKey,
-        'Authorization': `Bearer ${sbKey}`,
-        'Content-Type': 'application/json',
-      },
+      headers: { 'apikey': sbKey, 'Authorization': `Bearer ${sbKey}`, 'Content-Type': 'application/json' },
       body: JSON.stringify({
         type: 'recovery',
         email,
-        options: {
-          redirect_to: 'https://covetedstage.com/reset-password',
-        },
+        options: { redirect_to: 'https://covetedstage.com/reset-password' },
       }),
     })
 
-    console.log('Generate link status:', generateRes.status)
-
     if (!generateRes.ok) {
-      const errBody = await generateRes.json().catch(() => ({}))
-      console.error('Generate link failed:', JSON.stringify(errBody))
-      if (errBody.error_code === 'over_email_send_rate_limit' || errBody.code === 429) {
-        return { statusCode: 429, headers, body: JSON.stringify({ error: 'Please wait a few seconds before sending another reset email.' }) }
-      }
-      return { statusCode: 500, headers, body: JSON.stringify({ error: `Failed to generate reset link: ${errBody.msg || errBody.error || 'unknown error'}` }) }
+      const err = await generateRes.json().catch(() => ({}))
+      return { statusCode: 500, headers, body: JSON.stringify({ error: `Failed to generate link: ${err.msg || err.error || 'unknown'}` }) }
     }
 
     const linkData = await generateRes.json()
-    console.log('Recovery link generated, action_link:', linkData.action_link ? 'present' : 'missing')
+    const actionLink = linkData.action_link || linkData.properties?.action_link
+    console.log('Action link generated:', actionLink ? 'yes' : 'no')
 
-    // generate_link both generates AND sends the email via Supabase
-    // The action_link in the response is the actual reset URL sent to the user
-    console.log('Password reset email sent to:', email)
+    if (!actionLink) {
+      return { statusCode: 500, headers, body: JSON.stringify({ error: 'No action_link returned from Supabase' }) }
+    }
+
+    // ── Step 3: Send email via Resend ─────────────────────────────────────
+    const emailRes = await fetch('https://api.resend.com/emails', {
+      method: 'POST',
+      headers: {
+        'Authorization': `Bearer ${resendKey}`,
+        'Content-Type': 'application/json',
+      },
+      body: JSON.stringify({
+        from: 'Coveted Stage <noreply@covetedstage.com>',
+        to: email,
+        subject: 'Reset your Coveted Stage password',
+        html: `
+          <div style="font-family: Arial, sans-serif; max-width: 480px; margin: 0 auto; padding: 40px 24px; background: #09090b; color: #f4f0e8;">
+            <div style="font-size: 24px; color: #c9a84c; margin-bottom: 24px; font-family: Georgia, serif;">Coveted Stage</div>
+            <h2 style="font-size: 20px; color: #f4f0e8; margin-bottom: 16px;">Reset your password</h2>
+            <p style="color: #9a9690; font-size: 14px; line-height: 1.6; margin-bottom: 28px;">
+              You requested a password reset for your Coveted Stage creator account. 
+              Click the button below to set a new password. This link expires in 1 hour.
+            </p>
+            <a href="${actionLink}" style="display: inline-block; background: #c9a84c; color: #080808; text-decoration: none; padding: 14px 28px; border-radius: 8px; font-weight: bold; font-size: 14px; letter-spacing: 0.05em;">
+              RESET PASSWORD
+            </a>
+            <p style="color: #555250; font-size: 12px; margin-top: 28px; line-height: 1.6;">
+              If you didn't request this, you can safely ignore this email.<br>
+              This link will expire in 1 hour.
+            </p>
+          </div>
+        `,
+      }),
+    })
+
+    console.log('Resend status:', emailRes.status)
+    const emailData = await emailRes.json().catch(() => ({}))
+    console.log('Resend response:', JSON.stringify(emailData))
+
+    if (!emailRes.ok) {
+      return { statusCode: 500, headers, body: JSON.stringify({ error: `Failed to send email: ${emailData.message || 'unknown error'}` }) }
+    }
+
+    console.log('Password reset email sent successfully to:', email)
     return { statusCode: 200, headers, body: JSON.stringify({ success: true, email }) }
 
   } catch (err) {
