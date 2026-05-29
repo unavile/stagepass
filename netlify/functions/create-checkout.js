@@ -15,25 +15,54 @@ exports.handler = async (event) => {
 
     const stripe = new Stripe(process.env.STRIPE_SECRET_KEY)
 
-    // Create or retrieve a Stripe product for this creator
-    const product = await stripe.products.create({
-      name: `${creatorName} — StagePass Subscription`,
-    })
+    // ── Create or retrieve a Customer so Stripe reliably sends receipt emails ──
+    // Search for an existing customer with this email first to avoid duplicates
+    const existingCustomers = await stripe.customers.list({ email: fanEmail, limit: 1 })
+    let customer
+    if (existingCustomers.data.length > 0) {
+      customer = existingCustomers.data[0]
+    } else {
+      customer = await stripe.customers.create({
+        email: fanEmail,
+        metadata: { fan_id: fanId },
+      })
+    }
 
-    const price = await stripe.prices.create({
-      product: product.id,
-      unit_amount: Math.round(monthlyPrice * 100), // in cents
-      currency: 'usd',
-      recurring: { interval: 'month' },
+    // ── Find or create a price for this creator ────────────────────────────────
+    // Search for an existing active price for this creator to avoid duplicates
+    const existingPrices = await stripe.prices.list({
+      active: true,
+      limit: 100,
     })
+    let price = existingPrices.data.find(
+      p => p.metadata?.creator_id === creatorId &&
+           p.unit_amount === Math.round(monthlyPrice * 100) &&
+           p.recurring?.interval === 'month'
+    )
 
+    if (!price) {
+      // No existing price — create product + price for this creator
+      const product = await stripe.products.create({
+        name: `${creatorName} — Coveted Stage Subscription`,
+        metadata: { creator_id: creatorId },
+      })
+      price = await stripe.prices.create({
+        product: product.id,
+        unit_amount: Math.round(monthlyPrice * 100),
+        currency: 'usd',
+        recurring: { interval: 'month' },
+        metadata: { creator_id: creatorId },
+      })
+    }
+
+    // ── Create the checkout session ────────────────────────────────────────────
     const session = await stripe.checkout.sessions.create({
       mode: 'subscription',
       payment_method_types: ['card'],
+      customer: customer.id,          // explicit customer = reliable receipt email
       line_items: [{ price: price.id, quantity: 1 }],
       success_url: `${process.env.URL}/success?creator=${creatorId}`,
       cancel_url: `${process.env.URL}/`,
-      customer_email: fanEmail,
       metadata: {
         fan_id: fanId,
         creator_id: creatorId,
