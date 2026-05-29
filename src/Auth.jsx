@@ -8,7 +8,11 @@ async function nativeSignIn(email, password) {
     body: JSON.stringify({ email, password }),
   })
   const data = await res.json()
-  if (data.error || data.error_description) throw new Error(data.error_description || data.error || 'Sign in failed')
+  // Handle all Supabase error formats (v1: error/error_description, v2: msg/error_code)
+  if (!res.ok || data.error || data.error_description || data.msg || data.error_code) {
+    const message = data.error_description || data.msg || data.error || data.message || 'Sign in failed'
+    throw new Error(message)
+  }
   return data
 }
 
@@ -129,16 +133,12 @@ export default function Auth({ onAuth, creatorOnly = false }) {
       onAuth(signInResult)
     } catch (err) {
       const msg = err.message.toLowerCase()
-      if (msg.includes('invalid login') || msg.includes('invalid credentials') ||
-          msg.includes('invalid email') || msg.includes('wrong password') ||
-          msg.includes('user not found') || msg.includes('no user')) {
+      if (msg.includes('invalid login') || msg.includes('invalid credentials')) {
         setError('Incorrect email or password.')
       } else if (msg.includes('email not confirmed')) {
         setError('Please confirm your email address before signing in. Check your inbox.')
-      } else if (msg.includes('too many requests') || msg.includes('rate limit')) {
-        setError('Too many attempts. Please wait a moment and try again.')
       } else {
-        setError(err.message || 'Sign in failed. Please try again.')
+        setError(err.message)
       }
     }
     setLoading(false)
