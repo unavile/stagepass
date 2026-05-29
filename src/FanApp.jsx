@@ -122,7 +122,6 @@ export default function FanApp({ deepHandle }) {
   const [showLoginModal, setShowLoginModal] = useState(false)
   const [loginModalMessage, setLoginModalMessage] = useState('')
   const [pendingAction, setPendingAction] = useState(null) // 'subscribe' | 'buyTicket' | 'rsvp'
-  const [pendingAction, setPendingAction] = useState(null) // 'subscribe' | 'buyTicket' | 'rsvp'
   const [fanEventFilter, setFanEventFilter] = useState('current')
   const [creatorEventFilter, setCreatorEventFilter] = useState('current')
 
