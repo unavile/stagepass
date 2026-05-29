@@ -148,7 +148,26 @@ exports.handler = async (event) => {
 
     if (!emailRes.ok) {
       console.error('Resend error:', JSON.stringify(emailData))
-      return { statusCode: 500, headers, body: JSON.stringify({ error: emailData.message || 'Failed to send welcome email' }) }
+      // ── Email failed — delete the unconfirmed account to prevent ghost accounts ──
+      if (userId && sbUrl && sbKey) {
+        try {
+          const deleteRes = await fetch(`${sbUrl}/auth/v1/admin/users/${userId}`, {
+            method: 'DELETE',
+            headers: { 'apikey': sbKey, 'Authorization': `Bearer ${sbKey}` },
+          })
+          console.log('Deleted unconfirmed account:', email, 'status:', deleteRes.status)
+        } catch (e) {
+          console.warn('Could not delete unconfirmed account:', e.message)
+        }
+      }
+      return {
+        statusCode: 400,
+        headers,
+        body: JSON.stringify({
+          error: 'invalid_email',
+          message: 'That email address appears to be invalid. Please use a real email address.',
+        }),
+      }
     }
 
     return { statusCode: 200, headers, body: JSON.stringify({ success: true }) }

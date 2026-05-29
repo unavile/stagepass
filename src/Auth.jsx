@@ -102,17 +102,28 @@ export default function Auth({ onAuth, creatorOnly = false }) {
       // The Supabase database trigger handles profile + creator record creation
       // automatically when the user confirms their email — no manual insert needed
 
-      // Send welcome email with confirmation link (fire and forget)
-      fetch('/.netlify/functions/send-welcome-email', {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({
-          email: email.trim(),
-          displayName: displayName.trim(),
-          role: 'creator',
-          userId: data?.user?.id,
-        }),
-      }).catch(e => console.warn('Welcome email failed:', e))
+      // Send welcome email — await so we can catch invalid email errors
+      try {
+        const welcomeRes = await fetch('/.netlify/functions/send-welcome-email', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({
+            email: email.trim(),
+            displayName: displayName.trim(),
+            role: 'creator',
+            userId: data?.user?.id,
+          }),
+        })
+        const welcomeData = await welcomeRes.json().catch(() => ({}))
+        if (!welcomeRes.ok && welcomeData.error === 'invalid_email') {
+          // Account was deleted server-side — show error to user
+          setError(welcomeData.message || 'That email address appears to be invalid.')
+          setLoading(false)
+          return
+        }
+      } catch (e) {
+        console.warn('Welcome email failed:', e)
+      }
 
       if (data?.session) {
         // Email confirmation is OFF — upsert category via native fetch (Supabase JS hangs on Netlify)
