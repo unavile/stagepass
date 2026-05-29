@@ -99,6 +99,17 @@ export default function Auth({ onAuth, creatorOnly = false }) {
       // The Supabase database trigger handles profile + creator record creation
       // automatically when the user confirms their email — no manual insert needed
 
+      // Send welcome email (fire and forget — don't block signup on failure)
+      fetch('/.netlify/functions/send-welcome-email', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          email: email.trim(),
+          displayName: displayName.trim(),
+          role: 'creator',
+        }),
+      }).catch(e => console.warn('Welcome email failed:', e))
+
       if (data?.session) {
         // Email confirmation is OFF — user is logged in immediately
         // Update creator record with category then sign in natively

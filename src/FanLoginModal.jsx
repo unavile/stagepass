@@ -127,6 +127,17 @@ export default function FanLoginModal({ onSuccess, onClose, initialMessage }) {
           role: 'fan',
         })
 
+        // Send welcome email (fire and forget — don't block signup on failure)
+        fetch('/.netlify/functions/send-welcome-email', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({
+            email: email.trim(),
+            displayName: displayName.trim(),
+            role: 'fan',
+          }),
+        }).catch(e => console.warn('Welcome email failed:', e))
+
         if (signUpResult.access_token) {
           // Email confirmation OFF — logged in immediately
           storeSession(signUpResult)
