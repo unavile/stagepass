@@ -50,10 +50,10 @@ export default function Auth({ onAuth, creatorOnly = false }) {
 
     // ── Forgot password ──────────────────────────────────────────────────
     if (mode === 'forgot') {
-      const { error } = await supabase.auth.resetPasswordForEmail(email, {
+      const { error: resetError } = await supabase.auth.resetPasswordForEmail(email, {
         redirectTo: 'https://covetedstage.com/reset-password',
       })
-      if (error) setError(error.message)
+      if (resetError) setError(resetError.message)
       else setMessage('Check your email for a password reset link.')
       setLoading(false)
       return
@@ -129,12 +129,16 @@ export default function Auth({ onAuth, creatorOnly = false }) {
       onAuth(signInResult)
     } catch (err) {
       const msg = err.message.toLowerCase()
-      if (msg.includes('invalid login') || msg.includes('invalid credentials')) {
+      if (msg.includes('invalid login') || msg.includes('invalid credentials') ||
+          msg.includes('invalid email') || msg.includes('wrong password') ||
+          msg.includes('user not found') || msg.includes('no user')) {
         setError('Incorrect email or password.')
       } else if (msg.includes('email not confirmed')) {
         setError('Please confirm your email address before signing in. Check your inbox.')
+      } else if (msg.includes('too many requests') || msg.includes('rate limit')) {
+        setError('Too many attempts. Please wait a moment and try again.')
       } else {
-        setError(err.message)
+        setError(err.message || 'Sign in failed. Please try again.')
       }
     }
     setLoading(false)

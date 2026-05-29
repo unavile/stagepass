@@ -290,13 +290,20 @@ export default function AdminPortal() {
 
   async function handleResetPassword(c) {
     setActionLoading(true)
-    // Supabase admin password reset requires service role — use email reset instead
-    const res = await fetch(`${SB_URL}/auth/v1/recover`, {
-      method: 'POST',
-      headers: { 'Content-Type': 'application/json', 'apikey': SB_KEY },
-      body: JSON.stringify({ email: c.profiles?.email || '' })
-    })
-    setActionResult({ type: 'success', message: `Password reset email sent to ${c.profiles?.display_name}. They will receive a reset link.` })
+    setActionResult(null)
+    try {
+      const res = await fetch('/.netlify/functions/reset-password-admin', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ creatorId: c.id }),
+      })
+      const data = await res.json()
+      if (!res.ok || data.error) throw new Error(data.error || 'Failed to send reset email')
+      setActionResult({ type: 'success', message: `✓ Password reset email sent to ${c.profiles?.display_name}.` })
+    } catch (err) {
+      console.error('Reset password error:', err)
+      setActionResult({ type: 'error', message: `Failed to send reset email: ${err.message}` })
+    }
     setActionCreator(null); setActionType(null); setActionLoading(false)
   }
 
