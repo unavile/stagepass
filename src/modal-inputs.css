@@ -1,0 +1,19 @@
+/* Force dark color scheme on date/time/number inputs so browser icons are white */
+input[type="date"],
+input[type="time"],
+input[type="number"] {
+  color-scheme: dark;
+}
+
+/* Ensure date/time picker icons are visible on dark backgrounds */
+input[type="date"]::-webkit-calendar-picker-indicator,
+input[type="time"]::-webkit-calendar-picker-indicator {
+  filter: invert(1) brightness(0.8);
+  cursor: pointer;
+  opacity: 0.7;
+}
+
+input[type="date"]::-webkit-calendar-picker-indicator:hover,
+input[type="time"]::-webkit-calendar-picker-indicator:hover {
+  opacity: 1;
+}

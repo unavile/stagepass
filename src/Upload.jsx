@@ -107,10 +107,11 @@ export default function Upload({ creatorId, accentColor, onPostCreated }) {
   }
 
   const input = {
-    width: '100%', background: '#1a1a1e', border: '1px solid #ffffff20',
+    width: '100%', background: '#252530', border: '1px solid #ffffff28',
     borderRadius: 8, padding: '12px 16px', color: '#e8e2d6',
     fontFamily: "'DM Mono', monospace", fontSize: 13, outline: 'none',
     marginBottom: 12, boxSizing: 'border-box',
+    colorScheme: 'dark',
   }
 
   if (step === 'done') return (

@@ -11,10 +11,11 @@ export default function EditPostModal({ post, accentColor, accessToken, onClose,
   const ac = accentColor || '#c9a84c'
 
   const input = {
-    width: '100%', background: '#1a1a1e', border: '1px solid #ffffff20',
+    width: '100%', background: '#252530', border: '1px solid #ffffff28',
     borderRadius: 8, padding: '12px 16px', color: '#e8e2d6',
     fontFamily: "'DM Mono', monospace", fontSize: 13, outline: 'none',
     marginBottom: 12, boxSizing: 'border-box',
+    colorScheme: 'dark',
   }
 
   async function handleSave() {
@@ -60,7 +61,7 @@ export default function EditPostModal({ post, accentColor, accessToken, onClose,
       zIndex: 200, padding: 24,
     }}>
       <div style={{
-        background: '#0e0e0e', border: '1px solid #ffffff12',
+        background: '#161618', border: '1px solid #ffffff18',
         borderRadius: 14, width: '100%', maxWidth: 480,
         maxHeight: '90vh', overflowY: 'auto', padding: 32,
       }}>
