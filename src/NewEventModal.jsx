@@ -20,7 +20,8 @@ export default function NewEventModal({ creatorId, accentColor, onClose, onEvent
   const input = {
     //width: '100%', background: '#111', border: '1px solid #ffffff15',
     width: '100%', background: '#7e2c2c', border: '1px solid #ffffff15',
-    borderRadius: 8, padding: '12px 16px', color: '#e8e2d6',
+    //borderRadius: 8, padding: '12px 16px', color: '#e8e2d6',
+    borderRadius: 8, padding: '12px 16px', color: '#f0ebe0',
     fontFamily: "'DM Mono', monospace", fontSize: 13, outline: 'none',
     marginBottom: 12, boxSizing: 'border-box',
   }
@@ -116,7 +117,8 @@ export default function NewEventModal({ creatorId, accentColor, onClose, onEvent
 
   return (
     <div style={{
-      position: 'fixed', inset: 0, background: '#000000cc',
+      //position: 'fixed', inset: 0, background: '#000000cc',
+      position: 'fixed', inset: 0, background: '#736666cc',
       display: 'flex', alignItems: 'center', justifyContent: 'center',
       zIndex: 200, padding: 24
     }}>
