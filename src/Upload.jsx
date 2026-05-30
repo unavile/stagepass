@@ -1,6 +1,5 @@
 import { useState, useCallback } from 'react'
 import { useDropzone } from 'react-dropzone'
-import { supabase } from './supabaseClient'
 
 const ACCEPTED = {
   video:    { 'video/*': ['.mp4', '.mov', '.webm'] },
@@ -44,21 +43,25 @@ export default function Upload({ creatorId, accentColor, onPostCreated }) {
       const ext    = file.name.split('.').pop()
       const path   = `${creatorId}/${Date.now()}.${ext}`
 
-      const { error: uploadError } = await supabase.storage
-        .from(bucket)
-        .upload(path, file, {
-          cacheControl: '3600',
-          upsert: false,
-        })
-
-      if (uploadError) {
-        setError(uploadError.message)
+      const sbUrl = import.meta.env.VITE_SUPABASE_URL
+      const sbKey = import.meta.env.VITE_SUPABASE_ANON_KEY
+      const uploadRes = await fetch(`${sbUrl}/storage/v1/object/${bucket}/${path}`, {
+        method: 'POST',
+        headers: {
+          'apikey': sbKey,
+          'Authorization': `Bearer ${sbKey}`,
+          'x-upsert': 'false',
+          'Cache-Control': '3600',
+        },
+        body: file,
+      })
+      if (!uploadRes.ok) {
+        const uploadErr = await uploadRes.json().catch(() => ({}))
+        setError(uploadErr.message || 'Upload failed')
         setStep('form')
         return
       }
-
-      const { data: urlData } = supabase.storage.from(bucket).getPublicUrl(path)
-      fileUrl = urlData.publicUrl
+      fileUrl = `${sbUrl}/storage/v1/object/public/${bucket}/${path}`
     }
 
     // Simulate progress bar (Supabase JS v2 doesn't expose upload progress natively)
@@ -67,18 +70,29 @@ export default function Upload({ creatorId, accentColor, onPostCreated }) {
       await new Promise(r => setTimeout(r, 80))
     }
 
-    const { error: insertError } = await supabase.from('posts').insert({
-      creator_id:      creatorId,
-      title:           title.trim(),
-      description:     desc.trim(),
-      type:            type === 'document' ? 'text' : type,
-      file_url:        fileUrl,
-      thumbnail_emoji: EMOJI_MAP[type],
-      is_locked:       isLocked,
+    const sbUrl2 = import.meta.env.VITE_SUPABASE_URL
+    const sbKey2 = import.meta.env.VITE_SUPABASE_ANON_KEY
+    const insertRes = await fetch(`${sbUrl2}/rest/v1/posts`, {
+      method: 'POST',
+      headers: {
+        'apikey': sbKey2,
+        'Authorization': `Bearer ${sbKey2}`,
+        'Content-Type': 'application/json',
+        'Prefer': 'return=minimal',
+      },
+      body: JSON.stringify({
+        creator_id:      creatorId,
+        title:           title.trim(),
+        description:     desc.trim(),
+        type:            type === 'document' ? 'text' : type,
+        file_url:        fileUrl,
+        thumbnail_emoji: EMOJI_MAP[type],
+        is_locked:       isLocked,
+      }),
     })
-
-    if (insertError) {
-      setError(insertError.message)
+    if (!insertRes.ok) {
+      const insertErr = await insertRes.json().catch(() => ({}))
+      setError(insertErr.message || 'Failed to create post')
       setStep('form')
       return
     }
@@ -93,8 +107,7 @@ export default function Upload({ creatorId, accentColor, onPostCreated }) {
   }
 
   const input = {
-    //width: '100%', background: '#111', border: '1px solid #ffffff15',
-    width: '100%', background: '#7e2c2c', border: '1px solid #ffffff15',
+    width: '100%', background: '#1a1a1e', border: '1px solid #ffffff20',
     borderRadius: 8, padding: '12px 16px', color: '#e8e2d6',
     fontFamily: "'DM Mono', monospace", fontSize: 13, outline: 'none',
     marginBottom: 12, boxSizing: 'border-box',

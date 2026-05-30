@@ -11,8 +11,7 @@ export default function EditPostModal({ post, accentColor, accessToken, onClose,
   const ac = accentColor || '#c9a84c'
 
   const input = {
-    //width: '100%', background: '#111', border: '1px solid #ffffff15',
-    width: '100%', background: '#7e2c2c', border: '1px solid #ffffff15',
+    width: '100%', background: '#1a1a1e', border: '1px solid #ffffff20',
     borderRadius: 8, padding: '12px 16px', color: '#e8e2d6',
     fontFamily: "'DM Mono', monospace", fontSize: 13, outline: 'none',
     marginBottom: 12, boxSizing: 'border-box',
