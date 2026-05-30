@@ -274,18 +274,38 @@ export default function AdminPortal() {
   // ── Actions ────────────────────────────────────────────────────────────
   async function handleSuspend(c) {
     setActionLoading(true)
-    await sbFetch(`creators?id=eq.${c.id}`, { method: 'PATCH', body: JSON.stringify({ suspended: true, suspended_at: new Date().toISOString() }) })
-    setActionResult({ type: 'success', message: `${c.profiles?.display_name} has been suspended.` })
+    try {
+      const res = await fetch('/.netlify/functions/admin-update-creator', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ creatorId: c.id, updates: { suspended: true, suspended_at: new Date().toISOString() } }),
+      })
+      const data = await res.json()
+      if (!res.ok || data.error) throw new Error(data.error || 'Suspend failed')
+      setActionResult({ type: 'success', message: `${c.profiles?.display_name} has been suspended.` })
+      setCreators(prev => prev.map(x => x.id === c.id ? { ...x, suspended: true } : x))
+    } catch (err) {
+      setActionResult({ type: 'error', message: `Failed to suspend: ${err.message}` })
+    }
     setActionCreator(null); setActionType(null); setActionLoading(false)
-    loadData()
   }
 
   async function handleResume(c) {
     setActionLoading(true)
-    await sbFetch(`creators?id=eq.${c.id}`, { method: 'PATCH', body: JSON.stringify({ suspended: false, suspended_at: null }) })
-    setActionResult({ type: 'success', message: `${c.profiles?.display_name} has been reinstated.` })
+    try {
+      const res = await fetch('/.netlify/functions/admin-update-creator', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ creatorId: c.id, updates: { suspended: false, suspended_at: null } }),
+      })
+      const data = await res.json()
+      if (!res.ok || data.error) throw new Error(data.error || 'Resume failed')
+      setActionResult({ type: 'success', message: `${c.profiles?.display_name} has been reinstated.` })
+      setCreators(prev => prev.map(x => x.id === c.id ? { ...x, suspended: false } : x))
+    } catch (err) {
+      setActionResult({ type: 'error', message: `Failed to reinstate: ${err.message}` })
+    }
     setActionCreator(null); setActionType(null); setActionLoading(false)
-    loadData()
   }
 
   async function handleResetPassword(c) {

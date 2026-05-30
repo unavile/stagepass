@@ -125,6 +125,35 @@ export default function CreatorPortal() {
   // No session — show login
   if (!session) return <Auth creatorOnly={true} onAuth={handleAuthSuccess} />
 
+  // Logged in but suspended
+  if (profile.creators?.suspended) {
+    return (
+      <div style={{
+        minHeight: '100vh', background: '#09090b',
+        display: 'flex', alignItems: 'center', justifyContent: 'center',
+        flexDirection: 'column', gap: 16, padding: 24,
+        fontFamily: "'DM Mono', monospace",
+      }}>
+        <div style={{ fontSize: 32 }}>🚫</div>
+        <div style={{ color: '#f4f0e8', fontSize: 14, textAlign: 'center', maxWidth: 320 }}>
+          Your creator account has been suspended.
+        </div>
+        <div style={{ color: '#555', fontSize: 12, textAlign: 'center', maxWidth: 320, lineHeight: 1.7 }}>
+          Please contact the Coveted Stage team if you believe this is an error.
+        </div>
+        <button
+          onClick={() => { clearCreatorSession(); supabase.auth.signOut() }}
+          style={{
+            background: '#c9a84c', color: '#080808',
+            border: 'none', borderRadius: 7, padding: '10px 20px',
+            fontFamily: "'DM Mono', monospace", fontSize: 11,
+            fontWeight: 700, letterSpacing: '0.12em', cursor: 'pointer',
+          }}
+        >SIGN OUT</button>
+      </div>
+    )
+  }
+
   // Logged in but not a creator
   if (profile.role !== 'creator') {
     return (
