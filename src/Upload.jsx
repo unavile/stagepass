@@ -93,7 +93,8 @@ export default function Upload({ creatorId, accentColor, onPostCreated }) {
   }
 
   const input = {
-    width: '100%', background: '#111', border: '1px solid #ffffff15',
+    //width: '100%', background: '#111', border: '1px solid #ffffff15',
+    width: '100%', background: '#7e2c2c', border: '1px solid #ffffff15',
     borderRadius: 8, padding: '12px 16px', color: '#e8e2d6',
     fontFamily: "'DM Mono', monospace", fontSize: 13, outline: 'none',
     marginBottom: 12, boxSizing: 'border-box',
