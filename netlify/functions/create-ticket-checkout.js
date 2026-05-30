@@ -1,19 +1,15 @@
 const stripe = require('stripe')(process.env.STRIPE_SECRET_KEY)
 
 exports.handler = async (event) => {
-  if (event.httpMethod !== 'POST') {
-    return { statusCode: 405, body: 'Method not allowed' }
-  }
-
   const headers = {
     'Access-Control-Allow-Origin': '*',
     'Access-Control-Allow-Headers': 'Content-Type',
     'Content-Type': 'application/json',
+    'Access-Control-Allow-Methods': 'POST, OPTIONS',
   }
 
-  if (event.httpMethod === 'OPTIONS') {
-    return { statusCode: 200, headers, body: '' }
-  }
+  if (event.httpMethod === 'OPTIONS') return { statusCode: 200, headers, body: '' }
+  if (event.httpMethod !== 'POST') return { statusCode: 405, headers, body: 'Method not allowed' }
 
   try {
     const { eventId, eventName, ticketPrice, fanId, fanEmail } = JSON.parse(event.body)
@@ -31,7 +27,7 @@ exports.handler = async (event) => {
           currency: 'usd',
           product_data: {
             name: `Ticket: ${eventName}`,
-            description: `One-time ticket purchase for ${eventName} on StagePass`,
+            description: `One-time ticket purchase for ${eventName} on Coveted Stage`,
           },
           unit_amount: Math.round(parseFloat(ticketPrice) * 100),
         },
