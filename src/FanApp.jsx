@@ -236,7 +236,9 @@ export default function FanApp({ deepHandle }) {
     if (fanSession) {
       queries.push(
         supabase.from('subscriptions').select('id').eq('fan_id', fanSession.user.id).eq('creator_id', c.id).eq('status', 'active').maybeSingle(),
-        supabase.from('rsvps').select('event_id').eq('fan_id', fanSession.user.id)
+fetch(`${import.meta.env.VITE_SUPABASE_URL}/rest/v1/rsvps?fan_id=eq.${fanSession.user.id}&select=event_id`, {
+          headers: { 'apikey': import.meta.env.VITE_SUPABASE_ANON_KEY, 'Authorization': `Bearer ${fanSession.access_token}` }
+        }).then(r => r.json())
       )
     }
     const results = await Promise.all(queries)
@@ -284,42 +286,40 @@ export default function FanApp({ deepHandle }) {
     try {
       const sbUrl = import.meta.env.VITE_SUPABASE_URL
       const sbKey = import.meta.env.VITE_SUPABASE_ANON_KEY
-      const authHeaders = { 'apikey': sbKey, 'Authorization': `Bearer ${fanSession.access_token}` }
 
-      // 1. Fetch the stripe_subscription_id
-      const subRes = await fetch(
+      // 1. Fetch the stripe_subscription_id for this subscription
+      const res = await fetch(
         `${sbUrl}/rest/v1/subscriptions?fan_id=eq.${fanSession.user.id}&creator_id=eq.${selected.id}&status=eq.active&select=stripe_subscription_id&limit=1`,
-        { headers: authHeaders }
+        { headers: { 'apikey': sbKey, 'Authorization': `Bearer ${fanSession.access_token}` } }
       )
-      const rows = await subRes.json()
+      const rows = await res.json()
       const stripeSubId = rows?.[0]?.stripe_subscription_id
 
-      // 2. Cancel in Stripe — only if we have a valid subscription ID
+      // 2. Cancel in Stripe (via netlify function) if we have a stripe sub id
       if (stripeSubId) {
-        const cancelRes = await fetch('/.netlify/functions/cancel-subscription', {
+        await fetch('/.netlify/functions/cancel-subscription', {
           method: 'POST',
           headers: { 'Content-Type': 'application/json' },
           body: JSON.stringify({ stripeSubscriptionId: stripeSubId }),
         })
-        if (!cancelRes.ok) {
-          const cancelData = await cancelRes.json().catch(() => ({}))
-          console.warn('Stripe cancel warning:', cancelData.error)
-          // Continue with local cancellation even if Stripe call fails
-        }
       }
 
-      // 3. Update subscription status in Supabase
+      // 3. Update status in Supabase via native fetch
       await fetch(
         `${sbUrl}/rest/v1/subscriptions?fan_id=eq.${fanSession.user.id}&creator_id=eq.${selected.id}`,
         {
           method: 'PATCH',
-          headers: { ...authHeaders, 'Content-Type': 'application/json', 'Prefer': 'return=minimal' },
+          headers: {
+            'apikey': sbKey,
+            'Authorization': `Bearer ${fanSession.access_token}`,
+            'Content-Type': 'application/json',
+            'Prefer': 'return=minimal',
+          },
           body: JSON.stringify({ status: 'cancelled' }),
         }
       )
 
       // 4. Cancel RSVPs for non-free events from this creator
-      // First fetch the creator's events that are not free
       const eventsRes = await fetch(
         `${sbUrl}/rest/v1/events?creator_id=eq.${selected.id}&access_type=neq.free&select=id`,
         { headers: authHeaders }
@@ -327,13 +327,9 @@ export default function FanApp({ deepHandle }) {
       const nonFreeEvents = await eventsRes.json()
       if (Array.isArray(nonFreeEvents) && nonFreeEvents.length > 0) {
         const eventIds = nonFreeEvents.map(e => e.id)
-        // Delete RSVPs for this fan for those events
         await fetch(
           `${sbUrl}/rest/v1/rsvps?fan_id=eq.${fanSession.user.id}&event_id=in.(${eventIds.join(',')})`,
-          {
-            method: 'DELETE',
-            headers: { ...authHeaders, 'Prefer': 'return=minimal' },
-          }
+          { method: 'DELETE', headers: { ...authHeaders, 'Prefer': 'return=minimal' } }
         )
         console.log('Cancelled RSVPs for non-free events:', eventIds.length)
       }
@@ -372,20 +368,46 @@ export default function FanApp({ deepHandle }) {
     }
   }
 
-  async function handleRsvp(eventId) {
+  async function handleRsvp(eventId, eventAccessType) {
     if (!fanSession) {
       setLoginModalMessage('Sign in to RSVP to events.')
       setShowLoginModal(true)
       return
     }
+
+    // Re-check subscription status before allowing RSVP for non-free events
+    // This prevents stale state from allowing free RSVPs after unsubscribing
+    if (eventAccessType && eventAccessType !== 'free') {
+      const creatorId = selected?.id
+      if (creatorId && !subscribedIds.has(creatorId)) {
+        console.warn('RSVP blocked: fan is not subscribed to this creator')
+        return
+      }
+    }
+
+    const sbUrl = import.meta.env.VITE_SUPABASE_URL
+    const sbKey = import.meta.env.VITE_SUPABASE_ANON_KEY
+    const authHeaders = {
+      'apikey': sbKey,
+      'Authorization': `Bearer ${fanSession.access_token}`,
+      'Content-Type': 'application/json',
+      'Prefer': 'return=minimal',
+    }
+
     const already = eventRsvps[eventId]
     if (already) {
-      await supabase.from('rsvps').delete().eq('event_id', eventId).eq('fan_id', fanSession.user.id)
+      await fetch(
+        `${sbUrl}/rest/v1/rsvps?event_id=eq.${eventId}&fan_id=eq.${fanSession.user.id}`,
+        { method: 'DELETE', headers: authHeaders }
+      )
       setEventRsvps(prev => ({ ...prev, [eventId]: false }))
     } else {
-      const { error } = await supabase.from('rsvps')
-        .upsert({ event_id: eventId, fan_id: fanSession.user.id }, { onConflict: 'event_id,fan_id' })
-      if (!error) setEventRsvps(prev => ({ ...prev, [eventId]: true }))
+      const res = await fetch(`${sbUrl}/rest/v1/rsvps`, {
+        method: 'POST',
+        headers: { ...authHeaders, 'Prefer': 'resolution=merge-duplicates,return=minimal' },
+        body: JSON.stringify({ event_id: eventId, fan_id: fanSession.user.id }),
+      })
+      if (res.ok) setEventRsvps(prev => ({ ...prev, [eventId]: true }))
     }
     refetchFanEvents()
   }
@@ -533,7 +555,7 @@ export default function FanApp({ deepHandle }) {
                   </div>
                   {/* Subscriber: can always RSVP free */}
                   {subscribed && (
-                    <button onClick={() => handleRsvp(event.id)} style={{
+                    <button onClick={() => handleRsvp(event.id, event.access_type)} style={{
                       background: eventRsvps[event.id] ? 'rgba(255,255,255,0.06)' : ACCENT,
                       color: eventRsvps[event.id] ? TEXT2 : '#080808',
                       border: `1px solid ${eventRsvps[event.id] ? BORDER : 'transparent'}`,
@@ -546,7 +568,7 @@ export default function FanApp({ deepHandle }) {
                   )}
                   {/* Non-subscriber: options depend on access_type */}
                   {!subscribed && event.access_type === 'free' && (
-                    <button onClick={() => handleRsvp(event.id)} style={{
+                    <button onClick={() => handleRsvp(event.id, 'free')} style={{
                       background: eventRsvps[event.id] ? 'rgba(255,255,255,0.06)' : ACCENT,
                       color: eventRsvps[event.id] ? TEXT2 : '#080808',
                       border: `1px solid ${eventRsvps[event.id] ? BORDER : 'transparent'}`,
@@ -878,7 +900,15 @@ export default function FanApp({ deepHandle }) {
                           {event.daily_room_name && !active && (
                             <button onClick={() => setLiveEvent(rsvp.events)} style={{ background: ACCENT + '14', color: ACCENT, border: `1px solid ${ACCENT}40`, borderRadius: 7, padding: '9px 18px', fontFamily: "'DM Mono', monospace", fontSize: 11, fontWeight: 700, cursor: 'pointer', letterSpacing: '0.1em' }}>🎙 ENTER ROOM</button>
                           )}
-                          <button onClick={async () => { await supabase.from('rsvps').delete().eq('id', rsvp.id); refetchFanEvents() }}
+                          <button onClick={async () => {
+                              const sbUrl = import.meta.env.VITE_SUPABASE_URL
+                              const sbKey = import.meta.env.VITE_SUPABASE_ANON_KEY
+                              await fetch(`${sbUrl}/rest/v1/rsvps?id=eq.${rsvp.id}&fan_id=eq.${fanSession.user.id}`, {
+                                method: 'DELETE',
+                                headers: { 'apikey': sbKey, 'Authorization': `Bearer ${fanSession.access_token}`, 'Prefer': 'return=minimal' }
+                              })
+                              refetchFanEvents()
+                            }}
                             style={{ background: 'transparent', border: `1px solid ${BORDER}`, borderRadius: 7, padding: '9px 14px', color: TEXT3, fontFamily: "'DM Mono', monospace", fontSize: 10, cursor: 'pointer', letterSpacing: '0.08em' }}>CANCEL RSVP</button>
                         </div>
                       </div>
