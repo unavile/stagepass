@@ -284,40 +284,61 @@ export default function FanApp({ deepHandle }) {
     try {
       const sbUrl = import.meta.env.VITE_SUPABASE_URL
       const sbKey = import.meta.env.VITE_SUPABASE_ANON_KEY
+      const authHeaders = { 'apikey': sbKey, 'Authorization': `Bearer ${fanSession.access_token}` }
 
-      // 1. Fetch the stripe_subscription_id for this subscription
-      const res = await fetch(
+      // 1. Fetch the stripe_subscription_id
+      const subRes = await fetch(
         `${sbUrl}/rest/v1/subscriptions?fan_id=eq.${fanSession.user.id}&creator_id=eq.${selected.id}&status=eq.active&select=stripe_subscription_id&limit=1`,
-        { headers: { 'apikey': sbKey, 'Authorization': `Bearer ${fanSession.access_token}` } }
+        { headers: authHeaders }
       )
-      const rows = await res.json()
+      const rows = await subRes.json()
       const stripeSubId = rows?.[0]?.stripe_subscription_id
 
-      // 2. Cancel in Stripe (via netlify function) if we have a stripe sub id
+      // 2. Cancel in Stripe — only if we have a valid subscription ID
       if (stripeSubId) {
-        await fetch('/.netlify/functions/cancel-subscription', {
+        const cancelRes = await fetch('/.netlify/functions/cancel-subscription', {
           method: 'POST',
           headers: { 'Content-Type': 'application/json' },
           body: JSON.stringify({ stripeSubscriptionId: stripeSubId }),
         })
+        if (!cancelRes.ok) {
+          const cancelData = await cancelRes.json().catch(() => ({}))
+          console.warn('Stripe cancel warning:', cancelData.error)
+          // Continue with local cancellation even if Stripe call fails
+        }
       }
 
-      // 3. Update status in Supabase via native fetch
+      // 3. Update subscription status in Supabase
       await fetch(
         `${sbUrl}/rest/v1/subscriptions?fan_id=eq.${fanSession.user.id}&creator_id=eq.${selected.id}`,
         {
           method: 'PATCH',
-          headers: {
-            'apikey': sbKey,
-            'Authorization': `Bearer ${fanSession.access_token}`,
-            'Content-Type': 'application/json',
-            'Prefer': 'return=minimal',
-          },
+          headers: { ...authHeaders, 'Content-Type': 'application/json', 'Prefer': 'return=minimal' },
           body: JSON.stringify({ status: 'cancelled' }),
         }
       )
 
-      // 4. Update local state
+      // 4. Cancel RSVPs for non-free events from this creator
+      // First fetch the creator's events that are not free
+      const eventsRes = await fetch(
+        `${sbUrl}/rest/v1/events?creator_id=eq.${selected.id}&access_type=neq.free&select=id`,
+        { headers: authHeaders }
+      )
+      const nonFreeEvents = await eventsRes.json()
+      if (Array.isArray(nonFreeEvents) && nonFreeEvents.length > 0) {
+        const eventIds = nonFreeEvents.map(e => e.id)
+        // Delete RSVPs for this fan for those events
+        await fetch(
+          `${sbUrl}/rest/v1/rsvps?fan_id=eq.${fanSession.user.id}&event_id=in.(${eventIds.join(',')})`,
+          {
+            method: 'DELETE',
+            headers: { ...authHeaders, 'Prefer': 'return=minimal' },
+          }
+        )
+        console.log('Cancelled RSVPs for non-free events:', eventIds.length)
+      }
+
+      // 5. Update local state
       setSubscribed(false)
       setSubscribedIds(prev => { const n = new Set(prev); n.delete(selected.id); return n })
     } catch (err) {

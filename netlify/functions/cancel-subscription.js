@@ -33,6 +33,15 @@ exports.handler = async (event) => {
     }
   } catch (err) {
     console.error('Cancel subscription error:', err)
+
+    // If subscription not found in Stripe (already cancelled/deleted), treat as success
+    // so the local cancellation flow can still complete
+    if (err.code === 'resource_missing' || err.statusCode === 404 ||
+        (err.message && err.message.toLowerCase().includes('no such subscription'))) {
+      console.log('Subscription not found in Stripe — treating as already cancelled')
+      return { statusCode: 200, headers, body: JSON.stringify({ success: true, note: 'already_cancelled' }) }
+    }
+
     return {
       statusCode: 500,
       headers,
