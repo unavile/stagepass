@@ -328,23 +328,25 @@ export default function FanApp({ deepHandle }) {
       }
 
       // 3. Update status in Supabase via native fetch
-      await fetch(
-        `${sbUrl}/rest/v1/subscriptions?fan_id=eq.${fanSession.user.id}&creator_id=eq.${selected.id}`,
-        {
-          method: 'PATCH',
-          headers: {
-            'apikey': sbKey,
-            'Authorization': `Bearer ${fanSession.access_token}`,
-            'Content-Type': 'application/json',
-            'Prefer': 'return=minimal',
-          },
-          body: JSON.stringify({ status: 'cancelled' }),
-        }
-      )
+      // Use service role key via Netlify function to ensure RLS doesn't block the update
+      const cancelDbRes = await fetch('/.netlify/functions/cancel-fan-subscription', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          fanId: fanSession.user.id,
+          creatorId: selected.id,
+        }),
+      })
+      const cancelDbData = await cancelDbRes.json().catch(() => ({}))
+      if (!cancelDbRes.ok) {
+        console.error('Subscription DB cancel failed:', cancelDbData)
+      } else {
+        console.log('Subscription cancelled in DB successfully')
+      }
 
       // 4. Cancel RSVPs for non-free events from this creator
       const eventsRes = await fetch(
-        `${sbUrl}/rest/v1/events?creator_id=eq.${selected.id}&access_type=neq.free&select=id`,
+        `${sbUrl}/rest/v1/events?creator_id=eq.${selected.id}&access_type=not.eq.free&select=id`,
         { headers: authHeaders }
       )
       const nonFreeEvents = await eventsRes.json()
@@ -354,7 +356,7 @@ export default function FanApp({ deepHandle }) {
           `${sbUrl}/rest/v1/rsvps?fan_id=eq.${fanSession.user.id}&event_id=in.(${eventIds.join(',')})`,
           { method: 'DELETE', headers: { ...authHeaders, 'Prefer': 'return=minimal' } }
         )
-        console.log('Cancelled RSVPs for non-free events:', eventIds.length)
+        console.log('Cancelled RSVPs for non-free events:', eventIds.length, 'events:', eventIds)
       }
 
       // 5. Update local state
