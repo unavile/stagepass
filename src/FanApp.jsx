@@ -230,23 +230,40 @@ export default function FanApp({ deepHandle }) {
     setEventRsvps({})
     setCreatorEventFilter('current')
 
-    const queries = [
-      supabase.from('posts').select('*').eq('creator_id', c.id).order('published_at', { ascending: false }),
-    ]
+    const sbUrl = import.meta.env.VITE_SUPABASE_URL
+    const sbKey = import.meta.env.VITE_SUPABASE_ANON_KEY
+
+    // Fetch posts (public)
+    const postsRes = await fetch(
+      `${sbUrl}/rest/v1/posts?creator_id=eq.${c.id}&order=published_at.desc`,
+      { headers: { 'apikey': sbKey, 'Authorization': `Bearer ${sbKey}` } }
+    )
+    const postsData = await postsRes.json()
+    setPosts(Array.isArray(postsData) ? postsData : [])
+
     if (fanSession) {
-      queries.push(
-        supabase.from('subscriptions').select('id').eq('fan_id', fanSession.user.id).eq('creator_id', c.id).eq('status', 'active').maybeSingle(),
-fetch(`${import.meta.env.VITE_SUPABASE_URL}/rest/v1/rsvps?fan_id=eq.${fanSession.user.id}&select=event_id`, {
-          headers: { 'apikey': import.meta.env.VITE_SUPABASE_ANON_KEY, 'Authorization': `Bearer ${fanSession.access_token}` }
-        }).then(r => r.json())
+      const fanHeaders = { 'apikey': sbKey, 'Authorization': `Bearer ${fanSession.access_token}` }
+
+      // Check subscription status — use subscribedIds first (already fetched), fall back to DB
+      if (subscribedIds.has(c.id)) {
+        setSubscribed(true)
+      } else {
+        const subRes = await fetch(
+          `${sbUrl}/rest/v1/subscriptions?fan_id=eq.${fanSession.user.id}&creator_id=eq.${c.id}&status=eq.active&select=id&limit=1`,
+          { headers: fanHeaders }
+        )
+        const subData = await subRes.json()
+        setSubscribed(Array.isArray(subData) && subData.length > 0)
+      }
+
+      // Fetch RSVPs for this fan
+      const rsvpRes = await fetch(
+        `${sbUrl}/rest/v1/rsvps?fan_id=eq.${fanSession.user.id}&select=event_id`,
+        { headers: fanHeaders }
       )
-    }
-    const results = await Promise.all(queries)
-    setPosts(results[0].data || [])
-    if (fanSession) {
-      setSubscribed(!!results[1]?.data)
+      const rsvpData = await rsvpRes.json()
       const rsvpMap = {}
-      results[2]?.data?.forEach(r => { rsvpMap[r.event_id] = true })
+      if (Array.isArray(rsvpData)) rsvpData.forEach(r => { rsvpMap[r.event_id] = true })
       setEventRsvps(rsvpMap)
     }
   }
@@ -286,6 +303,12 @@ fetch(`${import.meta.env.VITE_SUPABASE_URL}/rest/v1/rsvps?fan_id=eq.${fanSession
     try {
       const sbUrl = import.meta.env.VITE_SUPABASE_URL
       const sbKey = import.meta.env.VITE_SUPABASE_ANON_KEY
+      const authHeaders = {
+        'apikey': sbKey,
+        'Authorization': `Bearer ${fanSession.access_token}`,
+        'Content-Type': 'application/json',
+        'Prefer': 'return=minimal',
+      }
 
       // 1. Fetch the stripe_subscription_id for this subscription
       const res = await fetch(
