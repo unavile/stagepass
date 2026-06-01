@@ -92,6 +92,55 @@ export default function CreatorPortal() {
     return () => subscription.unsubscribe()
   }, [])
 
+  // ── Refresh token before it expires ────────────────────────────────────────
+  useEffect(() => {
+    if (!session?.refresh_token) return
+
+    async function refreshToken() {
+      try {
+        const sbUrl = import.meta.env.VITE_SUPABASE_URL
+        const sbKey = import.meta.env.VITE_SUPABASE_ANON_KEY
+        const res = await fetch(`${sbUrl}/auth/v1/token?grant_type=refresh_token`, {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json', 'apikey': sbKey },
+          body: JSON.stringify({ refresh_token: session.refresh_token }),
+        })
+        if (!res.ok) {
+          console.warn('Token refresh failed — signing out')
+          clearCreatorSession()
+          setSession(null)
+          setProfile(null)
+          return
+        }
+        const data = await res.json()
+        if (data.access_token) {
+          const newSession = {
+            user: data.user || session.user,
+            access_token: data.access_token,
+            refresh_token: data.refresh_token || session.refresh_token,
+          }
+          storeCreatorSession(data)
+          setSession(newSession)
+          console.log('Session token refreshed successfully')
+        }
+      } catch (e) {
+        console.error('Token refresh error:', e)
+      }
+    }
+
+    // Refresh 5 minutes before expiry
+    const stored = localStorage.getItem(SESSION_KEY)
+    const tokenData = stored ? JSON.parse(stored) : null
+    const expiresAt = tokenData?.expires_at || 0
+    const nowSecs = Math.floor(Date.now() / 1000)
+    const secsUntilExpiry = expiresAt - nowSecs
+    const refreshIn = Math.max((secsUntilExpiry - 300) * 1000, 10000) // at least 10s
+
+    console.log(`Token refresh scheduled in ${Math.round(refreshIn / 1000)}s`)
+    const timer = setTimeout(refreshToken, refreshIn)
+    return () => clearTimeout(timer)
+  }, [session?.access_token])
+
   // Load profile once we have a session
   useEffect(() => {
     if (!session) { setProfile(null); setProfileLoading(false); return }
