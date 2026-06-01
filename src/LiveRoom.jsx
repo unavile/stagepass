@@ -75,6 +75,9 @@ export default function LiveRoom({ event, profile, isCreator, onLeave }) {
           showFullscreenButton: true,
           startVideoOff: !isCreatorRef.current,
           startAudioOff: !isCreatorRef.current,
+          layoutConfig: {
+            grid: { maxTilesPerPage: isCreatorRef.current ? 1 : 1 },
+          },
           theme: {
             colors: {
               accent: '#c9a84c',
@@ -92,9 +95,17 @@ export default function LiveRoom({ event, profile, isCreator, onLeave }) {
         }
       )
 
-      frame.on('joined-meeting', () => {
+      frame.on('joined-meeting', async () => {
         isJoinedRef.current = true
         setJoining(false)
+        // For creators: switch to speaker view showing only their own tile
+        if (isCreatorRef.current) {
+          try {
+            await frame.setLayoutConfig({ preset: 'single-participant' })
+          } catch {
+            // setLayoutConfig may not be available in all Daily versions — ignore
+          }
+        }
       })
 
       // Fallback: fires when local participant joins
@@ -106,7 +117,17 @@ export default function LiveRoom({ event, profile, isCreator, onLeave }) {
       })
 
       frame.on('participant-counts-updated', (e) => {
-        setParticipants(e.participants?.present || 0)
+        // Daily.co v2 uses e.participantCounts, v1 uses e.participants
+        const count = e?.participantCounts?.present ?? e?.participants?.present ?? 0
+        setParticipants(count)
+      })
+
+      // Also update count on any participant change as a fallback
+      frame.on('participant-joined', () => {
+        setParticipants(prev => prev + 1)
+      })
+      frame.on('participant-left', () => {
+        setParticipants(prev => Math.max(0, prev - 1))
       })
 
       frame.on('left-meeting', () => {
