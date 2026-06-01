@@ -98,22 +98,26 @@ export default function LiveRoom({ event, profile, isCreator, onLeave }) {
         setJoining(false)
         if (isCreatorRef.current) {
           try {
-            // Pin local participant so creator's own tile is always the featured/main view
-            const participants = frame.participants()
-            const localId = participants?.local?.session_id
-            if (localId) {
-              // Spotlight/pin the local participant as main tile
-              await frame.updateParticipant(localId, {
-                setAsPinned: true,
-              })
-            }
-            // Use spotlight layout so pinned participant fills the screen
-            await frame.setLayoutConfig({
-              preset: 'spotlight',
-            })
+            // Switch to speaker layout — active speaker fills the main panel
+            await frame.setLayoutConfig({ preset: 'default' })
           } catch (e) {
             console.warn('Layout config error:', e.message)
           }
+        }
+      })
+
+      // When a remote participant joins, make creator the active speaker
+      // by updating their own video to be visible and hiding remote tiles
+      frame.on('participant-joined', async (e) => {
+        if (!isCreatorRef.current || e?.participant?.local) return
+        try {
+          // Unsubscribe from remote participant's video so they don't appear
+          // as the main tile — creator sees only their own content
+          await frame.updateParticipant(e.participant.session_id, {
+            setSubscribedTracks: { video: false, audio: true, screenVideo: false },
+          })
+        } catch (err) {
+          console.warn('updateParticipant error:', err.message)
         }
       })
 
