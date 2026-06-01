@@ -4,7 +4,8 @@ import DailyIframe from '@daily-co/daily-js'
 export default function LiveRoom({ event, profile, isCreator, onLeave }) {
   const accentColor = '#c9a84c'
 
-  const callRef = useRef(null)
+  const containerRef = useRef(null)
+  const frameRef = useRef(null)
   const isJoinedRef = useRef(false)
   const joinStarted = useRef(false)
   const onLeaveRef = useRef(onLeave)
@@ -14,9 +15,7 @@ export default function LiveRoom({ event, profile, isCreator, onLeave }) {
 
   const [joining, setJoining] = useState(true)
   const [error, setError] = useState(null)
-  const [participants, setParticipants] = useState({})
-  const [localVideoTrack, setLocalVideoTrack] = useState(null)
-  const [localAudioTrack, setLocalAudioTrack] = useState(null)
+  const [participants, setParticipants] = useState(0)
 
   useEffect(() => { onLeaveRef.current = onLeave }, [onLeave])
   useEffect(() => { eventRef.current = event }, [event])
@@ -27,14 +26,13 @@ export default function LiveRoom({ event, profile, isCreator, onLeave }) {
     if (joinStarted.current) return
     joinStarted.current = true
 
-    // Destroy any existing call instance
     try {
       const existing = DailyIframe.getCallInstance()
       if (existing) { existing.destroy() }
     } catch {}
-    if (callRef.current) {
-      try { callRef.current.destroy() } catch {}
-      callRef.current = null
+    if (frameRef.current) {
+      try { frameRef.current.destroy() } catch {}
+      frameRef.current = null
     }
 
     try {
@@ -50,51 +48,79 @@ export default function LiveRoom({ event, profile, isCreator, onLeave }) {
       const { token, error: tokenError } = await tokenRes.json()
       if (tokenError) throw new Error(tokenError)
 
-      // Use createCallObject for full layout control (no prebuilt UI)
-      const call = DailyIframe.createCallObject({
-        audioSource: isCreatorRef.current,
-        videoSource: isCreatorRef.current,
-        dailyConfig: { experimentalChromeVideoMuteLightOff: true },
+      if (!containerRef.current) throw new Error('Container not ready')
+
+      const frame = DailyIframe.createFrame(containerRef.current, {
+        iframeStyle: {
+          width: '100%',
+          height: '100%',
+          border: 'none',
+          borderRadius: '12px',
+        },
+        showLeaveButton: false,
+        showFullscreenButton: true,
+        // Show device selector for creators so they can pick camera/mic source
+        showUserNameChangeUI: false,
+        // Fans don't need controls bar
+        showLocalVideo: isCreatorRef.current,
+        theme: {
+          colors: {
+            accent: '#c9a84c',
+            accentText: '#080808',
+            background: '#0e0e0e',
+            backgroundAccent: '#161616',
+            baseText: '#e8e2d6',
+            border: '#ffffff15',
+            mainAreaBg: '#080808',
+            mainAreaBgAccent: '#0e0e0e',
+            mainAreaText: '#e8e2d6',
+            supportiveText: '#888',
+          }
+        }
       })
-      callRef.current = call
 
-      // Track participant state
-      const updateParticipants = () => {
-        setParticipants({ ...call.participants() })
-        // Update local tracks
-        const local = call.participants()?.local
-        if (local?.tracks?.video?.persistentTrack) {
-          setLocalVideoTrack(local.tracks.video.persistentTrack)
-        }
-        if (local?.tracks?.audio?.persistentTrack) {
-          setLocalAudioTrack(local.tracks.audio.persistentTrack)
-        }
-      }
-
-      call.on('joined-meeting', () => {
+      frame.on('joined-meeting', () => {
         isJoinedRef.current = true
         setJoining(false)
-        updateParticipants()
       })
-      call.on('participant-joined', updateParticipants)
-      call.on('participant-updated', updateParticipants)
-      call.on('participant-left', updateParticipants)
-      call.on('track-started', updateParticipants)
-      call.on('left-meeting', () => {
+
+      frame.on('participant-updated', (e) => {
+        if (e.participant?.local) {
+          isJoinedRef.current = true
+          setJoining(false)
+        }
+      })
+
+      frame.on('participant-counts-updated', (e) => {
+        const count = e?.participantCounts?.present ?? e?.participants?.present ?? 0
+        setParticipants(count)
+      })
+
+      frame.on('participant-joined', () => {
+        setParticipants(prev => prev + 1)
+      })
+
+      frame.on('participant-left', () => {
+        setParticipants(prev => Math.max(0, prev - 1))
+      })
+
+      frame.on('left-meeting', () => {
         if (isJoinedRef.current) onLeaveRef.current()
       })
-      call.on('error', (e) => {
+
+      frame.on('error', (e) => {
         setError(e.errorMsg || 'Failed to join room')
         setJoining(false)
       })
 
-      await call.join({
+      await frame.join({
         url: `https://${import.meta.env.VITE_DAILY_DOMAIN}/${eventRef.current.daily_room_name}`,
         token,
         startVideoOff: !isCreatorRef.current,
         startAudioOff: !isCreatorRef.current,
       })
 
+      frameRef.current = frame
     } catch (err) {
       setError(err.message)
       setJoining(false)
@@ -102,42 +128,55 @@ export default function LiveRoom({ event, profile, isCreator, onLeave }) {
   }, [])
 
   useEffect(() => {
-    const timer = setTimeout(joinRoom, 300)
+    let attempts = 0
+    const maxAttempts = 20
+    const interval = setInterval(() => {
+      attempts++
+      if (containerRef.current) {
+        clearInterval(interval)
+        joinRoom()
+      } else if (attempts >= maxAttempts) {
+        clearInterval(interval)
+        setError('Live room container failed to mount. Please try again.')
+        setJoining(false)
+      }
+    }, 150)
+
     return () => {
-      clearTimeout(timer)
+      clearInterval(interval)
       joinStarted.current = false
       isJoinedRef.current = false
-      if (callRef.current) {
-        try { callRef.current.destroy() } catch {}
-        callRef.current = null
+      if (frameRef.current) {
+        try { frameRef.current.destroy() } catch {}
+        frameRef.current = null
       }
     }
   }, [joinRoom])
 
   async function handleLeave() {
     isJoinedRef.current = false
-    if (callRef.current) {
-      try { await callRef.current.leave() } catch {}
-      try { callRef.current.destroy() } catch {}
-      callRef.current = null
+    const frame = frameRef.current
+    if (frame) {
+      try { await frame.leave() } catch {}
+      try { frame.destroy() } catch {}
+      frameRef.current = null
     }
     onLeave()
   }
 
   async function handleEndForAll() {
     isJoinedRef.current = false
-    if (callRef.current) {
+    const frame = frameRef.current
+    if (frame) {
       try {
-        if (!joining) await callRef.current.sendAppMessage({ type: 'end-event' }, '*')
-        await callRef.current.leave()
-        callRef.current.destroy()
+        if (!joining) await frame.sendAppMessage({ type: 'end-event' }, '*')
+        await frame.leave()
+        frame.destroy()
       } catch {}
-      callRef.current = null
+      frameRef.current = null
     }
     onLeave()
   }
-
-  const participantCount = Object.keys(participants).length
 
   return (
     <div style={{
@@ -169,7 +208,7 @@ export default function LiveRoom({ event, profile, isCreator, onLeave }) {
         <div style={{ display: 'flex', alignItems: 'center', gap: 12 }}>
           {!joining && (
             <div style={{ fontFamily: "'DM Mono', monospace", fontSize: 11, color: '#555' }}>
-              👥 {participantCount} live
+              👥 {participants} live
             </div>
           )}
           {isCreator && !joining && (
@@ -189,9 +228,8 @@ export default function LiveRoom({ event, profile, isCreator, onLeave }) {
         </div>
       </div>
 
-      {/* Video area */}
-      <div style={{ flex: 1, position: 'relative', background: '#080808' }}>
-
+      {/* Room container */}
+      <div style={{ flex: 1, padding: '20px', position: 'relative' }}>
         {joining && !error && (
           <div style={{
             position: 'absolute', inset: 0,
@@ -232,116 +270,19 @@ export default function LiveRoom({ event, profile, isCreator, onLeave }) {
           </div>
         )}
 
-        {/* Creator view: show own video full screen */}
-        {!joining && !error && isCreator && (
-          <VideoTile
-            track={localVideoTrack}
-            name={profile.display_name || 'You'}
-            isLocal={true}
-            accentColor={accentColor}
-            fullScreen={true}
-          />
-        )}
-
-        {/* Fan view: show creator's video full screen */}
-        {!joining && !error && !isCreator && (
-          <div style={{ position: 'absolute', inset: 0 }}>
-            {Object.values(participants).filter(p => p.owner).map(p => (
-              <VideoTile
-                key={p.session_id}
-                track={p.tracks?.video?.persistentTrack}
-                name={p.user_name || 'Creator'}
-                isLocal={false}
-                accentColor={accentColor}
-                fullScreen={true}
-              />
-            ))}
-            {Object.values(participants).filter(p => p.owner).length === 0 && (
-              <div style={{
-                position: 'absolute', inset: 0,
-                display: 'flex', alignItems: 'center', justifyContent: 'center',
-                flexDirection: 'column', gap: 12
-              }}>
-                <div style={{ fontFamily: "'DM Serif Display', Georgia, serif", fontSize: 22, color: '#f0ebe0' }}>
-                  Waiting for creator...
-                </div>
-                <div style={{ fontFamily: "'DM Mono', monospace", fontSize: 11, color: '#444', letterSpacing: '0.15em' }}>
-                  The event will begin shortly
-                </div>
-              </div>
-            )}
-          </div>
-        )}
-
-        {/* Fan audience tiles (creator view only) — small strip at bottom */}
-        {!joining && !error && isCreator && (
-          <div style={{
-            position: 'absolute', bottom: 16, left: 16,
-            display: 'flex', gap: 8, flexWrap: 'wrap', maxWidth: '30%'
-          }}>
-            {Object.values(participants).filter(p => !p.local && !p.owner).map(p => (
-              <div key={p.session_id} style={{
-                width: 120, height: 80, borderRadius: 8,
-                background: '#161616', border: '1px solid #ffffff15',
-                display: 'flex', alignItems: 'center', justifyContent: 'center',
-                fontFamily: "'DM Mono', monospace", fontSize: 10, color: '#555'
-              }}>
-                {p.user_name || 'Fan'}
-              </div>
-            ))}
-          </div>
-        )}
-      </div>
-    </div>
-  )
-}
-
-// VideoTile renders a MediaStreamTrack into a <video> element
-function VideoTile({ track, name, isLocal, accentColor, fullScreen }) {
-  const videoRef = useRef(null)
-
-  useEffect(() => {
-    if (videoRef.current && track) {
-      videoRef.current.srcObject = new MediaStream([track])
-    }
-  }, [track])
-
-  return (
-    <div style={{
-      position: fullScreen ? 'absolute' : 'relative',
-      inset: fullScreen ? 0 : undefined,
-      background: '#111',
-      borderRadius: fullScreen ? 0 : 8,
-      overflow: 'hidden',
-      display: 'flex', alignItems: 'center', justifyContent: 'center',
-    }}>
-      {track ? (
-        <video
-          ref={videoRef}
-          autoPlay
-          muted={isLocal}
-          playsInline
-          style={{ width: '100%', height: '100%', objectFit: 'cover' }}
+        <div
+          ref={containerRef}
+          style={{
+            width: '100%',
+            height: '100%',
+            minHeight: 'calc(100vh - 100px)',
+            borderRadius: 12,
+            overflow: 'hidden',
+            opacity: joining ? 0 : 1,
+            transition: 'opacity 0.3s'
+          }}
         />
-      ) : (
-        <div style={{
-          display: 'flex', flexDirection: 'column', alignItems: 'center', gap: 12
-        }}>
-          <div style={{
-            width: 72, height: 72, borderRadius: '50%',
-            background: accentColor + '22',
-            border: `2px solid ${accentColor}44`,
-            display: 'flex', alignItems: 'center', justifyContent: 'center',
-            fontFamily: "'DM Serif Display', Georgia, serif",
-            fontSize: 28, color: accentColor
-          }}>
-            {(name || '?')[0].toUpperCase()}
-          </div>
-          <div style={{ fontFamily: "'DM Mono', monospace", fontSize: 12, color: '#888' }}>
-            {name}{isLocal ? ' (You)' : ''}
-          </div>
-        </div>
-      )}
+      </div>
     </div>
   )
 }
