@@ -6,12 +6,24 @@ export default function LiveRoom({ event, profile, isCreator, onLeave }) {
   const accentColor = '#c9a84c'
 
   const containerRef = useRef(null)
+  const hasJoined = useRef(false)
+  const frameRef = useRef(null)
   const [callFrame, setCallFrame] = useState(null)
   const [joining, setJoining] = useState(true)
   const [error, setError] = useState(null)
   const [participants, setParticipants] = useState(0)
 
   const joinRoom = useCallback(async () => {
+    // Prevent multiple simultaneous call instances
+    if (hasJoined.current) return
+    hasJoined.current = true
+
+    // Destroy any existing frame before creating a new one
+    if (frameRef.current) {
+      try { frameRef.current.destroy() } catch {}
+      frameRef.current = null
+    }
+
     try {
       // Get a meeting token
       const tokenRes = await fetch('/.netlify/functions/create-daily-token', {
@@ -62,8 +74,16 @@ export default function LiveRoom({ event, profile, isCreator, onLeave }) {
         setJoining(false)
       })
 
+      // Fallback: participant-updated fires when local participant joins
+      // This catches cases where joined-meeting doesn't fire reliably
+      frame.on('participant-updated', (e) => {
+        if (e.participant?.local) {
+          setJoining(false)
+        }
+      })
+
       frame.on('participant-counts-updated', (e) => {
-        setParticipants(e.participants.present)
+        setParticipants(e.participants?.present || 0)
       })
 
       frame.on('left-meeting', () => {
@@ -81,6 +101,7 @@ export default function LiveRoom({ event, profile, isCreator, onLeave }) {
         token,
       })
 
+      frameRef.current = frame
       setCallFrame(frame)
     } catch (err) {
       setError(err.message)
@@ -89,53 +110,61 @@ export default function LiveRoom({ event, profile, isCreator, onLeave }) {
   }, [event, profile, isCreator, onLeave, containerRef])
 
   useEffect(() => {
-    // Poll until container ref is available, then join
+    // Poll until container ref is available, then join exactly once
     let attempts = 0
     const maxAttempts = 20
-    const timer = setInterval(() => {
+    const interval = setInterval(() => {
       attempts++
       if (containerRef.current) {
-        clearInterval(timer)
+        clearInterval(interval)
         joinRoom()
       } else if (attempts >= maxAttempts) {
-        clearInterval(timer)
+        clearInterval(interval)
         setError('Live room container failed to mount. Please try again.')
         setJoining(false)
       }
     }, 150)
+
     return () => {
-      clearInterval(timer)
-      if (callFrame) {
-        callFrame.destroy()
+      clearInterval(interval)
+      hasJoined.current = false
+      if (frameRef.current) {
+        try { frameRef.current.destroy() } catch {}
+        frameRef.current = null
       }
     }
   }, [joinRoom])
 
   async function handleLeave() {
-    if (callFrame) {
+    const frame = frameRef.current || callFrame
+    if (frame) {
       try {
-        await callFrame.leave()
-        callFrame.destroy()
+        await frame.leave()
+        frame.destroy()
+        frameRef.current = null
       } catch (err) {
         console.warn('handleLeave error:', err.message)
-        try { callFrame.destroy() } catch {}
+        try { frame.destroy() } catch {}
+        frameRef.current = null
       }
     }
     onLeave()
   }
 
   async function handleEndForAll() {
-    if (callFrame) {
+    const frame = frameRef.current || callFrame
+    if (frame) {
       try {
-        // Only send app message if actively in meeting
         if (!joining) {
-          await callFrame.sendAppMessage({ type: 'end-event' }, '*')
+          await frame.sendAppMessage({ type: 'end-event' }, '*')
         }
-        await callFrame.leave()
-        callFrame.destroy()
+        await frame.leave()
+        frame.destroy()
+        frameRef.current = null
       } catch (err) {
         console.warn('handleEndForAll error:', err.message)
-        callFrame.destroy()
+        try { frame.destroy() } catch {}
+        frameRef.current = null
       }
     }
     onLeave()
