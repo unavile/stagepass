@@ -127,6 +127,8 @@ export default function FanApp({ deepHandle }) {
 
   // Live room
   const [liveEvent, setLiveEvent] = useState(null)
+  const [guestJoinEvent, setGuestJoinEvent] = useState(null) // event pending guest name entry
+  const [guestName, setGuestName] = useState('')
 
   const { events: creatorEvents } = usePublicEvents(selected?.id)
   const { events: fanEvents, loading: fanEventsLoading, refetch: refetchFanEvents } = useFanEvents(fanSession?.user?.id, fanSession?.access_token)
@@ -659,8 +661,8 @@ export default function FanApp({ deepHandle }) {
                       boxShadow: `0 4px 14px ${ACCENT}40`,
                     }}>BUY TICKET · ${event.ticket_price}</button>
                   )}
-                  {/* Join Live button */}
-                  {event.daily_room_name && eventRsvps[event.id] && isEventActive(event) && (
+                  {/* Join Live button — logged in fans with RSVP */}
+                  {event.daily_room_name && eventRsvps[event.id] && isEventActive(event) && fanSession && (
                     <button onClick={() => setLiveEvent(event)} style={{
                       background: ACCENT, color: '#080808', border: 'none',
                       borderRadius: 7, padding: '7px 14px',
@@ -668,6 +670,16 @@ export default function FanApp({ deepHandle }) {
                       fontWeight: 700, cursor: 'pointer', letterSpacing: '0.08em',
                       boxShadow: `0 4px 14px ${ACCENT}50`,
                     }}>🎙 JOIN LIVE</button>
+                  )}
+                  {/* Guest JOIN LIVE — free events, no login required */}
+                  {event.daily_room_name && event.access_type === 'free' && isEventActive(event) && !fanSession && (
+                    <button onClick={() => { setGuestJoinEvent(event); setGuestName('') }} style={{
+                      background: ACCENT, color: '#080808', border: 'none',
+                      borderRadius: 7, padding: '7px 14px',
+                      fontFamily: "'DM Mono', monospace", fontSize: 10,
+                      fontWeight: 700, cursor: 'pointer', letterSpacing: '0.08em',
+                      boxShadow: `0 4px 14px ${ACCENT}50`,
+                    }}>🎙 JOIN LIVE (FREE)</button>
                   )}
                 </div>
               </div>
@@ -1135,10 +1147,84 @@ export default function FanApp({ deepHandle }) {
       {liveEvent && (
         <LiveRoom
           event={liveEvent}
-          profile={fanProfile || { display_name: 'Guest' }}
+          profile={fanProfile || { display_name: guestName.trim() || 'Guest' }}
           isCreator={false}
           onLeave={() => setLiveEvent(null)}
         />
+      )}
+
+      {/* ── Guest name prompt before joining a free live event ── */}
+      {guestJoinEvent && (
+        <div style={{
+          position: 'fixed', inset: 0, zIndex: 500,
+          background: 'rgba(0,0,0,0.8)', backdropFilter: 'blur(8px)',
+          display: 'flex', alignItems: 'center', justifyContent: 'center', padding: 20,
+        }}>
+          <div style={{
+            width: '100%', maxWidth: 360,
+            background: 'rgba(17,17,20,0.97)', border: '1px solid rgba(255,255,255,0.08)',
+            borderRadius: 16, padding: '28px 24px',
+            boxShadow: '0 24px 80px rgba(0,0,0,0.7)',
+          }}>
+            <div style={{ fontFamily: "'DM Serif Display', Georgia, serif", fontSize: 20, color: TEXT1, marginBottom: 6 }}>
+              Join Live Event
+            </div>
+            <div style={{ fontFamily: "'DM Mono', monospace", fontSize: 11, color: TEXT3, marginBottom: 20 }}>
+              {guestJoinEvent.name}
+            </div>
+            <div style={{ fontFamily: "'DM Mono', monospace", fontSize: 10, color: TEXT3, letterSpacing: '0.1em', marginBottom: 8 }}>
+              YOUR DISPLAY NAME
+            </div>
+            <input
+              autoFocus
+              placeholder="e.g. Alex Chen"
+              value={guestName}
+              onChange={e => setGuestName(e.target.value)}
+              onKeyDown={e => {
+                if (e.key === 'Enter' && guestName.trim()) {
+                  setLiveEvent(guestJoinEvent)
+                  setGuestJoinEvent(null)
+                }
+              }}
+              style={{
+                width: '100%', background: 'rgba(9,9,11,0.6)',
+                border: '1px solid rgba(255,255,255,0.08)',
+                borderRadius: 8, padding: '11px 14px', color: TEXT1,
+                fontFamily: "'DM Mono', monospace", fontSize: 12,
+                outline: 'none', marginBottom: 16, boxSizing: 'border-box',
+              }}
+            />
+            <div style={{ fontFamily: "'DM Mono', monospace", fontSize: 10, color: TEXT3, marginBottom: 16, lineHeight: 1.7 }}>
+              Joining as a guest — your camera and mic will be off.
+              <span
+                onClick={() => { setGuestJoinEvent(null); setShowLoginModal(true) }}
+                style={{ color: ACCENT, cursor: 'pointer', marginLeft: 4 }}
+              >Sign in instead →</span>
+            </div>
+            <div style={{ display: 'flex', gap: 10 }}>
+              <button onClick={() => setGuestJoinEvent(null)} style={{
+                flex: 1, background: 'none', color: TEXT3,
+                border: '1px solid rgba(255,255,255,0.1)', borderRadius: 8, padding: '11px',
+                fontFamily: "'DM Mono', monospace", fontSize: 11, cursor: 'pointer',
+              }}>CANCEL</button>
+              <button
+                onClick={() => {
+                  if (guestName.trim()) {
+                    setLiveEvent(guestJoinEvent)
+                    setGuestJoinEvent(null)
+                  }
+                }}
+                disabled={!guestName.trim()}
+                style={{
+                  flex: 2, background: guestName.trim() ? ACCENT : ACCENT + '44',
+                  color: '#080808', border: 'none', borderRadius: 8, padding: '11px',
+                  fontFamily: "'DM Mono', monospace", fontSize: 11, fontWeight: 700,
+                  letterSpacing: '0.1em', cursor: guestName.trim() ? 'pointer' : 'not-allowed',
+                }}
+              >🎙 JOIN LIVE</button>
+            </div>
+          </div>
+        </div>
       )}
     </div>
   )
