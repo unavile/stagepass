@@ -122,6 +122,8 @@ export default function FanApp({ deepHandle }) {
   const [showLoginModal, setShowLoginModal] = useState(false)
   const [loginModalMessage, setLoginModalMessage] = useState('')
   const [pendingAction, setPendingAction] = useState(null) // 'subscribe' | 'buyTicket' | 'rsvp'
+  const [pendingEventId, setPendingEventId] = useState(null)
+  const [pendingEventAccessType, setPendingEventAccessType] = useState(null)
   const [fanEventFilter, setFanEventFilter] = useState('current')
   const [creatorEventFilter, setCreatorEventFilter] = useState('current')
 
@@ -438,6 +440,9 @@ export default function FanApp({ deepHandle }) {
   async function handleRsvp(eventId, eventAccessType) {
     if (!fanSession) {
       setLoginModalMessage('Sign in to RSVP to events.')
+      setPendingAction('rsvp')
+      setPendingEventId(eventId)
+      setPendingEventAccessType(eventAccessType)
       setShowLoginModal(true)
       return
     }
@@ -1111,7 +1116,6 @@ export default function FanApp({ deepHandle }) {
                   // ── Resume whatever the fan was trying to do before login ──
                   if (pendingAction === 'subscribe' && selected) {
                     setPendingAction(null)
-                    // Kick off checkout with the newly established session
                     try {
                       const checkoutRes = await fetch('/.netlify/functions/create-checkout', {
                         method: 'POST',
@@ -1130,8 +1134,87 @@ export default function FanApp({ deepHandle }) {
                     } catch (err) {
                       console.error('Post-login checkout error:', err)
                     }
+                  } else if (pendingAction === 'rsvp' && pendingEventId) {
+                    setPendingAction(null)
+                    const evtId = pendingEventId
+                    setPendingEventId(null)
+                    setPendingEventAccessType(null)
+                    const sbUrl = import.meta.env.VITE_SUPABASE_URL
+                    const sbKey = import.meta.env.VITE_SUPABASE_ANON_KEY
+                    try {
+                      // Execute the RSVP with the new session
+                      const rsvpRes = await fetch(`${sbUrl}/rest/v1/rsvps`, {
+                        method: 'POST',
+                        headers: {
+                          'apikey': sbKey,
+                          'Authorization': `Bearer ${tokenData.access_token}`,
+                          'Content-Type': 'application/json',
+                          'Prefer': 'resolution=merge-duplicates,return=minimal',
+                        },
+                        body: JSON.stringify({ event_id: evtId, fan_id: tokenData.user.id }),
+                      })
+                      if (rsvpRes.ok) {
+                        // Update RSVP state immediately so button shows RSVPd
+                        setEventRsvps(prev => ({ ...prev, [evtId]: true }))
+                      }
+                    } catch (err) {
+                      console.error('Post-login RSVP error:', err)
+                    }
+                    // Refresh creator page state so subscription + RSVPs are accurate
+                    if (selected) {
+                      const newSession = { user: tokenData.user, access_token: tokenData.access_token }
+                      const fanHeaders = { 'apikey': sbKey, 'Authorization': `Bearer ${tokenData.access_token}` }
+                      // Re-fetch subscription status for this creator
+                      try {
+                        const subRes = await fetch(
+                          `${sbUrl}/rest/v1/subscriptions?fan_id=eq.${tokenData.user.id}&creator_id=eq.${selected.id}&status=eq.active&select=id&limit=1`,
+                          { headers: fanHeaders }
+                        )
+                        const subData = await subRes.json()
+                        setSubscribed(Array.isArray(subData) && subData.length > 0)
+                      } catch {}
+                      // Re-fetch all RSVPs for this fan
+                      try {
+                        const rsvpRes2 = await fetch(
+                          `${sbUrl}/rest/v1/rsvps?fan_id=eq.${tokenData.user.id}&select=event_id`,
+                          { headers: fanHeaders }
+                        )
+                        const rsvpData = await rsvpRes2.json()
+                        if (Array.isArray(rsvpData)) {
+                          const rsvpMap = {}
+                          rsvpData.forEach(r => { rsvpMap[r.event_id] = true })
+                          setEventRsvps(rsvpMap)
+                        }
+                      } catch {}
+                    }
                   } else {
                     setPendingAction(null)
+                    // Even with no pending action, refresh creator page if one is selected
+                    if (selected) {
+                      const sbUrl = import.meta.env.VITE_SUPABASE_URL
+                      const sbKey = import.meta.env.VITE_SUPABASE_ANON_KEY
+                      const fanHeaders = { 'apikey': sbKey, 'Authorization': `Bearer ${tokenData.access_token}` }
+                      try {
+                        const subRes = await fetch(
+                          `${sbUrl}/rest/v1/subscriptions?fan_id=eq.${tokenData.user.id}&creator_id=eq.${selected.id}&status=eq.active&select=id&limit=1`,
+                          { headers: fanHeaders }
+                        )
+                        const subData = await subRes.json()
+                        setSubscribed(Array.isArray(subData) && subData.length > 0)
+                      } catch {}
+                      try {
+                        const rsvpRes = await fetch(
+                          `${sbUrl}/rest/v1/rsvps?fan_id=eq.${tokenData.user.id}&select=event_id`,
+                          { headers: fanHeaders }
+                        )
+                        const rsvpData = await rsvpRes.json()
+                        if (Array.isArray(rsvpData)) {
+                          const rsvpMap = {}
+                          rsvpData.forEach(r => { rsvpMap[r.event_id] = true })
+                          setEventRsvps(rsvpMap)
+                        }
+                      } catch {}
+                    }
                   }
                 }
               }
