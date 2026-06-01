@@ -62,16 +62,8 @@ export default function LiveRoom({ event, profile, isCreator, onLeave }) {
         setJoining(false)
       })
 
-      // Fallback: participant-updated fires when local participant joins
-      // This catches cases where joined-meeting doesn't fire reliably
-      frame.on('participant-updated', (e) => {
-        if (e.participant?.local) {
-          setJoining(false)
-        }
-      })
-
       frame.on('participant-counts-updated', (e) => {
-        setParticipants(e.participants?.present || 0)
+        setParticipants(e.participants.present)
       })
 
       frame.on('left-meeting', () => {
@@ -97,20 +89,22 @@ export default function LiveRoom({ event, profile, isCreator, onLeave }) {
   }, [event, profile, isCreator, onLeave, containerRef])
 
   useEffect(() => {
-    // Wait for DOM to be fully ready before Daily mounts
-    // 300ms gives React time to paint the container
-    const timer = setTimeout(() => {
+    // Poll until container ref is available, then join
+    let attempts = 0
+    const maxAttempts = 20
+    const timer = setInterval(() => {
+      attempts++
       if (containerRef.current) {
+        clearInterval(timer)
         joinRoom()
-      } else {
-        // Retry once more if container still not ready
-        setTimeout(() => {
-          if (containerRef.current) joinRoom()
-        }, 300)
+      } else if (attempts >= maxAttempts) {
+        clearInterval(timer)
+        setError('Live room container failed to mount. Please try again.')
+        setJoining(false)
       }
-    }, 300)
+    }, 150)
     return () => {
-      clearTimeout(timer)
+      clearInterval(timer)
       if (callFrame) {
         callFrame.destroy()
       }
@@ -119,17 +113,30 @@ export default function LiveRoom({ event, profile, isCreator, onLeave }) {
 
   async function handleLeave() {
     if (callFrame) {
-      await callFrame.leave()
-      callFrame.destroy()
+      try {
+        await callFrame.leave()
+        callFrame.destroy()
+      } catch (err) {
+        console.warn('handleLeave error:', err.message)
+        try { callFrame.destroy() } catch {}
+      }
     }
     onLeave()
   }
 
   async function handleEndForAll() {
     if (callFrame) {
-      await callFrame.sendAppMessage({ type: 'end-event' }, '*')
-      await callFrame.leave()
-      callFrame.destroy()
+      try {
+        // Only send app message if actively in meeting
+        if (!joining) {
+          await callFrame.sendAppMessage({ type: 'end-event' }, '*')
+        }
+        await callFrame.leave()
+        callFrame.destroy()
+      } catch (err) {
+        console.warn('handleEndForAll error:', err.message)
+        callFrame.destroy()
+      }
     }
     onLeave()
   }
