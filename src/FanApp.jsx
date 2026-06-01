@@ -131,22 +131,62 @@ export default function FanApp({ deepHandle }) {
   const { events: creatorEvents } = usePublicEvents(selected?.id)
   const { events: fanEvents, loading: fanEventsLoading, refetch: refetchFanEvents } = useFanEvents(fanSession?.user?.id, fanSession?.access_token)
 
-  // ── Fan session — always starts as guest, only activated on explicit sign-in ─
+  // ── Fan session — restore from localStorage on mount, persist across refreshes ─
   useEffect(() => {
-    // Do NOT read from localStorage on mount — always start as guest.
-    // Session is only set when the fan explicitly signs in during this session.
-    const { data: { subscription } } = supabase.auth.onAuthStateChange(async (event, session) => {
-      if (event === 'SIGNED_IN' && session) {
-        const url = `${import.meta.env.VITE_SUPABASE_URL}/rest/v1/profiles?select=*&id=eq.${session.user.id}&limit=1`
-        const res = await fetch(url, {
-          headers: {
-            'apikey': import.meta.env.VITE_SUPABASE_ANON_KEY,
-            'Authorization': `Bearer ${session.access_token}`,
-          }
-        })
+    // ── Restore session from localStorage on mount ────────────────────────────
+    async function tryRestoreSession() {
+      try {
+        const projectRef = import.meta.env.VITE_SUPABASE_URL.split('//')[1].split('.')[0]
+        const storageKey = `sb-${projectRef}-auth-token`
+        const stored = localStorage.getItem(storageKey)
+        if (!stored) return
+
+        const tokenData = JSON.parse(stored)
+        const expiresAt = tokenData.expires_at || 0
+        const nowSecs = Math.floor(Date.now() / 1000)
+
+        // Check if token is still valid
+        if (!tokenData?.access_token || !tokenData?.user || expiresAt <= nowSecs) {
+          localStorage.removeItem(storageKey)
+          return
+        }
+
+        // Reject creator accounts in fan portal
+        const sbUrl = import.meta.env.VITE_SUPABASE_URL
+        const sbKey = import.meta.env.VITE_SUPABASE_ANON_KEY
+        const res = await fetch(
+          `${sbUrl}/rest/v1/profiles?select=*&id=eq.${tokenData.user.id}&limit=1`,
+          { headers: { 'apikey': sbKey, 'Authorization': `Bearer ${tokenData.access_token}` } }
+        )
         const profiles = await res.json()
         const profile = profiles?.[0]
-        // Reject creator accounts — they belong on /creator not here
+        if (profile?.role === 'creator') {
+          console.log('Creator account detected in fan portal — clearing session')
+          localStorage.removeItem(storageKey)
+          return
+        }
+
+        // Restore the session
+        setFanSession({ user: tokenData.user, access_token: tokenData.access_token })
+        if (profile) setFanProfile(profile)
+      } catch (e) {
+        console.error('Fan session restore error:', e)
+      }
+    }
+
+    tryRestoreSession()
+
+    // Listen for sign-out
+    const { data: { subscription } } = supabase.auth.onAuthStateChange(async (event, session) => {
+      if (event === 'SIGNED_IN' && session) {
+        const sbUrl = import.meta.env.VITE_SUPABASE_URL
+        const sbKey = import.meta.env.VITE_SUPABASE_ANON_KEY
+        const res = await fetch(
+          `${sbUrl}/rest/v1/profiles?select=*&id=eq.${session.user.id}&limit=1`,
+          { headers: { 'apikey': sbKey, 'Authorization': `Bearer ${session.access_token}` } }
+        )
+        const profiles = await res.json()
+        const profile = profiles?.[0]
         if (profile?.role === 'creator') {
           console.log('Creator account detected in fan portal — ignoring session')
           await supabase.auth.signOut()

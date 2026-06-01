@@ -75,9 +75,7 @@ export default function LiveRoom({ event, profile, isCreator, onLeave }) {
           showFullscreenButton: true,
           startVideoOff: !isCreatorRef.current,
           startAudioOff: !isCreatorRef.current,
-          layoutConfig: {
-            grid: { maxTilesPerPage: isCreatorRef.current ? 1 : 1 },
-          },
+
           theme: {
             colors: {
               accent: '#c9a84c',
@@ -98,12 +96,23 @@ export default function LiveRoom({ event, profile, isCreator, onLeave }) {
       frame.on('joined-meeting', async () => {
         isJoinedRef.current = true
         setJoining(false)
-        // For creators: switch to speaker view showing only their own tile
         if (isCreatorRef.current) {
           try {
-            await frame.setLayoutConfig({ preset: 'single-participant' })
-          } catch {
-            // setLayoutConfig may not be available in all Daily versions — ignore
+            // Pin local participant so creator's own tile is always the featured/main view
+            const participants = frame.participants()
+            const localId = participants?.local?.session_id
+            if (localId) {
+              // Spotlight/pin the local participant as main tile
+              await frame.updateParticipant(localId, {
+                setAsPinned: true,
+              })
+            }
+            // Use spotlight layout so pinned participant fills the screen
+            await frame.setLayoutConfig({
+              preset: 'spotlight',
+            })
+          } catch (e) {
+            console.warn('Layout config error:', e.message)
           }
         }
       })
