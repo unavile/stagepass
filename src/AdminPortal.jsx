@@ -28,7 +28,10 @@ async function sbFetch(path, options = {}) {
       ...(options.headers || {}),
     }
   })
-  return res.json()
+  if (res.status === 204 || res.headers.get('content-length') === '0') return null
+  const text = await res.text()
+  if (!text) return null
+  try { return JSON.parse(text) } catch { return null }
 }
 
 const TABS = [
@@ -371,19 +374,27 @@ export default function AdminPortal() {
   }
 
   async function handleCancelEvent(event) {
-    await sbFetch(`events?id=eq.${event.id}`, {
-      method: 'DELETE',
-      headers: { 'Prefer': 'return=minimal' }
-    })
-    setCreatorEvents(prev => {
-      const updated = { ...prev }
-      if (updated[event.creator_id]) {
-        updated[event.creator_id] = updated[event.creator_id].filter(e => e.id !== event.id)
-      }
-      return updated
-    })
-    setCancellingEvent(null)
-    setActionResult({ type: 'success', message: `"${event.name}" has been cancelled and deleted.` })
+    try {
+      const res = await fetch('/.netlify/functions/admin-delete-record', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ table: 'events', id: event.id }),
+      })
+      const data = await res.json().catch(() => ({}))
+      if (!res.ok) throw new Error(data.error || 'Delete failed')
+      setCreatorEvents(prev => {
+        const updated = { ...prev }
+        if (updated[event.creator_id]) {
+          updated[event.creator_id] = updated[event.creator_id].filter(e => e.id !== event.id)
+        }
+        return updated
+      })
+      setCancellingEvent(null)
+      setActionResult({ type: 'success', message: `"${event.name}" has been cancelled and deleted.` })
+    } catch (err) {
+      setActionResult({ type: 'error', message: `Failed to delete event: ${err.message}` })
+      setCancellingEvent(null)
+    }
   }
 
   async function handleSaveEventEdit(eventId, creatorId, updates) {
