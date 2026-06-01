@@ -6,26 +6,34 @@ export default function LiveRoom({ event, profile, isCreator, onLeave }) {
   const accentColor = '#c9a84c'
 
   const containerRef = useRef(null)
-  const hasJoined = useRef(false)
   const frameRef = useRef(null)
-  const isJoinedRef = useRef(false)  // true only after joined-meeting fires
+  const isJoinedRef = useRef(false)
+  const joinStarted = useRef(false)
   const [callFrame, setCallFrame] = useState(null)
   const [joining, setJoining] = useState(true)
   const [error, setError] = useState(null)
   const [participants, setParticipants] = useState(0)
 
   const joinRoom = useCallback(async () => {
-    // Prevent multiple simultaneous call instances
-    if (hasJoined.current) return
-    hasJoined.current = true
-
-    // Destroy any existing frame before creating a new one
-    if (frameRef.current) {
-      try { frameRef.current.destroy() } catch {}
-      frameRef.current = null
-    }
+    // Prevent re-entry
+    if (joinStarted.current) return
+    joinStarted.current = true
 
     try {
+      // ── Destroy ANY existing Daily instance before creating a new one ────
+      // DailyIframe.getCallInstance() returns the singleton if one exists
+      try {
+        const existing = DailyIframe.getCallInstance()
+        if (existing) {
+          console.log('Destroying existing Daily instance before creating new one')
+          existing.destroy()
+        }
+      } catch {}
+      if (frameRef.current) {
+        try { frameRef.current.destroy() } catch {}
+        frameRef.current = null
+      }
+
       // Get a meeting token
       const tokenRes = await fetch('/.netlify/functions/create-daily-token', {
         method: 'POST',
@@ -90,8 +98,6 @@ export default function LiveRoom({ event, profile, isCreator, onLeave }) {
       })
 
       frame.on('left-meeting', () => {
-        // Only navigate away if the user actually joined and intentionally left
-        // Prevents premature exit during Daily.co internal setup/reconnect
         if (isJoinedRef.current) {
           onLeave()
         }
@@ -133,8 +139,9 @@ export default function LiveRoom({ event, profile, isCreator, onLeave }) {
 
     return () => {
       clearInterval(interval)
-      hasJoined.current = false
+      joinStarted.current = false
       isJoinedRef.current = false
+      // Destroy frame on unmount
       if (frameRef.current) {
         try { frameRef.current.destroy() } catch {}
         frameRef.current = null
@@ -143,18 +150,19 @@ export default function LiveRoom({ event, profile, isCreator, onLeave }) {
   }, [joinRoom])
 
   async function handleLeave() {
+    isJoinedRef.current = false
     const frame = frameRef.current || callFrame
-    isJoinedRef.current = false  // prevent left-meeting from firing onLeave again
     if (frame) {
-      try { await frame.leave(); frame.destroy() } catch {}
+      try { await frame.leave() } catch {}
+      try { frame.destroy() } catch {}
       frameRef.current = null
     }
     onLeave()
   }
 
   async function handleEndForAll() {
+    isJoinedRef.current = false
     const frame = frameRef.current || callFrame
-    isJoinedRef.current = false  // prevent left-meeting from firing onLeave again
     if (frame) {
       try {
         if (!joining) await frame.sendAppMessage({ type: 'end-event' }, '*')
