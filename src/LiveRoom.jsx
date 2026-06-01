@@ -75,7 +75,6 @@ export default function LiveRoom({ event, profile, isCreator, onLeave }) {
           showFullscreenButton: true,
           startVideoOff: !isCreatorRef.current,
           startAudioOff: !isCreatorRef.current,
-          subscribeToTracksAutomatically: false,
 
           theme: {
             colors: {
@@ -97,36 +96,9 @@ export default function LiveRoom({ event, profile, isCreator, onLeave }) {
       frame.on('joined-meeting', () => {
         isJoinedRef.current = true
         setJoining(false)
-        // When auto-subscribe is off, explicitly subscribe to all tracks
-        // for non-creator participants (fans) with video disabled
-        if (isCreatorRef.current) {
-          try {
-            const participants = frame.participants()
-            Object.values(participants).forEach(p => {
-              if (!p.local) {
-                frame.updateParticipant(p.session_id, {
-                  setSubscribedTracks: { audio: true, video: false, screenVideo: false, screenAudio: false },
-                })
-              }
-            })
-          } catch (e) {
-            console.warn('Initial participant subscribe error:', e.message)
-          }
-        }
+
       })
 
-      // When a remote participant joins, unsubscribe from their video
-      // so the creator only sees their own content in the main panel
-      frame.on('participant-joined', (e) => {
-        if (!isCreatorRef.current || e?.participant?.local) return
-        try {
-          frame.updateParticipant(e.participant.session_id, {
-            setSubscribedTracks: { audio: true, video: false, screenVideo: false, screenAudio: false },
-          })
-        } catch (err) {
-          console.warn('updateParticipant error:', err.message)
-        }
-      })
 
       // Fallback: fires when local participant joins
       frame.on('participant-updated', (e) => {
