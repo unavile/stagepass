@@ -75,6 +75,7 @@ export default function LiveRoom({ event, profile, isCreator, onLeave }) {
           showFullscreenButton: true,
           startVideoOff: !isCreatorRef.current,
           startAudioOff: !isCreatorRef.current,
+          subscribeToTracksAutomatically: true,
 
           theme: {
             colors: {
@@ -93,28 +94,18 @@ export default function LiveRoom({ event, profile, isCreator, onLeave }) {
         }
       )
 
-      frame.on('joined-meeting', async () => {
+      frame.on('joined-meeting', () => {
         isJoinedRef.current = true
         setJoining(false)
-        if (isCreatorRef.current) {
-          try {
-            // Switch to speaker layout — active speaker fills the main panel
-            await frame.setLayoutConfig({ preset: 'default' })
-          } catch (e) {
-            console.warn('Layout config error:', e.message)
-          }
-        }
       })
 
-      // When a remote participant joins, make creator the active speaker
-      // by updating their own video to be visible and hiding remote tiles
-      frame.on('participant-joined', async (e) => {
+      // When a remote participant joins, unsubscribe from their video
+      // so the creator only sees their own content in the main panel
+      frame.on('participant-joined', (e) => {
         if (!isCreatorRef.current || e?.participant?.local) return
         try {
-          // Unsubscribe from remote participant's video so they don't appear
-          // as the main tile — creator sees only their own content
-          await frame.updateParticipant(e.participant.session_id, {
-            setSubscribedTracks: { video: false, audio: true, screenVideo: false },
+          frame.updateParticipant(e.participant.session_id, {
+            setSubscribedTracks: { audio: true, video: false, screenVideo: false, screenAudio: false },
           })
         } catch (err) {
           console.warn('updateParticipant error:', err.message)
