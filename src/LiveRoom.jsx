@@ -2,55 +2,66 @@ import { useEffect, useState, useCallback, useRef } from 'react'
 import DailyIframe from '@daily-co/daily-js'
 
 export default function LiveRoom({ event, profile, isCreator, onLeave }) {
-  // accentColor must be declared before all hooks
   const accentColor = '#c9a84c'
 
   const containerRef = useRef(null)
   const frameRef = useRef(null)
   const isJoinedRef = useRef(false)
   const joinStarted = useRef(false)
+
+  // Stable refs for props — prevents useCallback from depending on unstable values
+  const onLeaveRef = useRef(onLeave)
+  const eventRef = useRef(event)
+  const profileRef = useRef(profile)
+  const isCreatorRef = useRef(isCreator)
+
   const [callFrame, setCallFrame] = useState(null)
   const [joining, setJoining] = useState(true)
   const [error, setError] = useState(null)
   const [participants, setParticipants] = useState(0)
 
+  // Keep prop refs in sync without causing re-renders or re-creating joinRoom
+  useEffect(() => { onLeaveRef.current = onLeave }, [onLeave])
+  useEffect(() => { eventRef.current = event }, [event])
+  useEffect(() => { profileRef.current = profile }, [profile])
+  useEffect(() => { isCreatorRef.current = isCreator }, [isCreator])
+
+  // joinRoom has empty deps — created once, uses refs for all external values
+  // This prevents the useEffect from re-running when props change
   const joinRoom = useCallback(async () => {
-    // Prevent re-entry
+    // Prevent re-entry (StrictMode double-invoke, polling race)
     if (joinStarted.current) return
     joinStarted.current = true
 
+    // Destroy ANY existing Daily instance before creating a new one
     try {
-      // ── Destroy ANY existing Daily instance before creating a new one ────
-      // DailyIframe.getCallInstance() returns the singleton if one exists
-      try {
-        const existing = DailyIframe.getCallInstance()
-        if (existing) {
-          console.log('Destroying existing Daily instance before creating new one')
-          existing.destroy()
-        }
-      } catch {}
-      if (frameRef.current) {
-        try { frameRef.current.destroy() } catch {}
-        frameRef.current = null
+      const existing = DailyIframe.getCallInstance()
+      if (existing) {
+        console.log('Destroying existing Daily instance')
+        existing.destroy()
       }
+    } catch {}
+    if (frameRef.current) {
+      try { frameRef.current.destroy() } catch {}
+      frameRef.current = null
+    }
 
+    try {
       // Get a meeting token
       const tokenRes = await fetch('/.netlify/functions/create-daily-token', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({
-          roomName: event.daily_room_name,
-          isOwner: isCreator,
-          userName: profile.display_name || 'Guest',
+          roomName: eventRef.current.daily_room_name,
+          isOwner: isCreatorRef.current,
+          userName: profileRef.current.display_name || 'Guest',
         })
       })
       const { token, error: tokenError } = await tokenRes.json()
       if (tokenError) throw new Error(tokenError)
 
-      // Wait for container ref to be available
       if (!containerRef.current) throw new Error('Live room container not ready')
 
-      // Create the Daily call frame inside the container div
       const frame = DailyIframe.createFrame(
         containerRef.current,
         {
@@ -62,6 +73,8 @@ export default function LiveRoom({ event, profile, isCreator, onLeave }) {
           },
           showLeaveButton: false,
           showFullscreenButton: true,
+          startVideoOff: !isCreatorRef.current,
+          startAudioOff: !isCreatorRef.current,
           theme: {
             colors: {
               accent: '#c9a84c',
@@ -84,8 +97,7 @@ export default function LiveRoom({ event, profile, isCreator, onLeave }) {
         setJoining(false)
       })
 
-      // Fallback: participant-updated fires when local participant joins
-      // This catches cases where joined-meeting doesn't fire reliably
+      // Fallback: fires when local participant joins
       frame.on('participant-updated', (e) => {
         if (e.participant?.local) {
           isJoinedRef.current = true
@@ -98,8 +110,10 @@ export default function LiveRoom({ event, profile, isCreator, onLeave }) {
       })
 
       frame.on('left-meeting', () => {
+        // Only navigate away if user actually joined — prevents premature exit
+        // during Daily.co internal setup, reconnects, or cleanup
         if (isJoinedRef.current) {
-          onLeave()
+          onLeaveRef.current()
         }
       })
 
@@ -108,10 +122,11 @@ export default function LiveRoom({ event, profile, isCreator, onLeave }) {
         setJoining(false)
       })
 
-      // Join using import.meta.env for browser env vars
       await frame.join({
-        url: `https://${import.meta.env.VITE_DAILY_DOMAIN}/${event.daily_room_name}`,
+        url: `https://${import.meta.env.VITE_DAILY_DOMAIN}/${eventRef.current.daily_room_name}`,
         token,
+        startVideoOff: !isCreatorRef.current,
+        startAudioOff: !isCreatorRef.current,
       })
 
       frameRef.current = frame
@@ -120,9 +135,10 @@ export default function LiveRoom({ event, profile, isCreator, onLeave }) {
       setError(err.message)
       setJoining(false)
     }
-  }, [event, profile, isCreator, onLeave, containerRef])
+  }, [])  // empty deps — all values accessed via refs
 
   useEffect(() => {
+    // Poll until container div is mounted, then join exactly once
     let attempts = 0
     const maxAttempts = 20
     const interval = setInterval(() => {
@@ -141,7 +157,6 @@ export default function LiveRoom({ event, profile, isCreator, onLeave }) {
       clearInterval(interval)
       joinStarted.current = false
       isJoinedRef.current = false
-      // Destroy frame on unmount
       if (frameRef.current) {
         try { frameRef.current.destroy() } catch {}
         frameRef.current = null
@@ -231,7 +246,6 @@ export default function LiveRoom({ event, profile, isCreator, onLeave }) {
       {/* Room container */}
       <div style={{ flex: 1, padding: '20px', position: 'relative' }}>
 
-        {/* Joining state */}
         {joining && !error && (
           <div style={{
             position: 'absolute', inset: 0,
@@ -245,15 +259,11 @@ export default function LiveRoom({ event, profile, isCreator, onLeave }) {
               JOINING LIVE ROOM...
             </div>
             <div style={{ width: 200, height: 2, background: '#1a1a1a', borderRadius: 999, overflow: 'hidden' }}>
-              <div style={{
-                width: '60%', height: '100%',
-                background: accentColor, borderRadius: 999,
-              }} />
+              <div style={{ width: '60%', height: '100%', background: accentColor, borderRadius: 999 }} />
             </div>
           </div>
         )}
 
-        {/* Error state */}
         {error && (
           <div style={{
             position: 'absolute', inset: 0,
@@ -278,7 +288,6 @@ export default function LiveRoom({ event, profile, isCreator, onLeave }) {
           </div>
         )}
 
-        {/* Daily iframe container */}
         <div
           ref={containerRef}
           style={{

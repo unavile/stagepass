@@ -47,9 +47,9 @@ exports.handler = async (event) => {
         room_name: roomName,
         is_owner: isOwner,
         user_name: userName,
-        enable_screenshare: true,
-        start_video_off: false,
-        start_audio_off: false,
+        enable_screenshare: isOwner,       // only creators can screenshare
+        start_video_off: !isOwner,         // fans join with camera off
+        start_audio_off: !isOwner,         // fans join with mic off
         exp: Math.floor(Date.now() / 1000) + 86400,
       }
     })
