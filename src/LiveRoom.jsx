@@ -8,6 +8,7 @@ export default function LiveRoom({ event, profile, isCreator, onLeave }) {
   const containerRef = useRef(null)
   const hasJoined = useRef(false)
   const frameRef = useRef(null)
+  const isJoinedRef = useRef(false)  // true only after joined-meeting fires
   const [callFrame, setCallFrame] = useState(null)
   const [joining, setJoining] = useState(true)
   const [error, setError] = useState(null)
@@ -71,6 +72,7 @@ export default function LiveRoom({ event, profile, isCreator, onLeave }) {
       )
 
       frame.on('joined-meeting', () => {
+        isJoinedRef.current = true
         setJoining(false)
       })
 
@@ -78,6 +80,7 @@ export default function LiveRoom({ event, profile, isCreator, onLeave }) {
       // This catches cases where joined-meeting doesn't fire reliably
       frame.on('participant-updated', (e) => {
         if (e.participant?.local) {
+          isJoinedRef.current = true
           setJoining(false)
         }
       })
@@ -87,7 +90,11 @@ export default function LiveRoom({ event, profile, isCreator, onLeave }) {
       })
 
       frame.on('left-meeting', () => {
-        onLeave()
+        // Only navigate away if the user actually joined and intentionally left
+        // Prevents premature exit during Daily.co internal setup/reconnect
+        if (isJoinedRef.current) {
+          onLeave()
+        }
       })
 
       frame.on('error', (e) => {
@@ -110,7 +117,6 @@ export default function LiveRoom({ event, profile, isCreator, onLeave }) {
   }, [event, profile, isCreator, onLeave, containerRef])
 
   useEffect(() => {
-    // Poll until container ref is available, then join exactly once
     let attempts = 0
     const maxAttempts = 20
     const interval = setInterval(() => {
@@ -128,6 +134,7 @@ export default function LiveRoom({ event, profile, isCreator, onLeave }) {
     return () => {
       clearInterval(interval)
       hasJoined.current = false
+      isJoinedRef.current = false
       if (frameRef.current) {
         try { frameRef.current.destroy() } catch {}
         frameRef.current = null
@@ -137,35 +144,24 @@ export default function LiveRoom({ event, profile, isCreator, onLeave }) {
 
   async function handleLeave() {
     const frame = frameRef.current || callFrame
+    isJoinedRef.current = false  // prevent left-meeting from firing onLeave again
     if (frame) {
-      try {
-        await frame.leave()
-        frame.destroy()
-        frameRef.current = null
-      } catch (err) {
-        console.warn('handleLeave error:', err.message)
-        try { frame.destroy() } catch {}
-        frameRef.current = null
-      }
+      try { await frame.leave(); frame.destroy() } catch {}
+      frameRef.current = null
     }
     onLeave()
   }
 
   async function handleEndForAll() {
     const frame = frameRef.current || callFrame
+    isJoinedRef.current = false  // prevent left-meeting from firing onLeave again
     if (frame) {
       try {
-        if (!joining) {
-          await frame.sendAppMessage({ type: 'end-event' }, '*')
-        }
+        if (!joining) await frame.sendAppMessage({ type: 'end-event' }, '*')
         await frame.leave()
         frame.destroy()
-        frameRef.current = null
-      } catch (err) {
-        console.warn('handleEndForAll error:', err.message)
-        try { frame.destroy() } catch {}
-        frameRef.current = null
-      }
+      } catch {}
+      frameRef.current = null
     }
     onLeave()
   }
