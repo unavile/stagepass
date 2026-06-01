@@ -19,8 +19,10 @@ async function nativeSignIn(email, password) {
     body: JSON.stringify({ email, password }),
   })
   const data = await res.json()
-  if (data.error || data.error_description) {
-    throw new Error(data.error_description || data.error || 'Sign in failed')
+  // Handle all Supabase error formats (v1: error/error_description, v2: msg/error_code)
+  if (!res.ok || data.error || data.error_description || data.msg || data.error_code) {
+    const message = data.error_description || data.msg || data.error || data.message || 'Sign in failed'
+    throw new Error(message)
   }
   return data
 }
