@@ -12,7 +12,7 @@ export function useFanEvents(fanId, accessToken) {
     setLoading(true)
     try {
       const res = await fetch(
-        `${SB_URL}/rest/v1/rsvps?fan_id=eq.${fanId}&select=id,event_id,events(id,name,description,venue,event_date,event_type,stream_url,is_free,access_type,ticket_price,creator_id,creators(profiles(display_name,handle)))&order=created_at.desc`,
+        `${SB_URL}/rest/v1/rsvps?fan_id=eq.${fanId}&select=id,event_id,events(id,name,description,venue,event_date,event_type,stream_url,is_free,access_type,ticket_price,creator_id,daily_room_name,start_time,duration_minutes,creators(profiles(display_name,handle)))&order=created_at.desc`,
         {
           headers: {
             'apikey': SB_KEY,
