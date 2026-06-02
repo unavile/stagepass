@@ -19,6 +19,7 @@ export default function Upload({ creatorId, accentColor, accessToken, onPostCrea
   const [file, setFile]         = useState(null)
   const [progress, setProgress] = useState(0)
   const [error, setError]       = useState(null)
+  const [diagMsg, setDiagMsg]   = useState('')
 
   const onDrop = useCallback(accepted => {
     if (accepted.length > 0) setFile(accepted[0])
@@ -50,8 +51,7 @@ export default function Upload({ creatorId, accentColor, accessToken, onPostCrea
         headers: {
           'apikey': sbKey,
           'Authorization': `Bearer ${accessToken || sbKey}`,
-          'Content-Type': file.type || 'application/octet-stream',
-          'x-upsert': 'true',
+          'x-upsert': 'false',
           'Cache-Control': '3600',
         },
         body: file,
@@ -140,6 +140,77 @@ export default function Upload({ creatorId, accentColor, accessToken, onPostCrea
 
   return (
     <div>
+      {/* ── DIAGNOSTIC: plain file input bypassing dropzone ── */}
+      <div style={{ background: '#1a1a1a', border: '1px solid #e84545', borderRadius: 8, padding: 12, marginBottom: 16 }}>
+        <div style={{ fontFamily: "'DM Mono', monospace", fontSize: 10, color: '#e84545', marginBottom: 8 }}>DIAGNOSTIC MODE — plain file input</div>
+        <input
+          type="file"
+          style={{ color: '#888', fontFamily: "'DM Mono', monospace", fontSize: 11, marginBottom: 8, display: 'block' }}
+          onChange={e => {
+            const f = e.target.files[0]
+            if (f) {
+              setFile(f)
+              setDiagMsg(`File selected: ${f.name} (${f.type}, ${(f.size/1024).toFixed(1)}KB)`)
+            }
+          }}
+        />
+        <div style={{ fontFamily: "'DM Mono', monospace", fontSize: 10, color: '#6dbf8a', marginBottom: 8 }}>{diagMsg}</div>
+        <button
+          onClick={async () => {
+            if (!file) { setDiagMsg('No file selected'); return }
+            setDiagMsg('Starting upload...')
+            const sbUrl = import.meta.env.VITE_SUPABASE_URL
+            const sbKey = import.meta.env.VITE_SUPABASE_ANON_KEY
+            const bucket = BUCKET_MAP[type]
+            const path = `${creatorId}/test_${Date.now()}.${file.name.split('.').pop()}`
+            setDiagMsg(`Uploading to bucket: ${bucket}, path: ${path}`)
+            setDiagMsg(`Auth token: ${accessToken ? accessToken.slice(0,20) + '...' : 'MISSING - using anon key'}`)
+            try {
+              const res = await fetch(`${sbUrl}/storage/v1/object/${bucket}/${path}`, {
+                method: 'POST',
+                headers: {
+                  'apikey': sbKey,
+                  'Authorization': `Bearer ${accessToken || sbKey}`,
+                  'x-upsert': 'true',
+                },
+                body: file,
+              })
+              const text = await res.text()
+              setDiagMsg(`Storage: ${res.status} ${res.statusText} — ${text.slice(0, 200)}`)
+              if (res.ok) {
+                const fileUrl = `${sbUrl}/storage/v1/object/public/${bucket}/${path}`
+                const ins = await fetch(`${sbUrl}/rest/v1/posts`, {
+                  method: 'POST',
+                  headers: {
+                    'apikey': sbKey,
+                    'Authorization': `Bearer ${accessToken || sbKey}`,
+                    'Content-Type': 'application/json',
+                    'Prefer': 'return=minimal',
+                  },
+                  body: JSON.stringify({
+                    creator_id: creatorId,
+                    title: title.trim() || 'Test Post',
+                    description: '',
+                    type: type === 'document' ? 'text' : type,
+                    file_url: fileUrl,
+                    thumbnail_emoji: EMOJI_MAP[type],
+                    is_locked: isLocked,
+                  }),
+                })
+                const insText = await ins.text()
+                setDiagMsg(`Post insert: ${ins.status} ${ins.statusText} — ${insText.slice(0, 200)}`)
+                if (ins.ok) { setDiagMsg('SUCCESS! Post created.'); onPostCreated?.() }
+              }
+            } catch(err) {
+              setDiagMsg(`ERROR: ${err.message}`)
+            }
+          }}
+          style={{ background: '#e84545', color: '#fff', border: 'none', borderRadius: 6, padding: '8px 16px', fontFamily: "'DM Mono', monospace", fontSize: 11, cursor: 'pointer' }}
+        >
+          TEST UPLOAD
+        </button>
+      </div>
+
       {/* Post type selector */}
       <div style={{ display: 'flex', gap: 8, marginBottom: 20 }}>
         {[
@@ -174,8 +245,8 @@ export default function Upload({ creatorId, accentColor, accessToken, onPostCrea
         onChange={e => setDesc(e.target.value)}
       />
 
-      {/* File dropzone — key={type} forces re-mount so accept filter updates with type */}
-      <div key={type}>
+      {/* File dropzone */}
+      {(
         <div {...getRootProps()} style={{
           border: `1px dashed ${isDragActive ? accentColor : '#ffffff20'}`,
           borderRadius: 10, padding: '28px', textAlign: 'center',
@@ -203,7 +274,7 @@ export default function Upload({ creatorId, accentColor, accessToken, onPostCrea
             </div>
           )}
         </div>
-      </div>
+      )}
 
       {/* Access toggle */}
       <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', background: '#111', border: '1px solid #ffffff10', borderRadius: 8, padding: '12px 16px', marginBottom: 16 }}>
