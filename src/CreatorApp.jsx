@@ -832,7 +832,7 @@ export default function CreatorApp({ session, profile, onSignOut }) {
         </div>
       )}
 
-      {showUpload && <NewPostModal creator={creator} onClose={() => setShowUpload(false)} onPostCreated={refetch} />}
+      {showUpload && <NewPostModal creator={creator} accessToken={session.access_token} onClose={() => setShowUpload(false)} onPostCreated={refetch} />}
       {editPost && <EditPostModal post={editPost} accentColor={ac} accessToken={session.access_token} onClose={() => setEditPost(null)} onSaved={() => { setEditPost(null); nativeRefetchPosts() }} />}
       {editEvent && <EditEventModal event={editEvent} accentColor={ac} accessToken={session.access_token} onClose={() => setEditEvent(null)} onSaved={() => { setEditEvent(null); nativeRefetchEvents() }} />}
       {showNewEvent && <NewEventModal creatorId={creator.id} accentColor={ac} onClose={() => setShowNewEvent(false)} onEventCreated={refetchEvents} />}

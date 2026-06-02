@@ -1,6 +1,6 @@
 import Upload from './Upload'
 
-export default function NewPostModal({ creator, onClose, onPostCreated }) {
+export default function NewPostModal({ creator, accessToken, onClose, onPostCreated }) {
   return (
     <div style={{
       position: 'fixed', inset: 0, background: '#000000cc',
@@ -19,6 +19,7 @@ export default function NewPostModal({ creator, onClose, onPostCreated }) {
         <Upload
           creatorId={creator.id}
           accentColor={creator.accentColor || '#c9a84c'}
+          accessToken={accessToken}
           onPostCreated={() => { onPostCreated?.(); onClose() }}
         />
       </div>

@@ -10,7 +10,7 @@ const ACCEPTED = {
 const BUCKET_MAP = { video: 'videos', audio: 'audio', document: 'documents' }
 const EMOJI_MAP  = { video: '🎛️', audio: '🎵', document: '📖' }
 
-export default function Upload({ creatorId, accentColor, onPostCreated }) {
+export default function Upload({ creatorId, accentColor, accessToken, onPostCreated }) {
   const [step, setStep]         = useState('form')   // 'form' | 'uploading' | 'done'
   const [type, setType]         = useState('video')
   const [title, setTitle]       = useState('')
@@ -49,7 +49,7 @@ export default function Upload({ creatorId, accentColor, onPostCreated }) {
         method: 'POST',
         headers: {
           'apikey': sbKey,
-          'Authorization': `Bearer ${sbKey}`,
+          'Authorization': `Bearer ${accessToken || sbKey}`,
           'x-upsert': 'false',
           'Cache-Control': '3600',
         },
@@ -57,7 +57,9 @@ export default function Upload({ creatorId, accentColor, onPostCreated }) {
       })
       if (!uploadRes.ok) {
         const uploadErr = await uploadRes.json().catch(() => ({}))
-        setError(uploadErr.message || 'Upload failed')
+        const errMsg = uploadErr.message || uploadErr.error || `Upload failed (${uploadRes.status})`
+        console.error('Storage upload error:', uploadRes.status, uploadErr)
+        setError(errMsg)
         setStep('form')
         return
       }
@@ -76,7 +78,7 @@ export default function Upload({ creatorId, accentColor, onPostCreated }) {
       method: 'POST',
       headers: {
         'apikey': sbKey2,
-        'Authorization': `Bearer ${sbKey2}`,
+        'Authorization': `Bearer ${accessToken || sbKey2}`,
         'Content-Type': 'application/json',
         'Prefer': 'return=minimal',
       },
