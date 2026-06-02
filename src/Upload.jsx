@@ -50,16 +50,25 @@ export default function Upload({ creatorId, accentColor, accessToken, onPostCrea
         headers: {
           'apikey': sbKey,
           'Authorization': `Bearer ${accessToken || sbKey}`,
-          'x-upsert': 'false',
+          'Content-Type': file.type || 'application/octet-stream',
+          'x-upsert': 'true',
           'Cache-Control': '3600',
         },
         body: file,
       })
       if (!uploadRes.ok) {
         const uploadErr = await uploadRes.json().catch(() => ({}))
-        const errMsg = uploadErr.message || uploadErr.error || `Upload failed (${uploadRes.status})`
+        const errMsg = uploadErr.message || uploadErr.error || `Storage upload failed (${uploadRes.status})`
         console.error('Storage upload error:', uploadRes.status, uploadErr)
         setError(errMsg)
+        setStep('form')
+        return
+      }
+      // Also check for error in response body (Supabase can return 200 with error)
+      const uploadData = await uploadRes.json().catch(() => ({}))
+      if (uploadData.error) {
+        console.error('Storage upload body error:', uploadData.error)
+        setError(uploadData.error)
         setStep('form')
         return
       }
