@@ -95,8 +95,10 @@ export default function CreatorApp({ session, profile, onSignOut }) {
     handle: '@' + (profile.handle || 'creator'),
     accentColor: profile.creators?.accent_color || '#c9a84c',
     monthlyPrice: profile.creators?.monthly_price || 5,
-      category: profile.creators?.category || 'Music',
-      customCategory: '',
+    category: profile.creators?.category || 'Music',
+    customCategory: '',
+    paidSubscribers: profile.creators?.paid_subscribers !== false, // default true
+    acceptDonations: profile.creators?.accept_donations || false,
   }
 
   const ac = creator.accentColor

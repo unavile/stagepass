@@ -342,6 +342,31 @@ export default function FanApp({ deepHandle }) {
     setSubscribeLoading(false)
   }
 
+  async function handleDonate() {
+    if (!fanSession) {
+      setLoginModalMessage('Sign in to support this creator.')
+      setShowLoginModal(true)
+      return
+    }
+    try {
+      const res = await fetch('/.netlify/functions/create-donation-checkout', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          creatorId: selected.id,
+          creatorName: selected.profiles?.display_name,
+          fanId: fanSession.user.id,
+          fanEmail: fanSession.user.email,
+        }),
+      })
+      const { url, error } = await res.json()
+      if (error) throw new Error(error)
+      window.location.href = url
+    } catch (err) {
+      console.error('Donate error:', err)
+    }
+  }
+
   async function handleUnsubscribe() {
     if (!fanSession || !selected) return
     try {
@@ -524,20 +549,35 @@ export default function FanApp({ deepHandle }) {
               {selected.profiles?.bio && <p style={{ fontSize: 12, color: TEXT2, lineHeight: 1.6, margin: '8px 0 0' }}>{selected.profiles.bio}</p>}
             </div>
           </div>
-          {subscribed ? (
-            <div style={{ display: 'flex', gap: 8 }}>
-              <div style={{ background: ACCENT + '14', color: ACCENT, border: `1px solid ${ACCENT}40`, borderRadius: 7, padding: '7px 14px', fontFamily: "'DM Mono', monospace", fontSize: 10, letterSpacing: '0.1em' }}>✓ SUBSCRIBED</div>
-              <button onClick={handleUnsubscribe} style={{ background: 'transparent', border: `1px solid ${BORDER}`, borderRadius: 7, padding: '7px 14px', color: TEXT3, fontFamily: "'DM Mono', monospace", fontSize: 10, cursor: 'pointer', letterSpacing: '0.1em' }}>CANCEL</button>
-            </div>
-          ) : (
-            <button onClick={handleSubscribe} disabled={subscribeLoading} style={{
-              width: '100%', background: ACCENT, color: '#080808',
-              border: 'none', borderRadius: 8, padding: '12px',
-              fontFamily: "'DM Mono', monospace", fontSize: 12, fontWeight: 700,
-              letterSpacing: '0.12em', cursor: subscribeLoading ? 'not-allowed' : 'pointer',
-              opacity: subscribeLoading ? 0.7 : 1, boxShadow: `0 4px 24px ${ACCENT}50`,
+          {/* Subscribe block — only shown if creator has paid_subscribers enabled */}
+          {selected?.paid_subscribers !== false && (
+            subscribed ? (
+              <div style={{ display: 'flex', gap: 8 }}>
+                <div style={{ background: ACCENT + '14', color: ACCENT, border: `1px solid ${ACCENT}40`, borderRadius: 7, padding: '7px 14px', fontFamily: "'DM Mono', monospace", fontSize: 10, letterSpacing: '0.1em' }}>✓ SUBSCRIBED</div>
+                <button onClick={handleUnsubscribe} style={{ background: 'transparent', border: `1px solid ${BORDER}`, borderRadius: 7, padding: '7px 14px', color: TEXT3, fontFamily: "'DM Mono', monospace", fontSize: 10, cursor: 'pointer', letterSpacing: '0.1em' }}>CANCEL</button>
+              </div>
+            ) : (
+              <button onClick={handleSubscribe} disabled={subscribeLoading} style={{
+                width: '100%', background: ACCENT, color: '#080808',
+                border: 'none', borderRadius: 8, padding: '12px',
+                fontFamily: "'DM Mono', monospace", fontSize: 12, fontWeight: 700,
+                letterSpacing: '0.12em', cursor: subscribeLoading ? 'not-allowed' : 'pointer',
+                opacity: subscribeLoading ? 0.7 : 1, boxShadow: `0 4px 24px ${ACCENT}50`,
+              }}>
+                {subscribeLoading ? 'REDIRECTING...' : `SUBSCRIBE · $${selected.monthly_price}/mo`}
+              </button>
+            )
+          )}
+          {/* Donate button — only shown if creator has accept_donations enabled */}
+          {selected?.accept_donations && (
+            <button onClick={handleDonate} style={{
+              width: '100%', background: 'transparent',
+              border: `1px solid ${ACCENT}55`, borderRadius: 8, padding: '11px',
+              fontFamily: "'DM Mono', monospace", fontSize: 11, fontWeight: 700,
+              letterSpacing: '0.12em', cursor: 'pointer', color: ACCENT,
+              marginTop: selected?.paid_subscribers !== false ? 8 : 0,
             }}>
-              {subscribeLoading ? 'REDIRECTING...' : `SUBSCRIBE · $${selected.monthly_price}/mo`}
+              💛 SUPPORT / DONATE
             </button>
           )}
         </div>
@@ -651,7 +691,7 @@ export default function FanApp({ deepHandle }) {
                       {eventRsvps[event.id] ? "✓ RSVP'D — CANCEL" : 'RSVP FREE'}
                     </button>
                   )}
-                  {!subscribed && event.access_type === 'subscribers' && (
+                  {!subscribed && event.access_type === 'subscribers' && selected?.paid_subscribers !== false && (
                     <button onClick={handleSubscribe} style={{
                       background: ACCENT + '14', color: ACCENT, border: `1px solid ${ACCENT}40`,
                       borderRadius: 7, padding: '7px 14px', fontFamily: "'DM Mono', monospace",

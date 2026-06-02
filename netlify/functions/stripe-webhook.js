@@ -66,6 +66,58 @@ exports.handler = async (event) => {
     const session = stripeEvent.data.object
     console.log('Session metadata:', JSON.stringify(session.metadata))
 
+    // ── Donation ───────────────────────────────────────────────────────────
+    if (session.metadata?.type === 'donation') {
+      const { creator_id, fan_id, creator_name } = session.metadata
+      const amountDollars = (session.amount_total / 100).toFixed(2)
+      console.log('Donation received — creator:', creator_id, 'amount: $' + amountDollars)
+
+      // Send thank-you email to fan via Resend
+      try {
+        const fanEmail = session.customer_details?.email
+        if (fanEmail && process.env.RESEND_API_KEY) {
+          await fetch('https://api.resend.com/emails', {
+            method: 'POST',
+            headers: {
+              'Authorization': `Bearer ${process.env.RESEND_API_KEY}`,
+              'Content-Type': 'application/json',
+            },
+            body: JSON.stringify({
+              from: 'Coveted Stage <hello@covetedstage.com>',
+              to: fanEmail,
+              subject: `Thank you for supporting ${creator_name}!`,
+              html: `
+                <div style="font-family: Georgia, serif; max-width: 520px; margin: 0 auto; padding: 40px 24px; background: #09090b; color: #f4f0e8;">
+                  <div style="font-size: 28px; color: #c9a84c; margin-bottom: 8px;">Coveted Stage</div>
+                  <hr style="border: none; border-top: 1px solid #333; margin: 20px 0;" />
+                  <h2 style="font-size: 22px; color: #f4f0e8; margin-bottom: 12px;">Thank you for your support! 💛</h2>
+                  <p style="color: #9a9690; line-height: 1.7;">
+                    Your donation of <strong style="color: #c9a84c;">$${amountDollars}</strong> to
+                    <strong style="color: #f4f0e8;">${creator_name}</strong> has been received.
+                    Your generosity helps creators like ${creator_name} continue making amazing content.
+                  </p>
+                  <p style="color: #9a9690; line-height: 1.7;">
+                    You can keep following ${creator_name} and discover more creators at
+                    <a href="https://covetedstage.com" style="color: #c9a84c;">covetedstage.com</a>.
+                  </p>
+                  <hr style="border: none; border-top: 1px solid #333; margin: 28px 0;" />
+                  <div style="font-size: 11px; color: #555; font-family: monospace; letter-spacing: 0.1em;">
+                    COVETED STAGE · THE STAGE IS YOURS
+                  </div>
+                </div>
+              `,
+            }),
+          })
+          console.log('Donation thank-you email sent to:', fanEmail)
+        }
+      } catch (emailErr) {
+        console.error('Donation email error:', emailErr.message)
+        // Don't fail the webhook if email fails
+      }
+
+      return { statusCode: 200, body: JSON.stringify({ received: true }) }
+    }
+
     // ── Ticket purchase ────────────────────────────────────────────────────
     if (session.metadata?.type === 'ticket_purchase') {
       const { event_id, fan_id } = session.metadata

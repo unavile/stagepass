@@ -28,6 +28,10 @@ export default function EditProfileModal({ profile, creator, accessToken, onClos
   const isCustom = creator.category && !KNOWN.includes(creator.category)
   const [category, setCategory] = useState(isCustom ? 'Other' : (creator.category || 'Music'))
   const [customCategory, setCustomCategory] = useState(isCustom ? (creator.category || '') : '')
+  const [paidSubscribers, setPaidSubscribers] = useState(
+    creator.paidSubscribers !== undefined ? creator.paidSubscribers : true
+  )
+  const [acceptDonations, setAcceptDonations] = useState(creator.acceptDonations || false)
   const [avatarFile, setAvatarFile] = useState(null)
   const [avatarPreview, setAvatarPreview] = useState(profile.avatar_url || null)
   const [loading, setLoading] = useState(false)
@@ -105,6 +109,8 @@ export default function EditProfileModal({ profile, creator, accessToken, onClos
             monthly_price: parseFloat(monthlyPrice) || 0,
             accent_color: accentColor,
             category: category === 'Other' ? (customCategory.trim() || 'Other') : category,
+            paid_subscribers: paidSubscribers,
+            accept_donations: acceptDonations,
           }),
         }),
       ])
@@ -207,6 +213,52 @@ export default function EditProfileModal({ profile, creator, accessToken, onClos
             <div key={c.value} onClick={() => setAccentColor(c.value)} style={{ width: 36, height: 36, borderRadius: '50%', background: c.value, cursor: 'pointer', border: accentColor === c.value ? '3px solid #fff' : '3px solid transparent', transition: 'border 0.15s', boxSizing: 'border-box' }} title={c.label} />
           ))}
         </div>
+
+
+        {/* Monetisation toggles */}
+        <div style={{ fontFamily: "'DM Mono', monospace", fontSize: 10, color: '#555', letterSpacing: '0.15em', marginBottom: 12 }}>MONETISATION</div>
+        {[
+          {
+            key: 'paidSubscribers',
+            label: 'Paid Subscribers',
+            sub: 'Fans pay a monthly fee to subscribe. Turn off to make all content free.',
+            value: paidSubscribers,
+            set: setPaidSubscribers,
+            defaultOn: true,
+          },
+          {
+            key: 'acceptDonations',
+            label: 'Accept Donations',
+            sub: 'Show a "Support / Donate" button on your page for one-time fan donations.',
+            value: acceptDonations,
+            set: setAcceptDonations,
+            defaultOn: false,
+          },
+        ].map(({ key, label, sub, value, set }) => (
+          <div key={key} onClick={() => set(!value)} style={{
+            display: 'flex', alignItems: 'center', justifyContent: 'space-between',
+            background: '#111', border: `1px solid ${value ? accentColor + '44' : '#ffffff12'}`,
+            borderRadius: 9, padding: '12px 14px', cursor: 'pointer',
+            marginBottom: 10, transition: 'all 0.15s',
+          }}>
+            <div style={{ flex: 1, marginRight: 12 }}>
+              <div style={{ fontSize: 13, color: value ? '#f0ebe0' : '#888', fontWeight: value ? 500 : 400 }}>{label}</div>
+              <div style={{ fontFamily: "'DM Mono', monospace", fontSize: 10, color: '#444', marginTop: 3, lineHeight: 1.5 }}>{sub}</div>
+            </div>
+            <div style={{
+              width: 40, height: 22, borderRadius: 11, flexShrink: 0,
+              background: value ? accentColor : '#2a2a2a',
+              position: 'relative', transition: 'background 0.2s',
+            }}>
+              <div style={{
+                width: 16, height: 16, borderRadius: '50%', background: '#fff',
+                position: 'absolute', top: 3,
+                left: value ? 21 : 3, transition: 'left 0.2s',
+              }}/>
+            </div>
+          </div>
+        ))}
+        <div style={{ marginBottom: 12 }} />
 
         {/* Preview */}
         <div style={{ background: '#111', borderRadius: 8, padding: '14px 16px', marginBottom: 16, border: `1px solid ${accentColor}33` }}>
