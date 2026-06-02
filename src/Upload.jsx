@@ -36,78 +36,121 @@ export default function Upload({ creatorId, accentColor, accessToken, onPostCrea
     setError(null)
     setStep('uploading')
 
+    const sbUrl = import.meta.env.VITE_SUPABASE_URL
+    const sbKey = import.meta.env.VITE_SUPABASE_ANON_KEY
+    const authToken = accessToken || sbKey
+
+    console.log('[Upload] Starting upload — type:', type, 'file:', file.name, 'size:', file.size)
+    console.log('[Upload] accessToken present:', !!accessToken)
+    console.log('[Upload] creatorId:', creatorId)
+
     let fileUrl = null
 
-    if (file) {
-      const bucket = BUCKET_MAP[type]
-      const ext    = file.name.split('.').pop()
-      const path   = `${creatorId}/${Date.now()}.${ext}`
+    // ── Storage upload ──────────────────────────────────────────────────────
+    const bucket = BUCKET_MAP[type]
+    const ext    = file.name.split('.').pop()
+    const path   = `${creatorId}/${Date.now()}.${ext}`
+    const storageUrl = `${sbUrl}/storage/v1/object/${bucket}/${path}`
 
-      const sbUrl = import.meta.env.VITE_SUPABASE_URL
-      const sbKey = import.meta.env.VITE_SUPABASE_ANON_KEY
-      const uploadRes = await fetch(`${sbUrl}/storage/v1/object/${bucket}/${path}`, {
+    console.log('[Upload] Storage URL:', storageUrl)
+    console.log('[Upload] Bucket:', bucket, '| Content-Type:', file.type || 'application/octet-stream')
+
+    let uploadRes
+    try {
+      uploadRes = await fetch(storageUrl, {
         method: 'POST',
         headers: {
           'apikey': sbKey,
-          'Authorization': `Bearer ${accessToken || sbKey}`,
+          'Authorization': `Bearer ${authToken}`,
           'Content-Type': file.type || 'application/octet-stream',
           'x-upsert': 'true',
           'Cache-Control': '3600',
         },
         body: file,
       })
-      if (!uploadRes.ok) {
-        const uploadErr = await uploadRes.json().catch(() => ({}))
-        const errMsg = uploadErr.message || uploadErr.error || `Storage upload failed (${uploadRes.status})`
-        console.error('Storage upload error:', uploadRes.status, uploadErr)
-        setError(errMsg)
-        setStep('form')
-        return
-      }
-      // Also check for error in response body (Supabase can return 200 with error)
-      const uploadData = await uploadRes.json().catch(() => ({}))
+    } catch (fetchErr) {
+      console.error('[Upload] Fetch threw:', fetchErr)
+      setError('Network error during upload: ' + fetchErr.message)
+      setStep('form')
+      return
+    }
+
+    console.log('[Upload] Storage response status:', uploadRes.status, uploadRes.statusText)
+    const uploadBody = await uploadRes.text()
+    console.log('[Upload] Storage response body:', uploadBody)
+
+    if (!uploadRes.ok) {
+      let errMsg = `Storage upload failed (${uploadRes.status})`
+      try { errMsg = JSON.parse(uploadBody)?.message || JSON.parse(uploadBody)?.error || errMsg } catch {}
+      setError(errMsg)
+      setStep('form')
+      return
+    }
+
+    // Check for error in response body even on 200
+    try {
+      const uploadData = JSON.parse(uploadBody)
       if (uploadData.error) {
-        console.error('Storage upload body error:', uploadData.error)
+        console.error('[Upload] Storage body error:', uploadData.error)
         setError(uploadData.error)
         setStep('form')
         return
       }
-      fileUrl = `${sbUrl}/storage/v1/object/public/${bucket}/${path}`
-    }
+    } catch {}
 
-    // Simulate progress bar (Supabase JS v2 doesn't expose upload progress natively)
+    fileUrl = `${sbUrl}/storage/v1/object/public/${bucket}/${path}`
+    console.log('[Upload] File URL:', fileUrl)
+
+    // ── Progress bar ────────────────────────────────────────────────────────
     for (let i = 0; i <= 100; i += 10) {
       setProgress(i)
       await new Promise(r => setTimeout(r, 80))
     }
 
-    const sbUrl2 = import.meta.env.VITE_SUPABASE_URL
-    const sbKey2 = import.meta.env.VITE_SUPABASE_ANON_KEY
-    const insertRes = await fetch(`${sbUrl2}/rest/v1/posts`, {
-      method: 'POST',
-      headers: {
-        'apikey': sbKey2,
-        'Authorization': `Bearer ${accessToken || sbKey2}`,
-        'Content-Type': 'application/json',
-        'Prefer': 'return=minimal',
-      },
-      body: JSON.stringify({
-        creator_id:      creatorId,
-        title:           title.trim(),
-        description:     desc.trim(),
-        type:            type === 'document' ? 'text' : type,
-        file_url:        fileUrl,
-        thumbnail_emoji: EMOJI_MAP[type],
-        is_locked:       isLocked,
-      }),
-    })
-    if (!insertRes.ok) {
-      const insertErr = await insertRes.json().catch(() => ({}))
-      setError(insertErr.message || 'Failed to create post')
+    // ── Post insert ─────────────────────────────────────────────────────────
+    const postPayload = {
+      creator_id:      creatorId,
+      title:           title.trim(),
+      description:     desc.trim(),
+      type:            type === 'document' ? 'text' : type,
+      file_url:        fileUrl,
+      thumbnail_emoji: EMOJI_MAP[type],
+      is_locked:       isLocked,
+    }
+    console.log('[Upload] Inserting post:', postPayload)
+
+    let insertRes
+    try {
+      insertRes = await fetch(`${sbUrl}/rest/v1/posts`, {
+        method: 'POST',
+        headers: {
+          'apikey': sbKey,
+          'Authorization': `Bearer ${authToken}`,
+          'Content-Type': 'application/json',
+          'Prefer': 'return=minimal',
+        },
+        body: JSON.stringify(postPayload),
+      })
+    } catch (fetchErr) {
+      console.error('[Upload] Post insert fetch threw:', fetchErr)
+      setError('Network error during post creation: ' + fetchErr.message)
       setStep('form')
       return
     }
 
+    console.log('[Upload] Post insert status:', insertRes.status, insertRes.statusText)
+    const insertBody = await insertRes.text()
+    console.log('[Upload] Post insert body:', insertBody)
+
+    if (!insertRes.ok) {
+      let errMsg = `Failed to create post (${insertRes.status})`
+      try { errMsg = JSON.parse(insertBody)?.message || JSON.parse(insertBody)?.error || errMsg } catch {}
+      setError(errMsg)
+      setStep('form')
+      return
+    }
+
+    console.log('[Upload] Post created successfully!')
     setStep('done')
     onPostCreated?.()
   }
