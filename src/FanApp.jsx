@@ -129,7 +129,10 @@ export default function FanApp({ deepHandle }) {
 
   // Live room
   const [liveEvent, setLiveEvent] = useState(null)
-  const [guestJoinEvent, setGuestJoinEvent] = useState(null) // event pending guest name entry
+  const [guestJoinEvent, setGuestJoinEvent] = useState(null)
+  const [showDonateModal, setShowDonateModal] = useState(false)
+  const [donateAmount, setDonateAmount] = useState('10')
+  const [donateLoading, setDonateLoading] = useState(false) // event pending guest name entry
   const [guestName, setGuestName] = useState('')
 
   const { events: creatorEvents } = usePublicEvents(selected?.id)
@@ -348,6 +351,14 @@ export default function FanApp({ deepHandle }) {
       setShowLoginModal(true)
       return
     }
+    setDonateAmount('10')
+    setShowDonateModal(true)
+  }
+
+  async function submitDonation() {
+    const amount = parseFloat(donateAmount)
+    if (!amount || amount < 1) return
+    setDonateLoading(true)
     try {
       const res = await fetch('/.netlify/functions/create-donation-checkout', {
         method: 'POST',
@@ -357,6 +368,7 @@ export default function FanApp({ deepHandle }) {
           creatorName: selected.profiles?.display_name,
           fanId: fanSession.user.id,
           fanEmail: fanSession.user.email,
+          amountCents: Math.round(amount * 100),
         }),
       })
       const { url, error } = await res.json()
@@ -364,6 +376,7 @@ export default function FanApp({ deepHandle }) {
       window.location.href = url
     } catch (err) {
       console.error('Donate error:', err)
+      setDonateLoading(false)
     }
   }
 
@@ -1274,6 +1287,89 @@ export default function FanApp({ deepHandle }) {
           isCreator={false}
           onLeave={() => setLiveEvent(null)}
         />
+      )}
+
+      {/* ── Donation amount modal ── */}
+      {showDonateModal && selected && (
+        <div style={{
+          position: 'fixed', inset: 0, zIndex: 500,
+          background: 'rgba(0,0,0,0.8)', backdropFilter: 'blur(8px)',
+          display: 'flex', alignItems: 'center', justifyContent: 'center', padding: 20,
+        }}>
+          <div style={{
+            width: '100%', maxWidth: 360,
+            background: 'rgba(17,17,20,0.97)',
+            border: '1px solid rgba(255,255,255,0.08)',
+            borderRadius: 16, padding: '28px 24px',
+            boxShadow: '0 24px 80px rgba(0,0,0,0.7)',
+          }}>
+            <div style={{ fontFamily: "'DM Serif Display', Georgia, serif", fontSize: 20, color: TEXT1, marginBottom: 4 }}>
+              Support {selected.profiles?.display_name}
+            </div>
+            <div style={{ fontFamily: "'DM Mono', monospace", fontSize: 10, color: TEXT3, marginBottom: 24, letterSpacing: '0.1em' }}>
+              ONE-TIME DONATION
+            </div>
+            {/* Quick amount buttons */}
+            <div style={{ display: 'flex', gap: 8, marginBottom: 16 }}>
+              {['5', '10', '25', '50'].map(amt => (
+                <button key={amt} onClick={() => setDonateAmount(amt)} style={{
+                  flex: 1, padding: '10px 0',
+                  background: donateAmount === amt ? ACCENT + '22' : 'rgba(9,9,11,0.6)',
+                  border: `1px solid ${donateAmount === amt ? ACCENT + '88' : 'rgba(255,255,255,0.08)'}`,
+                  borderRadius: 8, color: donateAmount === amt ? ACCENT : TEXT2,
+                  fontFamily: "'DM Mono', monospace", fontSize: 12,
+                  fontWeight: donateAmount === amt ? 700 : 400,
+                  cursor: 'pointer', letterSpacing: '0.05em',
+                }}>
+                  ${amt}
+                </button>
+              ))}
+            </div>
+            {/* Custom amount input */}
+            <div style={{ fontFamily: "'DM Mono', monospace", fontSize: 10, color: TEXT3, letterSpacing: '0.1em', marginBottom: 8 }}>
+              CUSTOM AMOUNT
+            </div>
+            <div style={{ display: 'flex', alignItems: 'center', gap: 8, marginBottom: 20 }}>
+              <span style={{ color: TEXT3, fontFamily: "'DM Mono', monospace", fontSize: 16 }}>$</span>
+              <input
+                type="number"
+                min="1"
+                step="1"
+                value={donateAmount}
+                onChange={e => setDonateAmount(e.target.value)}
+                onKeyDown={e => e.key === 'Enter' && submitDonation()}
+                style={{
+                  flex: 1, background: 'rgba(9,9,11,0.6)',
+                  border: '1px solid rgba(255,255,255,0.08)',
+                  borderRadius: 8, padding: '11px 14px', color: TEXT1,
+                  fontFamily: "'DM Mono', monospace", fontSize: 14,
+                  outline: 'none', boxSizing: 'border-box',
+                }}
+              />
+            </div>
+            <div style={{ display: 'flex', gap: 10 }}>
+              <button onClick={() => setShowDonateModal(false)} style={{
+                flex: 1, background: 'none', color: TEXT3,
+                border: '1px solid rgba(255,255,255,0.1)', borderRadius: 8, padding: '11px',
+                fontFamily: "'DM Mono', monospace", fontSize: 11, cursor: 'pointer',
+              }}>CANCEL</button>
+              <button
+                onClick={submitDonation}
+                disabled={donateLoading || !parseFloat(donateAmount) || parseFloat(donateAmount) < 1}
+                style={{
+                  flex: 2, background: ACCENT, color: '#080808',
+                  border: 'none', borderRadius: 8, padding: '11px',
+                  fontFamily: "'DM Mono', monospace", fontSize: 11, fontWeight: 700,
+                  letterSpacing: '0.1em',
+                  cursor: (donateLoading || !parseFloat(donateAmount)) ? 'not-allowed' : 'pointer',
+                  opacity: (donateLoading || !parseFloat(donateAmount)) ? 0.6 : 1,
+                }}
+              >
+                {donateLoading ? 'REDIRECTING...' : `💛 DONATE $${parseFloat(donateAmount) || 0}`}
+              </button>
+            </div>
+          </div>
+        </div>
       )}
 
       {/* ── Guest name prompt before joining a free live event ── */}

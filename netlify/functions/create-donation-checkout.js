@@ -1,6 +1,6 @@
 // netlify/functions/create-donation-checkout.js
-// Creates a Stripe checkout for a one-time donation to a creator
-// Sends a thank-you email to the fan via Resend after payment
+// Creates a Stripe checkout for a fan-specified one-time donation to a creator
+// Sends a thank-you email to the fan via the stripe-webhook on completion
 
 const Stripe = require('stripe')
 
@@ -15,25 +15,30 @@ exports.handler = async (event) => {
   if (event.httpMethod !== 'POST') return { statusCode: 405, headers, body: 'Method not allowed' }
 
   try {
-    const { creatorId, creatorName, fanId, fanEmail } = JSON.parse(event.body)
+    const { creatorId, creatorName, fanId, fanEmail, amountCents } = JSON.parse(event.body)
 
     if (!creatorId || !creatorName || !fanId) {
       return { statusCode: 400, headers, body: JSON.stringify({ error: 'Missing required fields' }) }
     }
 
+    // amountCents is passed from the fan's chosen amount — minimum $1
+    const amount = Math.max(Math.round(amountCents || 500), 100)
+
     const stripe = new Stripe(process.env.STRIPE_SECRET_KEY)
     const baseUrl = process.env.URL || 'https://covetedstage.com'
 
     // Create or retrieve Stripe customer
-    const existingCustomers = await stripe.customers.list({ email: fanEmail, limit: 1 })
-    const customer = existingCustomers.data.length > 0
-      ? existingCustomers.data[0]
-      : await stripe.customers.create({ email: fanEmail, metadata: { fan_id: fanId } })
+    let customer
+    if (fanEmail) {
+      const existing = await stripe.customers.list({ email: fanEmail, limit: 1 })
+      customer = existing.data.length > 0
+        ? existing.data[0]
+        : await stripe.customers.create({ email: fanEmail, metadata: { fan_id: fanId } })
+    }
 
-    const session = await stripe.checkout.sessions.create({
+    const sessionParams = {
       mode: 'payment',
       payment_method_types: ['card'],
-      customer: customer.id,
       line_items: [{
         price_data: {
           currency: 'usd',
@@ -41,10 +46,9 @@ exports.handler = async (event) => {
             name: `Support ${creatorName} on Coveted Stage`,
             description: `One-time donation to ${creatorName}`,
           },
-          unit_amount: 500, // $5 default — fan can edit quantity at checkout
+          unit_amount: amount,
         },
         quantity: 1,
-        adjustable_quantity: { enabled: true, minimum: 1, maximum: 100 },
       }],
       metadata: {
         type: 'donation',
@@ -54,7 +58,11 @@ exports.handler = async (event) => {
       },
       success_url: `${baseUrl}/success?donation=1&creator=${creatorId}`,
       cancel_url: `${baseUrl}/`,
-    })
+    }
+
+    if (customer) sessionParams.customer = customer.id
+
+    const session = await stripe.checkout.sessions.create(sessionParams)
 
     return {
       statusCode: 200,
