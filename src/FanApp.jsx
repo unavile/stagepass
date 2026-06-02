@@ -129,11 +129,11 @@ export default function FanApp({ deepHandle }) {
 
   // Live room
   const [liveEvent, setLiveEvent] = useState(null)
-  const [guestJoinEvent, setGuestJoinEvent] = useState(null) // event pending guest name entry
-  const [guestName, setGuestName] = useState('')
+  const [guestJoinEvent, setGuestJoinEvent] = useState(null)
   const [showDonateModal, setShowDonateModal] = useState(false)
   const [donateAmount, setDonateAmount] = useState('10')
-  const [donateLoading, setDonateLoading] = useState(false)
+  const [donateLoading, setDonateLoading] = useState(false) // event pending guest name entry
+  const [guestName, setGuestName] = useState('')
 
   const { events: creatorEvents } = usePublicEvents(selected?.id)
   const { events: fanEvents, loading: fanEventsLoading, refetch: refetchFanEvents } = useFanEvents(fanSession?.user?.id, fanSession?.access_token)
@@ -269,6 +269,19 @@ export default function FanApp({ deepHandle }) {
       .catch(() => setSubscribedIds(new Set()))
   }, [fanSession])
 
+  // ── Reset loading states when user navigates back from external pages ──────
+  // Stripe redirects back via browser history — React state is preserved
+  // so donateLoading / subscribeLoading stay true unless we reset them here
+  useEffect(() => {
+    function handleVisibilityChange() {
+      if (document.visibilityState === 'visible') {
+        setDonateLoading(false)
+      }
+    }
+    document.addEventListener('visibilitychange', handleVisibilityChange)
+    return () => document.removeEventListener('visibilitychange', handleVisibilityChange)
+  }, [])
+
   // ── Select a creator to view their page ─────────────────────────────────
   async function selectCreator(c) {
     setSelected(c)
@@ -352,7 +365,6 @@ export default function FanApp({ deepHandle }) {
       return
     }
     setDonateAmount('10')
-    setDonateLoading(false)
     setShowDonateModal(true)
   }
 
@@ -563,6 +575,7 @@ export default function FanApp({ deepHandle }) {
               {selected.profiles?.bio && <p style={{ fontSize: 12, color: TEXT2, lineHeight: 1.6, margin: '8px 0 0' }}>{selected.profiles.bio}</p>}
             </div>
           </div>
+          {/* Subscribe block — only shown if creator has paid_subscribers enabled */}
           {selected?.paid_subscribers !== false && (
             subscribed ? (
               <div style={{ display: 'flex', gap: 8 }}>
@@ -581,6 +594,7 @@ export default function FanApp({ deepHandle }) {
               </button>
             )
           )}
+          {/* Donate button — only shown if creator has accept_donations enabled */}
           {selected?.accept_donations && (
             <button onClick={handleDonate} style={{
               width: '100%', background: 'transparent',
@@ -1308,6 +1322,7 @@ export default function FanApp({ deepHandle }) {
             <div style={{ fontFamily: "'DM Mono', monospace", fontSize: 10, color: TEXT3, marginBottom: 24, letterSpacing: '0.1em' }}>
               ONE-TIME DONATION
             </div>
+            {/* Quick amount buttons */}
             <div style={{ display: 'flex', gap: 8, marginBottom: 16 }}>
               {['5', '10', '25', '50'].map(amt => (
                 <button key={amt} onClick={() => setDonateAmount(amt)} style={{
@@ -1323,13 +1338,16 @@ export default function FanApp({ deepHandle }) {
                 </button>
               ))}
             </div>
+            {/* Custom amount input */}
             <div style={{ fontFamily: "'DM Mono', monospace", fontSize: 10, color: TEXT3, letterSpacing: '0.1em', marginBottom: 8 }}>
               CUSTOM AMOUNT
             </div>
             <div style={{ display: 'flex', alignItems: 'center', gap: 8, marginBottom: 20 }}>
               <span style={{ color: TEXT3, fontFamily: "'DM Mono', monospace", fontSize: 16 }}>$</span>
               <input
-                type="number" min="1" step="1"
+                type="number"
+                min="1"
+                step="1"
                 value={donateAmount}
                 onChange={e => setDonateAmount(e.target.value)}
                 onKeyDown={e => e.key === 'Enter' && submitDonation()}
@@ -1343,7 +1361,7 @@ export default function FanApp({ deepHandle }) {
               />
             </div>
             <div style={{ display: 'flex', gap: 10 }}>
-              <button onClick={() => { setShowDonateModal(false); setDonateLoading(false) }} style={{
+              <button onClick={() => setShowDonateModal(false)} style={{
                 flex: 1, background: 'none', color: TEXT3,
                 border: '1px solid rgba(255,255,255,0.1)', borderRadius: 8, padding: '11px',
                 fontFamily: "'DM Mono', monospace", fontSize: 11, cursor: 'pointer',
