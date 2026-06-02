@@ -174,7 +174,7 @@ export default function Upload({ creatorId, accentColor, accessToken, onPostCrea
         onChange={e => setDesc(e.target.value)}
       />
 
-      {/* File dropzone — key={type} forces re-mount when type changes so accept filter updates */}
+      {/* File dropzone — key={type} forces re-mount so accept filter updates with type */}
       <div key={type}>
         <div {...getRootProps()} style={{
           border: `1px dashed ${isDragActive ? accentColor : '#ffffff20'}`,
