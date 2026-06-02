@@ -36,121 +36,70 @@ export default function Upload({ creatorId, accentColor, accessToken, onPostCrea
     setError(null)
     setStep('uploading')
 
-    const sbUrl = import.meta.env.VITE_SUPABASE_URL
-    const sbKey = import.meta.env.VITE_SUPABASE_ANON_KEY
-    const authToken = accessToken || sbKey
-
-    console.log('[Upload] Starting upload — type:', type, 'file:', file.name, 'size:', file.size)
-    console.log('[Upload] accessToken present:', !!accessToken)
-    console.log('[Upload] creatorId:', creatorId)
-
     let fileUrl = null
 
-    // ── Storage upload ──────────────────────────────────────────────────────
-    const bucket = BUCKET_MAP[type]
-    const ext    = file.name.split('.').pop()
-    const path   = `${creatorId}/${Date.now()}.${ext}`
-    const storageUrl = `${sbUrl}/storage/v1/object/${bucket}/${path}`
+    if (file) {
+      const bucket = BUCKET_MAP[type]
+      const ext    = file.name.split('.').pop()
+      const path   = `${creatorId}/${Date.now()}.${ext}`
 
-    console.log('[Upload] Storage URL:', storageUrl)
-    console.log('[Upload] Bucket:', bucket, '| Content-Type:', file.type || 'application/octet-stream')
-
-    let uploadRes
-    try {
-      uploadRes = await fetch(storageUrl, {
+      const sbUrl = import.meta.env.VITE_SUPABASE_URL
+      const sbKey = import.meta.env.VITE_SUPABASE_ANON_KEY
+      const uploadRes = await fetch(`${sbUrl}/storage/v1/object/${bucket}/${path}`, {
         method: 'POST',
         headers: {
           'apikey': sbKey,
-          'Authorization': `Bearer ${authToken}`,
+          'Authorization': `Bearer ${accessToken || sbKey}`,
           'Content-Type': file.type || 'application/octet-stream',
           'x-upsert': 'true',
           'Cache-Control': '3600',
         },
         body: file,
       })
-    } catch (fetchErr) {
-      console.error('[Upload] Fetch threw:', fetchErr)
-      setError('Network error during upload: ' + fetchErr.message)
-      setStep('form')
-      return
-    }
-
-    console.log('[Upload] Storage response status:', uploadRes.status, uploadRes.statusText)
-    const uploadBody = await uploadRes.text()
-    console.log('[Upload] Storage response body:', uploadBody)
-
-    if (!uploadRes.ok) {
-      let errMsg = `Storage upload failed (${uploadRes.status})`
-      try { errMsg = JSON.parse(uploadBody)?.message || JSON.parse(uploadBody)?.error || errMsg } catch {}
-      setError(errMsg)
-      setStep('form')
-      return
-    }
-
-    // Check for error in response body even on 200
-    try {
-      const uploadData = JSON.parse(uploadBody)
-      if (uploadData.error) {
-        console.error('[Upload] Storage body error:', uploadData.error)
-        setError(uploadData.error)
+      if (!uploadRes.ok) {
+        const uploadErr = await uploadRes.json().catch(() => ({}))
+        const errMsg = uploadErr.message || uploadErr.error || `Upload failed (${uploadRes.status})`
+        console.error('Storage upload error:', uploadRes.status, uploadErr)
+        setError(errMsg)
         setStep('form')
         return
       }
-    } catch {}
+      fileUrl = `${sbUrl}/storage/v1/object/public/${bucket}/${path}`
+    }
 
-    fileUrl = `${sbUrl}/storage/v1/object/public/${bucket}/${path}`
-    console.log('[Upload] File URL:', fileUrl)
-
-    // ── Progress bar ────────────────────────────────────────────────────────
+    // Simulate progress bar (Supabase JS v2 doesn't expose upload progress natively)
     for (let i = 0; i <= 100; i += 10) {
       setProgress(i)
       await new Promise(r => setTimeout(r, 80))
     }
 
-    // ── Post insert ─────────────────────────────────────────────────────────
-    const postPayload = {
-      creator_id:      creatorId,
-      title:           title.trim(),
-      description:     desc.trim(),
-      type:            type === 'document' ? 'text' : type,
-      file_url:        fileUrl,
-      thumbnail_emoji: EMOJI_MAP[type],
-      is_locked:       isLocked,
-    }
-    console.log('[Upload] Inserting post:', postPayload)
-
-    let insertRes
-    try {
-      insertRes = await fetch(`${sbUrl}/rest/v1/posts`, {
-        method: 'POST',
-        headers: {
-          'apikey': sbKey,
-          'Authorization': `Bearer ${authToken}`,
-          'Content-Type': 'application/json',
-          'Prefer': 'return=minimal',
-        },
-        body: JSON.stringify(postPayload),
-      })
-    } catch (fetchErr) {
-      console.error('[Upload] Post insert fetch threw:', fetchErr)
-      setError('Network error during post creation: ' + fetchErr.message)
-      setStep('form')
-      return
-    }
-
-    console.log('[Upload] Post insert status:', insertRes.status, insertRes.statusText)
-    const insertBody = await insertRes.text()
-    console.log('[Upload] Post insert body:', insertBody)
-
+    const sbUrl2 = import.meta.env.VITE_SUPABASE_URL
+    const sbKey2 = import.meta.env.VITE_SUPABASE_ANON_KEY
+    const insertRes = await fetch(`${sbUrl2}/rest/v1/posts`, {
+      method: 'POST',
+      headers: {
+        'apikey': sbKey2,
+        'Authorization': `Bearer ${accessToken || sbKey2}`,
+        'Content-Type': 'application/json',
+        'Prefer': 'return=minimal',
+      },
+      body: JSON.stringify({
+        creator_id:      creatorId,
+        title:           title.trim(),
+        description:     desc.trim(),
+        type:            type === 'document' ? 'text' : type,
+        file_url:        fileUrl,
+        thumbnail_emoji: EMOJI_MAP[type],
+        is_locked:       isLocked,
+      }),
+    })
     if (!insertRes.ok) {
-      let errMsg = `Failed to create post (${insertRes.status})`
-      try { errMsg = JSON.parse(insertBody)?.message || JSON.parse(insertBody)?.error || errMsg } catch {}
-      setError(errMsg)
+      const insertErr = await insertRes.json().catch(() => ({}))
+      setError(insertErr.message || 'Failed to create post')
       setStep('form')
       return
     }
 
-    console.log('[Upload] Post created successfully!')
     setStep('done')
     onPostCreated?.()
   }
@@ -225,8 +174,8 @@ export default function Upload({ creatorId, accentColor, accessToken, onPostCrea
         onChange={e => setDesc(e.target.value)}
       />
 
-      {/* File dropzone */}
-      {(
+      {/* File dropzone — key={type} forces re-mount when type changes so accept filter updates */}
+      <div key={type}>
         <div {...getRootProps()} style={{
           border: `1px dashed ${isDragActive ? accentColor : '#ffffff20'}`,
           borderRadius: 10, padding: '28px', textAlign: 'center',
@@ -254,7 +203,7 @@ export default function Upload({ creatorId, accentColor, accessToken, onPostCrea
             </div>
           )}
         </div>
-      )}
+      </div>
 
       {/* Access toggle */}
       <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', background: '#111', border: '1px solid #ffffff10', borderRadius: 8, padding: '12px 16px', marginBottom: 16 }}>
