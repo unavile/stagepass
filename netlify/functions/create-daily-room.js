@@ -49,14 +49,17 @@ exports.handler = async (event) => {
       name: `stagepass-${eventId}`,
       privacy: 'private',
       properties: {
-        start_audio_off: false,
-        start_video_off: false,
+        start_audio_off: true,
+        start_video_off: true,
         enable_chat: true,
         enable_screenshare: true,
         exp: expiry,
-        // Participants (fans) join with camera and mic off
-        // Only the owner (creator) can turn on their camera/mic
-        owner_only_broadcast: true,
+        // owner_only_broadcast is intentionally NOT set here.
+        // When enabled it forces Daily into webinar/spotlight layout which
+        // crops the video with object-fit:cover and cannot be overridden.
+        // Fan audio/video is controlled instead via meeting tokens (is_owner,
+        // start_video_off, start_audio_off) which already enforce the same
+        // restriction without triggering the forced spotlight crop layout.
       }
     })
 
