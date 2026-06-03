@@ -981,7 +981,7 @@ export default function CreatorApp({ session, profile, onSignOut }) {
       {editEvent && <EditEventModal event={editEvent} accentColor={ac} accessToken={session.access_token} onClose={() => setEditEvent(null)} onSaved={() => { setEditEvent(null); nativeRefetchEvents() }} />}
       {showNewEvent && <NewEventModal creatorId={creator.id} accentColor={ac} onClose={() => setShowNewEvent(false)} onEventCreated={refetchEvents} />}
       {showEditProfile && <EditProfileModal profile={profile} creator={creator} accessToken={session.access_token} onClose={() => setShowEditProfile(false)} onSaved={() => window.location.reload()} />}
-      {liveEvent && <LiveRoom event={liveEvent} profile={profile} isCreator={true} onLeave={() => setLiveEvent(null)} />}
+      {liveEvent && <LiveRoom event={liveEvent} profile={profile} isCreator={true} onLeave={() => setLiveEvent(null)} accessToken={session.access_token} />}
     </div>
   )
 }

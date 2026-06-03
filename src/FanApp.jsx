@@ -1341,6 +1341,7 @@ export default function FanApp({ deepHandle }) {
           profile={fanProfile || { display_name: guestName.trim() || 'Guest' }}
           isCreator={false}
           onLeave={() => setLiveEvent(null)}
+          accessToken={fanSession?.access_token || null}
         />
       )}
 

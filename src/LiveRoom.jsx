@@ -4,7 +4,7 @@ import DailyIframe from '@daily-co/daily-js'
 // Module-level flag — survives React Strict Mode double-mounts unlike a ref.
 let globalJoinInProgress = false
 
-export default function LiveRoom({ event, profile, isCreator, onLeave }) {
+export default function LiveRoom({ event, profile, isCreator, onLeave, accessToken }) {
   const accentColor = '#c9a84c'
 
   const frameRef = useRef(null)
@@ -63,10 +63,13 @@ export default function LiveRoom({ event, profile, isCreator, onLeave }) {
   async function fetchSessionSummary() {
     const sbUrl = import.meta.env.VITE_SUPABASE_URL
     const sbKey = import.meta.env.VITE_SUPABASE_ANON_KEY
+    // Use the creator's access token as Bearer so RLS (creator_id = auth.uid()) passes.
+    // Fall back to anon key only if no token is available.
+    const bearerToken = accessToken || sbKey
     try {
       const res = await fetch(
         `${sbUrl}/rest/v1/live_session_participants?event_id=eq.${eventRef.current.id}&select=*&order=joined_at.asc`,
-        { headers: { 'apikey': sbKey, 'Authorization': `Bearer ${sbKey}` } }
+        { headers: { 'apikey': sbKey, 'Authorization': `Bearer ${bearerToken}` } }
       )
       const data = await res.json()
       return Array.isArray(data) ? data : []

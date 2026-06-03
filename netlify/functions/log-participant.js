@@ -4,15 +4,17 @@
 // Writes to the `live_session_participants` table in Supabase using the
 // service role key so it can bypass RLS.
 //
-// Required environment variable in Netlify dashboard:
-//   SUPABASE_SERVICE_KEY  — your Supabase project's service_role secret key
-//   VITE_SUPABASE_URL     — your Supabase project URL (already set for the frontend)
+// Required environment variables — set these in Netlify dashboard:
+//   SUPABASE_URL         — your Supabase project URL (no VITE_ prefix — Netlify
+//                          functions don't receive Vite build-time variables)
+//   SUPABASE_SERVICE_KEY — your Supabase project's service_role secret key
 
 const https = require('https')
 
 function supabaseRequest({ method, path, body, serviceKey, supabaseUrl }) {
   return new Promise((resolve, reject) => {
-    const host = supabaseUrl.replace('https://', '')
+    // Strip protocol and any trailing slash to get a clean hostname
+    const host = supabaseUrl.replace('https://', '').replace('http://', '').replace(/\/$/, '')
     const payload = body ? JSON.stringify(body) : ''
     const options = {
       hostname: host,
@@ -31,7 +33,7 @@ function supabaseRequest({ method, path, body, serviceKey, supabaseUrl }) {
       res.on('data', chunk => data += chunk)
       res.on('end', () => {
         try { resolve({ status: res.statusCode, data: data ? JSON.parse(data) : null }) }
-        catch (e) { reject(new Error(`JSON parse error: ${data}`)) }
+        catch (e) { reject(new Error(`JSON parse error (status ${res.statusCode}): ${data}`)) }
       })
     })
     req.on('error', reject)
@@ -50,21 +52,26 @@ exports.handler = async (event) => {
   if (event.httpMethod === 'OPTIONS') return { statusCode: 200, headers, body: '' }
   if (event.httpMethod !== 'POST') return { statusCode: 405, headers, body: 'Method not allowed' }
 
-  const serviceKey = process.env.SUPABASE_SERVICE_KEY
-  const supabaseUrl = process.env.VITE_SUPABASE_URL
+  // NOTE: use SUPABASE_URL (not VITE_SUPABASE_URL) — VITE_ prefixed vars are
+  // only injected at Vite build time and are NOT available to Netlify functions.
+  const serviceKey = process.env.SUPABASE_SERVICE_ROLE_KEY
+  const supabaseUrl = process.env.SUPABASE_URL
 
   if (!serviceKey || !supabaseUrl) {
-    console.error('Missing SUPABASE_SERVICE_KEY or VITE_SUPABASE_URL env vars')
-    return { statusCode: 500, headers, body: JSON.stringify({ error: 'Server misconfiguration' }) }
+    console.error('Missing env vars. Need SUPABASE_SERVICE_ROLE_KEY and SUPABASE_URL in Netlify dashboard.')
+    return { statusCode: 500, headers, body: JSON.stringify({ error: 'Server misconfiguration — missing env vars' }) }
   }
 
   try {
     const { action, eventId, creatorId, displayName, fanId, sessionRowId } = JSON.parse(event.body)
 
-    // ── JOIN: insert a new row, return its id so the client can reference it on leave ──
+    console.log('log-participant called:', { action, eventId, creatorId, displayName, fanId, sessionRowId })
+
+    // ── JOIN ─────────────────────────────────────────────────────────────────
     if (action === 'join') {
       if (!eventId || !creatorId || !displayName) {
-        return { statusCode: 400, headers, body: JSON.stringify({ error: 'Missing required fields for join' }) }
+        console.error('Missing required join fields:', { eventId, creatorId, displayName })
+        return { statusCode: 400, headers, body: JSON.stringify({ error: 'Missing required fields: eventId, creatorId, displayName' }) }
       }
 
       const result = await supabaseRequest({
@@ -81,9 +88,10 @@ exports.handler = async (event) => {
         supabaseUrl,
       })
 
+      console.log('Supabase insert response:', result.status, JSON.stringify(result.data))
+
       if (result.status !== 201) {
-        console.error('Supabase insert error:', result.data)
-        throw new Error(result.data?.message || `Supabase error ${result.status}`)
+        throw new Error(result.data?.message || result.data?.error || `Supabase insert error ${result.status}`)
       }
 
       const rowId = Array.isArray(result.data) ? result.data[0]?.id : result.data?.id
@@ -91,7 +99,7 @@ exports.handler = async (event) => {
       return { statusCode: 200, headers, body: JSON.stringify({ rowId }) }
     }
 
-    // ── LEAVE: stamp the left_at time on the existing row ──────────────────────
+    // ── LEAVE ────────────────────────────────────────────────────────────────
     if (action === 'leave') {
       if (!sessionRowId) {
         return { statusCode: 400, headers, body: JSON.stringify({ error: 'Missing sessionRowId for leave' }) }
@@ -105,9 +113,10 @@ exports.handler = async (event) => {
         supabaseUrl,
       })
 
+      console.log('Supabase PATCH response:', result.status)
+
       if (result.status !== 200 && result.status !== 204) {
-        console.error('Supabase update error:', result.data)
-        throw new Error(result.data?.message || `Supabase error ${result.status}`)
+        throw new Error(result.data?.message || result.data?.error || `Supabase update error ${result.status}`)
       }
 
       console.log(`Participant left — rowId: ${sessionRowId}`)
