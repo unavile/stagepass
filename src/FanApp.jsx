@@ -131,6 +131,7 @@ export default function FanApp({ deepHandle }) {
   const [liveEvent, setLiveEvent] = useState(null)
   const [guestJoinEvent, setGuestJoinEvent] = useState(null)
   const [showDonateModal, setShowDonateModal] = useState(false)
+  const [videoPost, setVideoPost] = useState(null) // post object for video popup
   const [donateAmount, setDonateAmount] = useState('10')
   const [donateLoading, setDonateLoading] = useState(false) // event pending guest name entry
   const [guestName, setGuestName] = useState('')
@@ -629,7 +630,31 @@ export default function FanApp({ deepHandle }) {
               </div>
               {canView && post.file_url && (
                 <div style={{ marginTop: 12, paddingTop: 12, borderTop: `1px solid ${BORDER2}` }}>
-                  {post.type === 'video' && <video controls src={post.file_url} controlsList="nodownload" onContextMenu={e => e.preventDefault()} style={{ width: '100%', borderRadius: 8, maxHeight: 260 }} />}
+                  {post.type === 'video' && (
+                    <div
+                      onClick={() => setVideoPost(post)}
+                      style={{
+                        width: '100%', borderRadius: 8,
+                        background: '#0a0a0a', border: `1px solid ${BORDER2}`,
+                        display: 'flex', alignItems: 'center', justifyContent: 'center',
+                        cursor: 'pointer', position: 'relative', overflow: 'hidden',
+                        minHeight: 120,
+                      }}
+                    >
+                      <div style={{
+                        width: 48, height: 48, borderRadius: '50%',
+                        background: ACCENT + '22', border: `2px solid ${ACCENT}66`,
+                        display: 'flex', alignItems: 'center', justifyContent: 'center',
+                      }}>
+                        <span style={{ fontSize: 20, marginLeft: 4 }}>▶</span>
+                      </div>
+                      <div style={{
+                        position: 'absolute', bottom: 8, left: 10,
+                        fontFamily: "'DM Mono', monospace", fontSize: 9,
+                        color: TEXT3, letterSpacing: '0.1em',
+                      }}>CLICK TO PLAY</div>
+                    </div>
+                  )}
                   {post.type === 'audio' && <audio controls src={post.file_url} style={{ width: '100%' }} />}
                   {post.type === 'text' && <a href={post.file_url} target="_blank" rel="noreferrer" style={{ color: ACCENT, fontFamily: "'DM Mono', monospace", fontSize: 11 }}>OPEN PDF →</a>}
                 </div>
@@ -896,7 +921,11 @@ export default function FanApp({ deepHandle }) {
                         </div>
                       </div>
                       <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', paddingTop: 12, borderTop: `1px solid ${BORDER2}` }}>
-                        <div style={{ fontFamily: "'DM Mono', monospace", fontSize: 14, color: ACCENT, fontWeight: 700 }}>${c.monthly_price}<span style={{ fontSize: 9, color: TEXT3, fontWeight: 400 }}>/mo</span></div>
+                        {c.paid_subscribers !== false ? (
+                          <div style={{ fontFamily: "'DM Mono', monospace", fontSize: 14, color: ACCENT, fontWeight: 700 }}>${c.monthly_price}<span style={{ fontSize: 9, color: TEXT3, fontWeight: 400 }}>/mo</span></div>
+                        ) : (
+                          <div style={{ fontFamily: "'DM Mono', monospace", fontSize: 9, color: TEXT3, letterSpacing: '0.1em' }}>FREE</div>
+                        )}
                         <div style={{ fontFamily: "'DM Mono', monospace", fontSize: 9, color: TEXT3, letterSpacing: '0.1em' }}>VIEW →</div>
                       </div>
                     </div>
@@ -1300,6 +1329,54 @@ export default function FanApp({ deepHandle }) {
           isCreator={false}
           onLeave={() => setLiveEvent(null)}
         />
+      )}
+
+      {/* ── Video popup player ── */}
+      {videoPost && (
+        <div
+          onClick={() => setVideoPost(null)}
+          style={{
+            position: 'fixed', inset: 0, zIndex: 600,
+            background: 'rgba(0,0,0,0.92)', backdropFilter: 'blur(8px)',
+            display: 'flex', alignItems: 'center', justifyContent: 'center',
+            padding: 20,
+          }}
+        >
+          <div
+            onClick={e => e.stopPropagation()}
+            style={{ width: '100%', maxWidth: 780, position: 'relative' }}
+          >
+            {/* Close button */}
+            <button
+              onClick={() => setVideoPost(null)}
+              style={{
+                position: 'absolute', top: -40, right: 0,
+                background: 'none', border: 'none', color: TEXT2,
+                fontSize: 22, cursor: 'pointer', lineHeight: 1,
+              }}
+            >✕</button>
+            {/* Title */}
+            <div style={{
+              fontFamily: "'DM Serif Display', Georgia, serif",
+              fontSize: 16, color: TEXT1, marginBottom: 10,
+            }}>{videoPost.title}</div>
+            {/* Player */}
+            <video
+              controls
+              autoPlay
+              controlsList="nodownload"
+              onContextMenu={e => e.preventDefault()}
+              src={videoPost.file_url}
+              style={{ width: '100%', borderRadius: 10, maxHeight: '70vh', background: '#000' }}
+            />
+            {videoPost.description && (
+              <div style={{
+                fontFamily: "'DM Mono', monospace", fontSize: 11,
+                color: TEXT3, marginTop: 10, lineHeight: 1.7,
+              }}>{videoPost.description}</div>
+            )}
+          </div>
+        </div>
       )}
 
       {/* ── Donation amount modal ── */}
