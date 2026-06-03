@@ -15,6 +15,7 @@ export default function LiveRoom({ event, profile, isCreator, onLeave, accessTok
   const isCreatorRef = useRef(isCreator)
   const sessionRowIdRef = useRef(null)
   const isMountActiveRef = useRef(false)
+  const containerRef = useRef(null)  // parentEl for Daily iframe
 
   const [joining, setJoining] = useState(true)
   const [error, setError] = useState(null)
@@ -121,16 +122,20 @@ export default function LiveRoom({ event, profile, isCreator, onLeave, accessTok
 
       if (!isMountActiveRef.current) { globalJoinInProgress = false; return }
 
-      const HEADER_HEIGHT = 60
-      const frame = DailyIframe.createFrame({
+      // Wait for the container div to be in the DOM before mounting
+      if (!containerRef.current) throw new Error('Container not ready')
+
+      // Daily is mounted into containerRef (the padding-bottom aspect-ratio div).
+      // iframeStyle uses absolute positioning to fill that container exactly —
+      // this is the official Daily.co fix for video cropping on responsive pages.
+      const frame = DailyIframe.createFrame(containerRef.current, {
         iframeStyle: {
-          position: 'fixed',
-          top: `${HEADER_HEIGHT}px`,
+          position: 'absolute',
+          top: '0',
           left: '0',
           width: '100%',
-          height: `calc(100% - ${HEADER_HEIGHT}px)`,
+          height: '100%',
           border: 'none',
-          zIndex: '299',
         },
         showLeaveButton: false,
         showFullscreenButton: true,
@@ -215,8 +220,24 @@ export default function LiveRoom({ event, profile, isCreator, onLeave, accessTok
   }, [])
 
   useEffect(() => {
-    joinRoom()
+    // Poll until containerRef is mounted in the DOM, then call joinRoom.
+    // Needed because createFrame() now takes a parentEl and throws if it's null.
+    let attempts = 0
+    const maxAttempts = 20
+    const interval = setInterval(() => {
+      attempts++
+      if (containerRef.current) {
+        clearInterval(interval)
+        joinRoom()
+      } else if (attempts >= maxAttempts) {
+        clearInterval(interval)
+        setError('Live room container failed to mount. Please try again.')
+        setJoining(false)
+      }
+    }, 150)
+
     return () => {
+      clearInterval(interval)
       isMountActiveRef.current = false
       isJoinedRef.current = false
       globalJoinInProgress = false
@@ -443,13 +464,14 @@ export default function LiveRoom({ event, profile, isCreator, onLeave, accessTok
   return (
     <div style={{
       position: 'fixed', inset: 0, zIndex: 300,
-      pointerEvents: 'none',
+      background: '#080808',
+      display: 'flex', flexDirection: 'column',
     }}>
       <link href="https://fonts.googleapis.com/css2?family=DM+Serif+Display&family=DM+Mono:wght@400;500&display=swap" rel="stylesheet" />
 
-      {/* Header — sits above the Daily iframe */}
+      {/* Header */}
       <div style={{
-        pointerEvents: 'auto',
+        flexShrink: 0,
         display: 'flex', alignItems: 'center', justifyContent: 'space-between',
         padding: '0 24px', height: 60, background: '#0a0a0a',
         borderBottom: '1px solid #ffffff0a',
@@ -490,51 +512,61 @@ export default function LiveRoom({ event, profile, isCreator, onLeave, accessTok
         </div>
       </div>
 
-      {/* Loading overlay */}
-      {joining && !error && (
-        <div style={{
-          pointerEvents: 'auto',
-          position: 'fixed', top: 60, left: 0, right: 0, bottom: 0,
-          background: '#080808',
-          display: 'flex', alignItems: 'center', justifyContent: 'center',
-          flexDirection: 'column', gap: 20,
-        }}>
-          <div style={{ fontFamily: "'DM Serif Display', Georgia, serif", fontSize: 22, color: '#f0ebe0' }}>
-            {event.name}
-          </div>
-          <div style={{ fontFamily: "'DM Mono', monospace", fontSize: 11, color: '#444', letterSpacing: '0.2em' }}>
-            JOINING LIVE ROOM...
-          </div>
-          <div style={{ width: 200, height: 2, background: '#1a1a1a', borderRadius: 999, overflow: 'hidden' }}>
-            <div style={{ width: '60%', height: '100%', background: accentColor, borderRadius: 999 }} />
-          </div>
-        </div>
-      )}
+      {/* Aspect-ratio container — the official Daily.co fix for video cropping.
+          padding-bottom: 56.25% = 16:9 ratio. The iframe is absolutely positioned
+          inside this div and fills it exactly, so Daily always gets the right shape. */}
+      <div style={{ flex: 1, display: 'flex', flexDirection: 'column', justifyContent: 'center', background: '#080808', padding: isCreator ? '16px' : '0' }}>
+        <div style={{ position: 'relative', width: '100%', paddingBottom: '56.25%' }}>
 
-      {/* Error overlay */}
-      {error && (
-        <div style={{
-          pointerEvents: 'auto',
-          position: 'fixed', top: 60, left: 0, right: 0, bottom: 0,
-          background: '#080808',
-          display: 'flex', alignItems: 'center', justifyContent: 'center',
-          flexDirection: 'column', gap: 16,
-        }}>
-          <div style={{ fontSize: 32 }}>⚠️</div>
-          <div style={{ fontFamily: "'DM Serif Display', Georgia, serif", fontSize: 20, color: '#f0ebe0' }}>
-            Couldn't join room
-          </div>
-          <div style={{ fontFamily: "'DM Mono', monospace", fontSize: 12, color: '#555', maxWidth: 320, textAlign: 'center' }}>
-            {error}
-          </div>
-          <button onClick={onLeave} style={{
-            background: accentColor, color: '#080808',
-            border: 'none', borderRadius: 6, padding: '10px 20px',
-            fontFamily: "'DM Mono', monospace", fontSize: 11,
-            fontWeight: 700, cursor: 'pointer', letterSpacing: '0.12em'
-          }}>GO BACK</button>
+          {/* Daily iframe mounts here via containerRef */}
+          <div ref={containerRef} style={{ position: 'absolute', top: 0, left: 0, width: '100%', height: '100%' }} />
+
+          {/* Loading overlay — sits on top of the container while joining */}
+          {joining && !error && (
+            <div style={{
+              position: 'absolute', inset: 0, zIndex: 1,
+              background: '#080808',
+              display: 'flex', alignItems: 'center', justifyContent: 'center',
+              flexDirection: 'column', gap: 20,
+            }}>
+              <div style={{ fontFamily: "'DM Serif Display', Georgia, serif", fontSize: 22, color: '#f0ebe0' }}>
+                {event.name}
+              </div>
+              <div style={{ fontFamily: "'DM Mono', monospace", fontSize: 11, color: '#444', letterSpacing: '0.2em' }}>
+                JOINING LIVE ROOM...
+              </div>
+              <div style={{ width: 200, height: 2, background: '#1a1a1a', borderRadius: 999, overflow: 'hidden' }}>
+                <div style={{ width: '60%', height: '100%', background: accentColor, borderRadius: 999 }} />
+              </div>
+            </div>
+          )}
+
+          {/* Error overlay */}
+          {error && (
+            <div style={{
+              position: 'absolute', inset: 0, zIndex: 1,
+              background: '#080808',
+              display: 'flex', alignItems: 'center', justifyContent: 'center',
+              flexDirection: 'column', gap: 16,
+            }}>
+              <div style={{ fontSize: 32 }}>⚠️</div>
+              <div style={{ fontFamily: "'DM Serif Display', Georgia, serif", fontSize: 20, color: '#f0ebe0' }}>
+                Couldn't join room
+              </div>
+              <div style={{ fontFamily: "'DM Mono', monospace", fontSize: 12, color: '#555', maxWidth: 320, textAlign: 'center' }}>
+                {error}
+              </div>
+              <button onClick={onLeave} style={{
+                background: accentColor, color: '#080808',
+                border: 'none', borderRadius: 6, padding: '10px 20px',
+                fontFamily: "'DM Mono', monospace", fontSize: 11,
+                fontWeight: 700, cursor: 'pointer', letterSpacing: '0.12em'
+              }}>GO BACK</button>
+            </div>
+          )}
+
         </div>
-      )}
+      </div>
     </div>
   )
 }
