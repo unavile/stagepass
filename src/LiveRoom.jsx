@@ -292,12 +292,12 @@ export default function LiveRoom({ event, profile, isCreator, onLeave }) {
         </div>
       </div>
 
-      {/* Room container */}
+      {/* Room container — flex:1 fills the viewport below the 60px header.
+          The inner Daily mount div uses position:absolute + inset so Daily
+          always gets a concrete pixel bounding rect and never has to guess
+          its height — which is what was causing the cropping. */}
       <div style={{
         flex: 1,
-        display: 'flex',
-        flexDirection: 'column',
-        padding: isCreator ? '20px' : '0',
         position: 'relative',
       }}>
         {joining && !error && (
@@ -340,13 +340,17 @@ export default function LiveRoom({ event, profile, isCreator, onLeave }) {
           </div>
         )}
 
+        {/* Daily iframe mounts here. position:absolute + inset gives Daily
+            an unambiguous pixel size. For creators, inset:'20px' adds padding.
+            overflow:hidden is scoped to this box so it only clips the border
+            radius, not the video content itself. */}
         <div
           ref={containerRef}
           style={{
-            flex: 1,
-            width: '100%',
-            height: '100%',
+            position: 'absolute',
+            inset: isCreator ? '20px' : '0',
             borderRadius: isCreator ? 12 : 0,
+            overflow: 'hidden',
             opacity: joining ? 0 : 1,
             transition: 'opacity 0.3s',
           }}
