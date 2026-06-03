@@ -113,7 +113,6 @@ export default function LiveRoom({ event, profile, isCreator, onLeave }) {
           border: 'none',
           borderRadius: isCreatorRef.current ? '12px' : '0',
         },
-        layout: 'fullscreen',
         showLeaveButton: false,
         showFullscreenButton: true,
         showUserNameChangeUI: false,
