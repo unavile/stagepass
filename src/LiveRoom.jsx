@@ -12,6 +12,7 @@ export default function LiveRoom({ event, profile, isCreator, onLeave }) {
   const eventRef = useRef(event)
   const profileRef = useRef(profile)
   const isCreatorRef = useRef(isCreator)
+  const sessionRowIdRef = useRef(null)  // tracks this participant's DB row for leave logging
 
   const [joining, setJoining] = useState(true)
   const [error, setError] = useState(null)
@@ -21,6 +22,41 @@ export default function LiveRoom({ event, profile, isCreator, onLeave }) {
   useEffect(() => { eventRef.current = event }, [event])
   useEffect(() => { profileRef.current = profile }, [profile])
   useEffect(() => { isCreatorRef.current = isCreator }, [isCreator])
+
+  // ── Log participant join to DB ──────────────────────────────────────────────
+  async function logParticipantJoin() {
+    try {
+      const res = await fetch('/.netlify/functions/log-participant', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          action: 'join',
+          eventId: eventRef.current.id,
+          creatorId: eventRef.current.creator_id,
+          displayName: profileRef.current?.display_name || 'Guest',
+          fanId: profileRef.current?.id || null,
+        })
+      })
+      const { rowId } = await res.json()
+      if (rowId) sessionRowIdRef.current = rowId
+    } catch (e) {
+      console.error('log-participant join error:', e)
+    }
+  }
+
+  // ── Log participant leave to DB ─────────────────────────────────────────────
+  async function logParticipantLeave() {
+    if (!sessionRowIdRef.current) return
+    try {
+      await fetch('/.netlify/functions/log-participant', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ action: 'leave', sessionRowId: sessionRowIdRef.current })
+      })
+    } catch (e) {
+      console.error('log-participant leave error:', e)
+    }
+  }
 
   const joinRoom = useCallback(async () => {
     if (joinStarted.current) return
@@ -55,13 +91,14 @@ export default function LiveRoom({ event, profile, isCreator, onLeave }) {
           width: '100%',
           height: '100%',
           border: 'none',
-          borderRadius: '12px',
+          // No border-radius for fans — they get edge-to-edge fullscreen
+          borderRadius: isCreatorRef.current ? '12px' : '0',
         },
+        // 'fullscreen' layout prevents Daily from internally cropping/letterboxing
+        layout: 'fullscreen',
         showLeaveButton: false,
         showFullscreenButton: true,
-        // Show device selector for creators so they can pick camera/mic source
         showUserNameChangeUI: false,
-        // Fans don't need controls bar
         showLocalVideo: isCreatorRef.current,
         theme: {
           colors: {
@@ -79,9 +116,11 @@ export default function LiveRoom({ event, profile, isCreator, onLeave }) {
         }
       })
 
-      frame.on('joined-meeting', () => {
+      frame.on('joined-meeting', async () => {
         isJoinedRef.current = true
         setJoining(false)
+        // Log this participant joining — fire after UI update
+        await logParticipantJoin()
       })
 
       frame.on('participant-updated', (e) => {
@@ -155,6 +194,7 @@ export default function LiveRoom({ event, profile, isCreator, onLeave }) {
 
   async function handleLeave() {
     isJoinedRef.current = false
+    await logParticipantLeave()
     const frame = frameRef.current
     if (frame) {
       try { await frame.leave() } catch {}
@@ -166,6 +206,7 @@ export default function LiveRoom({ event, profile, isCreator, onLeave }) {
 
   async function handleEndForAll() {
     isJoinedRef.current = false
+    await logParticipantLeave()
     const frame = frameRef.current
     if (frame) {
       try {
@@ -186,7 +227,7 @@ export default function LiveRoom({ event, profile, isCreator, onLeave }) {
     }}>
       <link href="https://fonts.googleapis.com/css2?family=DM+Serif+Display&family=DM+Mono:wght@400;500&display=swap" rel="stylesheet" />
 
-      {/* Header */}
+      {/* Header — 60px tall */}
       <div style={{
         display: 'flex', alignItems: 'center', justifyContent: 'space-between',
         padding: '0 24px', height: 60, background: '#0a0a0a',
@@ -228,13 +269,22 @@ export default function LiveRoom({ event, profile, isCreator, onLeave }) {
         </div>
       </div>
 
-      {/* Room container */}
-      <div style={{ flex: 1, padding: '20px', position: 'relative' }}>
+      {/* Room container — flex:1 fills all remaining height after the 60px header.
+          Creators get 20px padding + rounded corners.
+          Fans get zero padding so the video fills edge-to-edge with no cropping. */}
+      <div style={{
+        flex: 1,
+        display: 'flex',
+        flexDirection: 'column',
+        padding: isCreator ? '20px' : '0',
+        position: 'relative',
+        // Do NOT set overflow:hidden here — that is what was clipping the Daily iframe
+      }}>
         {joining && !error && (
           <div style={{
             position: 'absolute', inset: 0,
             display: 'flex', alignItems: 'center', justifyContent: 'center',
-            flexDirection: 'column', gap: 20
+            flexDirection: 'column', gap: 20, zIndex: 1,
           }}>
             <div style={{ fontFamily: "'DM Serif Display', Georgia, serif", fontSize: 22, color: '#f0ebe0' }}>
               {event.name}
@@ -252,7 +302,7 @@ export default function LiveRoom({ event, profile, isCreator, onLeave }) {
           <div style={{
             position: 'absolute', inset: 0,
             display: 'flex', alignItems: 'center', justifyContent: 'center',
-            flexDirection: 'column', gap: 16
+            flexDirection: 'column', gap: 16, zIndex: 1,
           }}>
             <div style={{ fontSize: 32 }}>⚠️</div>
             <div style={{ fontFamily: "'DM Serif Display', Georgia, serif", fontSize: 20, color: '#f0ebe0' }}>
@@ -270,16 +320,19 @@ export default function LiveRoom({ event, profile, isCreator, onLeave }) {
           </div>
         )}
 
+        {/* The Daily iframe mounts here.
+            - flex:1 + height:100% makes it grow to fill the container.
+            - No overflow:hidden so the iframe is never clipped.
+            - borderRadius only for creator view (fans get true edge-to-edge). */}
         <div
           ref={containerRef}
           style={{
+            flex: 1,
             width: '100%',
             height: '100%',
-            minHeight: 'calc(100vh - 100px)',
-            borderRadius: 12,
-            overflow: 'hidden',
+            borderRadius: isCreator ? 12 : 0,
             opacity: joining ? 0 : 1,
-            transition: 'opacity 0.3s'
+            transition: 'opacity 0.3s',
           }}
         />
       </div>

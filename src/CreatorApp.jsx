@@ -78,6 +78,9 @@ export default function CreatorApp({ session, profile, onSignOut }) {
   const [notifications, setNotifications] = useState([])
   const [notifsLoading, setNotifsLoading] = useState(false)
   const [openNotif, setOpenNotif] = useState(null) // id of expanded notification
+  const [eventParticipants, setEventParticipants] = useState({})       // { eventId: [...rows] }
+  const [loadingParticipants, setLoadingParticipants] = useState({})   // { eventId: bool }
+  const [expandedParticipants, setExpandedParticipants] = useState({}) // { eventId: bool }
   const todayStr = new Date().toISOString().split('T')[0]
   const currentEvents = (events || []).filter(e => e.event_date >= todayStr)
   const pastEvents = (events || []).filter(e => e.event_date < todayStr)
@@ -182,6 +185,31 @@ export default function CreatorApp({ session, profile, onSignOut }) {
       }
     )
     setNotifications(prev => prev.map(n => ({ ...n, read: true })))
+  }
+
+  // ── Fetch live session participants for a past event ───────────────────────
+  async function fetchParticipants(eventId) {
+    if (eventParticipants[eventId] !== undefined) {
+      // Already loaded — just toggle visibility
+      setExpandedParticipants(prev => ({ ...prev, [eventId]: !prev[eventId] }))
+      return
+    }
+    setExpandedParticipants(prev => ({ ...prev, [eventId]: true }))
+    setLoadingParticipants(prev => ({ ...prev, [eventId]: true }))
+    const sbUrl = import.meta.env.VITE_SUPABASE_URL
+    const sbKey = import.meta.env.VITE_SUPABASE_ANON_KEY
+    try {
+      const res = await fetch(
+        `${sbUrl}/rest/v1/live_session_participants?event_id=eq.${eventId}&select=*&order=joined_at.asc`,
+        { headers: { 'apikey': sbKey, 'Authorization': `Bearer ${session.access_token}` } }
+      )
+      const data = await res.json()
+      setEventParticipants(prev => ({ ...prev, [eventId]: Array.isArray(data) ? data : [] }))
+    } catch (e) {
+      console.error('fetchParticipants error:', e)
+      setEventParticipants(prev => ({ ...prev, [eventId]: [] }))
+    }
+    setLoadingParticipants(prev => ({ ...prev, [eventId]: false }))
   }
 
   // Load notifications on mount, then poll every 60 seconds for new ones
@@ -617,7 +645,123 @@ export default function CreatorApp({ session, profile, onSignOut }) {
                           </div>
                         </div>
                       )}
-                      {event.daily_room_name && (
+                      {/* ── Live session participants (past events only) ── */}
+                      {event.daily_room_name && event.event_date < todayStr && (
+                        <div style={{ marginTop: 14, paddingTop: 14, borderTop: `1px solid ${BORDER2}` }}>
+                          <button
+                            onClick={() => fetchParticipants(event.id)}
+                            style={{
+                              display: 'flex', alignItems: 'center', gap: 8,
+                              background: 'none', border: `1px solid ${BORDER}`,
+                              borderRadius: 7, padding: '6px 14px', cursor: 'pointer',
+                              fontFamily: "'DM Mono', monospace", fontSize: 10,
+                              color: TEXT2, letterSpacing: '0.1em',
+                            }}
+                          >
+                            <span>👁</span>
+                            {expandedParticipants[event.id] ? 'HIDE VIEWERS' : 'VIEW LIVE ATTENDEES'}
+                            {eventParticipants[event.id] !== undefined && (
+                              <span style={{
+                                background: ac + '22', color: ac,
+                                border: `1px solid ${ac}40`,
+                                borderRadius: 10, fontSize: 9, fontWeight: 700,
+                                padding: '1px 7px', fontFamily: "'DM Mono', monospace",
+                              }}>{eventParticipants[event.id].length}</span>
+                            )}
+                          </button>
+
+                          {expandedParticipants[event.id] && (
+                            <div style={{ marginTop: 12 }}>
+                              {loadingParticipants[event.id] ? (
+                                <div style={{ fontFamily: "'DM Mono', monospace", fontSize: 10, color: TEXT3, letterSpacing: '0.1em' }}>
+                                  LOADING...
+                                </div>
+                              ) : !eventParticipants[event.id]?.length ? (
+                                <div style={{ fontFamily: "'DM Mono', monospace", fontSize: 10, color: TEXT3 }}>
+                                  No viewer data recorded for this session.
+                                </div>
+                              ) : (
+                                <div style={{ display: 'flex', flexDirection: 'column', gap: 6 }}>
+                                  {/* Column headers */}
+                                  <div style={{
+                                    display: 'grid',
+                                    gridTemplateColumns: isMobile ? '1fr 1fr' : '1fr 120px 120px 80px',
+                                    gap: 8, padding: '4px 10px',
+                                    fontFamily: "'DM Mono', monospace", fontSize: 8,
+                                    color: TEXT3, letterSpacing: '0.16em',
+                                  }}>
+                                    <span>NAME</span>
+                                    {!isMobile && <span>JOINED</span>}
+                                    {!isMobile && <span>LEFT</span>}
+                                    <span>DURATION</span>
+                                  </div>
+                                  {eventParticipants[event.id].map((p, i) => {
+                                    const joinedAt = p.joined_at ? new Date(p.joined_at) : null
+                                    const leftAt = p.left_at ? new Date(p.left_at) : null
+                                    let duration = '—'
+                                    if (joinedAt && leftAt) {
+                                      const mins = Math.round((leftAt - joinedAt) / 60000)
+                                      duration = mins < 60
+                                        ? `${mins}m`
+                                        : `${Math.floor(mins / 60)}h ${mins % 60}m`
+                                    } else if (joinedAt) {
+                                      duration = 'Active'
+                                    }
+                                    return (
+                                      <div key={p.id} style={{
+                                        display: 'grid',
+                                        gridTemplateColumns: isMobile ? '1fr 1fr' : '1fr 120px 120px 80px',
+                                        gap: 8, padding: '8px 10px',
+                                        background: i % 2 === 0 ? 'rgba(24,24,28,0.5)' : 'transparent',
+                                        borderRadius: 6, alignItems: 'center',
+                                      }}>
+                                        <div style={{ display: 'flex', alignItems: 'center', gap: 8, minWidth: 0 }}>
+                                          <div style={{
+                                            width: 24, height: 24, borderRadius: '50%', flexShrink: 0,
+                                            background: BG, border: `1px solid ${ac}35`,
+                                            display: 'flex', alignItems: 'center', justifyContent: 'center',
+                                            fontSize: 9, color: ac,
+                                            fontFamily: "'DM Serif Display', Georgia, serif",
+                                          }}>
+                                            {(p.display_name || 'G').charAt(0).toUpperCase()}
+                                          </div>
+                                          <div style={{ minWidth: 0 }}>
+                                            <div style={{ fontSize: 12, color: TEXT1, whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' }}>
+                                              {p.display_name || 'Guest'}
+                                            </div>
+                                            {p.fan_id && (
+                                              <div style={{ fontFamily: "'DM Mono', monospace", fontSize: 8, color: TEXT3 }}>REGISTERED FAN</div>
+                                            )}
+                                          </div>
+                                        </div>
+                                        {!isMobile && (
+                                          <div style={{ fontFamily: "'DM Mono', monospace", fontSize: 10, color: TEXT3 }}>
+                                            {joinedAt ? joinedAt.toLocaleTimeString('en-US', { hour: '2-digit', minute: '2-digit' }) : '—'}
+                                          </div>
+                                        )}
+                                        {!isMobile && (
+                                          <div style={{ fontFamily: "'DM Mono', monospace", fontSize: 10, color: TEXT3 }}>
+                                            {leftAt ? leftAt.toLocaleTimeString('en-US', { hour: '2-digit', minute: '2-digit' }) : '—'}
+                                          </div>
+                                        )}
+                                        <div style={{
+                                          fontFamily: "'DM Mono', monospace", fontSize: 10,
+                                          color: duration === 'Active' ? '#6dbf8a' : TEXT2,
+                                          fontWeight: 600,
+                                        }}>
+                                          {duration}
+                                        </div>
+                                      </div>
+                                    )
+                                  })}
+                                </div>
+                              )}
+                            </div>
+                          )}
+                        </div>
+                      )}
+
+                      {event.daily_room_name && event.event_date >= todayStr && (
                         <button onClick={() => setLiveEvent(event)} style={{
                           marginTop: 14, width: '100%',
                           background: ac, color: '#080808',
