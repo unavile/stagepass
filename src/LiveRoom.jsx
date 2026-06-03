@@ -61,18 +61,21 @@ export default function LiveRoom({ event, profile, isCreator, onLeave, accessTok
   }
 
   async function fetchSessionSummary() {
-    const sbUrl = import.meta.env.VITE_SUPABASE_URL
-    const sbKey = import.meta.env.VITE_SUPABASE_ANON_KEY
-    // Use the creator's access token as Bearer so RLS (creator_id = auth.uid()) passes.
-    // Fall back to anon key only if no token is available.
-    const bearerToken = accessToken || sbKey
+    // Fetch via the Netlify function using the service role key — this bypasses
+    // RLS entirely so we never hit auth/token issues on the summary screen.
     try {
-      const res = await fetch(
-        `${sbUrl}/rest/v1/live_session_participants?event_id=eq.${eventRef.current.id}&select=*&order=joined_at.asc`,
-        { headers: { 'apikey': sbKey, 'Authorization': `Bearer ${bearerToken}` } }
-      )
-      const data = await res.json()
-      return Array.isArray(data) ? data : []
+      const res = await fetch('/.netlify/functions/log-participant', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ action: 'fetch', eventId: eventRef.current.id }),
+      })
+      const json = await res.json()
+      if (json.error) {
+        console.error('fetchSessionSummary error from function:', json.error)
+        return []
+      }
+      console.log('fetchSessionSummary rows:', json.rows?.length)
+      return Array.isArray(json.rows) ? json.rows : []
     } catch (e) {
       console.error('fetchSessionSummary error:', e)
       return []
@@ -133,6 +136,14 @@ export default function LiveRoom({ event, profile, isCreator, onLeave, accessTok
         showFullscreenButton: true,
         showUserNameChangeUI: false,
         showLocalVideo: isCreatorRef.current,
+        // Fans watch a single broadcaster — use grid mode (activeSpeakerMode: false)
+        // so Daily uses object-fit: contain internally, showing the full video frame
+        // without cropping the edges. Active speaker mode (the default) uses
+        // object-fit: cover which intentionally crops to fill the tile.
+        activeSpeakerMode: isCreatorRef.current ? true : false,
+        // Hide the participants bar for fans — they don't need to see thumbnails
+        // and hiding it gives the main video the full iframe height.
+        showParticipantsBar: isCreatorRef.current ? true : false,
         theme: {
           colors: {
             accent: '#c9a84c',

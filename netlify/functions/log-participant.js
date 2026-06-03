@@ -1,19 +1,20 @@
 // netlify/functions/log-participant.js
 //
-// Logs fan/guest join and leave events for each live stream session.
-// Writes to the `live_session_participants` table in Supabase using the
-// service role key so it can bypass RLS.
+// Handles three actions for live session participant tracking:
+//   join   — insert a row when someone joins
+//   leave  — stamp left_at when someone leaves  
+//   fetch  — return all participants for an event (used for post-stream summary)
 //
-// Required environment variables — set these in Netlify dashboard:
-//   SUPABASE_URL         — your Supabase project URL (no VITE_ prefix — Netlify
-//                          functions don't receive Vite build-time variables)
-//   SUPABASE_SERVICE_KEY — your Supabase project's service_role secret key
+// Uses the service role key to bypass RLS for all operations.
+//
+// Required environment variables in Netlify dashboard:
+//   SUPABASE_URL              — your Supabase project URL (no VITE_ prefix)
+//   SUPABASE_SERVICE_ROLE_KEY — your Supabase service_role secret key
 
 const https = require('https')
 
 function supabaseRequest({ method, path, body, serviceKey, supabaseUrl }) {
   return new Promise((resolve, reject) => {
-    // Strip protocol and any trailing slash to get a clean hostname
     const host = supabaseUrl.replace('https://', '').replace('http://', '').replace(/\/$/, '')
     const payload = body ? JSON.stringify(body) : ''
     const options = {
@@ -52,8 +53,6 @@ exports.handler = async (event) => {
   if (event.httpMethod === 'OPTIONS') return { statusCode: 200, headers, body: '' }
   if (event.httpMethod !== 'POST') return { statusCode: 405, headers, body: 'Method not allowed' }
 
-  // NOTE: use SUPABASE_URL (not VITE_SUPABASE_URL) — VITE_ prefixed vars are
-  // only injected at Vite build time and are NOT available to Netlify functions.
   const serviceKey = process.env.SUPABASE_SERVICE_ROLE_KEY
   const supabaseUrl = process.env.SUPABASE_URL
 
@@ -121,6 +120,30 @@ exports.handler = async (event) => {
 
       console.log(`Participant left — rowId: ${sessionRowId}`)
       return { statusCode: 200, headers, body: JSON.stringify({ ok: true }) }
+    }
+
+    // ── FETCH — returns all participants for an event, bypassing RLS ─────────
+    if (action === 'fetch') {
+      if (!eventId) {
+        return { statusCode: 400, headers, body: JSON.stringify({ error: 'Missing eventId for fetch' }) }
+      }
+
+      const result = await supabaseRequest({
+        method: 'GET',
+        path: `/rest/v1/live_session_participants?event_id=eq.${eventId}&order=joined_at.asc`,
+        body: null,
+        serviceKey,
+        supabaseUrl,
+      })
+
+      console.log('Supabase fetch response:', result.status, 'rows:', Array.isArray(result.data) ? result.data.length : result.data)
+
+      if (result.status !== 200) {
+        throw new Error(result.data?.message || result.data?.error || `Supabase fetch error ${result.status}`)
+      }
+
+      const rows = Array.isArray(result.data) ? result.data : []
+      return { statusCode: 200, headers, body: JSON.stringify({ rows }) }
     }
 
     return { statusCode: 400, headers, body: JSON.stringify({ error: `Unknown action: ${action}` }) }
