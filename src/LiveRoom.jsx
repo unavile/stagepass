@@ -512,14 +512,20 @@ export default function LiveRoom({ event, profile, isCreator, onLeave, accessTok
         </div>
       </div>
 
-      {/* Aspect-ratio container — the official Daily.co fix for video cropping.
-          padding-bottom: 56.25% = 16:9 ratio. The iframe is absolutely positioned
-          inside this div and fills it exactly, so Daily always gets the right shape. */}
-      <div style={{ flex: 1, display: 'flex', flexDirection: 'column', justifyContent: 'center', background: '#080808', padding: isCreator ? '16px' : '0' }}>
-        <div style={{ position: 'relative', width: '100%', paddingBottom: '56.25%' }}>
+      {/* Aspect-ratio wrapper — Daily.co's official fix for video cropping.
+          This must be a block element (not flex) so that padding-bottom: 56.25%
+          correctly resolves against the element's width to enforce 16:9.
+          Inside a flex container, percentage padding resolves to zero. */}
+      <div style={{
+        position: 'relative',
+        width: isCreator ? 'calc(100% - 32px)' : '100%',
+        paddingBottom: isCreator ? 'calc(56.25% - 18px)' : '56.25%',
+        background: '#080808',
+        margin: isCreator ? '16px auto' : '0',
+      }}>
 
-          {/* Daily iframe mounts here via containerRef */}
-          <div ref={containerRef} style={{ position: 'absolute', top: 0, left: 0, width: '100%', height: '100%' }} />
+        {/* Daily iframe mounts here via containerRef — fills the aspect-ratio box */}
+        <div ref={containerRef} style={{ position: 'absolute', top: 0, left: 0, width: '100%', height: '100%' }} />
 
           {/* Loading overlay — sits on top of the container while joining */}
           {joining && !error && (
@@ -566,7 +572,6 @@ export default function LiveRoom({ event, profile, isCreator, onLeave, accessTok
           )}
 
         </div>
-      </div>
     </div>
   )
 }
