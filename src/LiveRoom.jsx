@@ -1,18 +1,23 @@
 import { useEffect, useState, useCallback, useRef } from 'react'
 import DailyIframe from '@daily-co/daily-js'
 
+// Module-level flag — survives React Strict Mode double-mounts unlike a ref.
+// Prevents two LiveRoom instances from racing to call DailyIframe.createFrame().
+let globalJoinInProgress = false
+
 export default function LiveRoom({ event, profile, isCreator, onLeave }) {
   const accentColor = '#c9a84c'
 
   const containerRef = useRef(null)
   const frameRef = useRef(null)
   const isJoinedRef = useRef(false)
-  const joinStarted = useRef(false)
   const onLeaveRef = useRef(onLeave)
   const eventRef = useRef(event)
   const profileRef = useRef(profile)
   const isCreatorRef = useRef(isCreator)
-  const sessionRowIdRef = useRef(null)  // tracks this participant's DB row for leave logging
+  const sessionRowIdRef = useRef(null)
+  // Tracks whether THIS mount's join attempt is the active one
+  const isMountActiveRef = useRef(false)
 
   const [joining, setJoining] = useState(true)
   const [error, setError] = useState(null)
@@ -23,7 +28,6 @@ export default function LiveRoom({ event, profile, isCreator, onLeave }) {
   useEffect(() => { profileRef.current = profile }, [profile])
   useEffect(() => { isCreatorRef.current = isCreator }, [isCreator])
 
-  // ── Log participant join to DB ──────────────────────────────────────────────
   async function logParticipantJoin() {
     try {
       const res = await fetch('/.netlify/functions/log-participant', {
@@ -44,7 +48,6 @@ export default function LiveRoom({ event, profile, isCreator, onLeave }) {
     }
   }
 
-  // ── Log participant leave to DB ─────────────────────────────────────────────
   async function logParticipantLeave() {
     if (!sessionRowIdRef.current) return
     try {
@@ -58,17 +61,33 @@ export default function LiveRoom({ event, profile, isCreator, onLeave }) {
     }
   }
 
-  const joinRoom = useCallback(async () => {
-    if (joinStarted.current) return
-    joinStarted.current = true
-
+  // Destroys every Daily instance we know about and waits for teardown.
+  // Called before creating a new frame to prevent the duplicate-instance error.
+  async function destroyExistingInstances() {
+    if (frameRef.current) {
+      try { await frameRef.current.destroy() } catch {}
+      frameRef.current = null
+    }
     try {
       const existing = DailyIframe.getCallInstance()
-      if (existing) { existing.destroy() }
+      if (existing) { await existing.destroy() }
     } catch {}
-    if (frameRef.current) {
-      try { frameRef.current.destroy() } catch {}
-      frameRef.current = null
+    // Give Daily a moment to fully release its internal state
+    await new Promise(resolve => setTimeout(resolve, 100))
+  }
+
+  const joinRoom = useCallback(async () => {
+    // Block if another join is already underway (module-level guard)
+    if (globalJoinInProgress) return
+    globalJoinInProgress = true
+    isMountActiveRef.current = true
+
+    await destroyExistingInstances()
+
+    // Bail out if this mount was already cleaned up before we got here
+    if (!isMountActiveRef.current) {
+      globalJoinInProgress = false
+      return
     }
 
     try {
@@ -85,16 +104,15 @@ export default function LiveRoom({ event, profile, isCreator, onLeave }) {
       if (tokenError) throw new Error(tokenError)
 
       if (!containerRef.current) throw new Error('Container not ready')
+      if (!isMountActiveRef.current) { globalJoinInProgress = false; return }
 
       const frame = DailyIframe.createFrame(containerRef.current, {
         iframeStyle: {
           width: '100%',
           height: '100%',
           border: 'none',
-          // No border-radius for fans — they get edge-to-edge fullscreen
           borderRadius: isCreatorRef.current ? '12px' : '0',
         },
-        // 'fullscreen' layout prevents Daily from internally cropping/letterboxing
         layout: 'fullscreen',
         showLeaveButton: false,
         showFullscreenButton: true,
@@ -119,7 +137,7 @@ export default function LiveRoom({ event, profile, isCreator, onLeave }) {
       frame.on('joined-meeting', async () => {
         isJoinedRef.current = true
         setJoining(false)
-        // Log this participant joining — fire after UI update
+        globalJoinInProgress = false
         await logParticipantJoin()
       })
 
@@ -127,6 +145,7 @@ export default function LiveRoom({ event, profile, isCreator, onLeave }) {
         if (e.participant?.local) {
           isJoinedRef.current = true
           setJoining(false)
+          globalJoinInProgress = false
         }
       })
 
@@ -144,10 +163,12 @@ export default function LiveRoom({ event, profile, isCreator, onLeave }) {
       })
 
       frame.on('left-meeting', () => {
+        globalJoinInProgress = false
         if (isJoinedRef.current) onLeaveRef.current()
       })
 
       frame.on('error', (e) => {
+        globalJoinInProgress = false
         setError(e.errorMsg || 'Failed to join room')
         setJoining(false)
       })
@@ -161,6 +182,7 @@ export default function LiveRoom({ event, profile, isCreator, onLeave }) {
 
       frameRef.current = frame
     } catch (err) {
+      globalJoinInProgress = false
       setError(err.message)
       setJoining(false)
     }
@@ -183,8 +205,10 @@ export default function LiveRoom({ event, profile, isCreator, onLeave }) {
 
     return () => {
       clearInterval(interval)
-      joinStarted.current = false
+      // Mark this mount as inactive so any in-flight joinRoom() bails out
+      isMountActiveRef.current = false
       isJoinedRef.current = false
+      globalJoinInProgress = false
       if (frameRef.current) {
         try { frameRef.current.destroy() } catch {}
         frameRef.current = null
@@ -269,16 +293,13 @@ export default function LiveRoom({ event, profile, isCreator, onLeave }) {
         </div>
       </div>
 
-      {/* Room container — flex:1 fills all remaining height after the 60px header.
-          Creators get 20px padding + rounded corners.
-          Fans get zero padding so the video fills edge-to-edge with no cropping. */}
+      {/* Room container */}
       <div style={{
         flex: 1,
         display: 'flex',
         flexDirection: 'column',
         padding: isCreator ? '20px' : '0',
         position: 'relative',
-        // Do NOT set overflow:hidden here — that is what was clipping the Daily iframe
       }}>
         {joining && !error && (
           <div style={{
@@ -320,10 +341,6 @@ export default function LiveRoom({ event, profile, isCreator, onLeave }) {
           </div>
         )}
 
-        {/* The Daily iframe mounts here.
-            - flex:1 + height:100% makes it grow to fill the container.
-            - No overflow:hidden so the iframe is never clipped.
-            - borderRadius only for creator view (fans get true edge-to-edge). */}
         <div
           ref={containerRef}
           style={{
