@@ -629,7 +629,7 @@ export default function FanApp({ deepHandle }) {
               </div>
               {canView && post.file_url && (
                 <div style={{ marginTop: 12, paddingTop: 12, borderTop: `1px solid ${BORDER2}` }}>
-                  {post.type === 'video' && <video controls src={post.file_url} style={{ width: '100%', borderRadius: 8, maxHeight: 260 }} />}
+                  {post.type === 'video' && <video controls src={post.file_url} controlsList="nodownload" onContextMenu={e => e.preventDefault()} style={{ width: '100%', borderRadius: 8, maxHeight: 260 }} />}
                   {post.type === 'audio' && <audio controls src={post.file_url} style={{ width: '100%' }} />}
                   {post.type === 'text' && <a href={post.file_url} target="_blank" rel="noreferrer" style={{ color: ACCENT, fontFamily: "'DM Mono', monospace", fontSize: 11 }}>OPEN PDF →</a>}
                 </div>
