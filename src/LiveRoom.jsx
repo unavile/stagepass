@@ -21,6 +21,41 @@ export default function LiveRoom({ event, profile, isCreator, onLeave, accessTok
   const [error, setError] = useState(null)
   const [participants, setParticipants] = useState(0)
   const [sessionSummary, setSessionSummary] = useState(null)
+  const [isLandscape, setIsLandscape] = useState(
+    () => window.innerWidth > window.innerHeight
+  )
+
+  // viewportSize tracks the actual visible pixel dimensions reported by
+  // visualViewport (the correct API for iPhone Safari). Falls back to
+  // window dimensions on browsers without visualViewport support.
+  const [viewportSize, setViewportSize] = useState(() => ({
+    w: window.visualViewport?.width  ?? window.innerWidth,
+    h: window.visualViewport?.height ?? window.innerHeight,
+  }))
+
+  useEffect(() => {
+    function update() {
+      const w = window.visualViewport?.width  ?? window.innerWidth
+      const h = window.visualViewport?.height ?? window.innerHeight
+      setViewportSize({ w, h })
+      setIsLandscape(w > h)
+    }
+    // visualViewport fires 'resize' correctly on iPhone including after
+    // browser chrome show/hide — more reliable than orientationchange
+    if (window.visualViewport) {
+      window.visualViewport.addEventListener('resize', update)
+    } else {
+      window.addEventListener('resize', update)
+    }
+    window.addEventListener('orientationchange', () => setTimeout(update, 100))
+    return () => {
+      if (window.visualViewport) {
+        window.visualViewport.removeEventListener('resize', update)
+      } else {
+        window.removeEventListener('resize', update)
+      }
+    }
+  }, [])
 
   useEffect(() => { onLeaveRef.current = onLeave }, [onLeave])
   useEffect(() => { eventRef.current = event }, [event])
@@ -98,13 +133,17 @@ export default function LiveRoom({ event, profile, isCreator, onLeave, accessTok
         body: JSON.stringify({
           roomName: eventRef.current.daily_room_name,
           isOwner: isCreatorRef.current,
-          userName: profileRef.current?.display_name || 'Guest',
+          userName: profileRef.current.display_name || 'Guest',
         })
       })
       const { token, error: tokenError } = await tokenRes.json()
       if (tokenError) throw new Error(tokenError)
       if (!isMountActiveRef.current) { globalJoinInProgress = false; return }
 
+      // containerRef is a div that is position:absolute filling the area below
+      // the header. Daily docs say: when parentEl is provided, the iframe fills
+      // the parentEl width and height. Because containerRef has explicit pixel
+      // dimensions from its CSS, Daily gets an unambiguous rect — no cropping.
       const frame = DailyIframe.createFrame(containerRef.current, {
         iframeStyle: {
           width: '100%',
@@ -115,8 +154,8 @@ export default function LiveRoom({ event, profile, isCreator, onLeave, accessTok
         showFullscreenButton: true,
         showUserNameChangeUI: false,
         showLocalVideo: isCreatorRef.current,
+        activeSpeakerMode: isCreatorRef.current,
         showParticipantsBar: isCreatorRef.current,
-        activeSpeakerMode: true,
         theme: {
           colors: {
             accent: '#c9a84c',
@@ -183,6 +222,7 @@ export default function LiveRoom({ event, profile, isCreator, onLeave, accessTok
   }, [])
 
   useEffect(() => {
+    // Poll until containerRef is in the DOM, then join
     let attempts = 0
     const interval = setInterval(() => {
       attempts++
@@ -243,16 +283,31 @@ export default function LiveRoom({ event, profile, isCreator, onLeave, accessTok
     const rows = Array.isArray(sessionSummary) ? sessionSummary : []
     const loading = sessionSummary === 'loading'
     return (
-      <div style={{ position: 'fixed', inset: 0, zIndex: 300, background: '#080808', display: 'flex', flexDirection: 'column', fontFamily: "'DM Mono', monospace" }}>
+      <div style={{
+        position: 'fixed', inset: 0, zIndex: 300,
+        background: '#080808', display: 'flex', flexDirection: 'column',
+        fontFamily: "'DM Mono', monospace",
+      }}>
         <link href="https://fonts.googleapis.com/css2?family=DM+Serif+Display&family=DM+Mono:wght@400;500&display=swap" rel="stylesheet" />
-        <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', padding: '0 24px', height: HEADER_H, background: '#0a0a0a', borderBottom: '1px solid #ffffff0a', flexShrink: 0 }}>
+        <div style={{
+          display: 'flex', alignItems: 'center', justifyContent: 'space-between',
+          padding: '0 24px', height: HEADER_H, background: '#0a0a0a',
+          borderBottom: '1px solid #ffffff0a', flexShrink: 0,
+        }}>
           <div style={{ display: 'flex', alignItems: 'center', gap: 12 }}>
             <span style={{ fontFamily: "'DM Serif Display', Georgia, serif", fontSize: 18, color: accentColor }}>Coveted Stage</span>
             <span style={{ fontSize: 11, color: '#444' }}>·</span>
             <span style={{ fontSize: 12, color: '#888' }}>{event.name}</span>
-            <span style={{ background: '#ffffff0a', color: '#555', border: '1px solid #ffffff10', borderRadius: 4, fontSize: 10, fontWeight: 700, padding: '2px 8px', letterSpacing: '0.12em' }}>ENDED</span>
+            <span style={{
+              background: '#ffffff0a', color: '#555', border: '1px solid #ffffff10',
+              borderRadius: 4, fontSize: 10, fontWeight: 700, padding: '2px 8px', letterSpacing: '0.12em',
+            }}>ENDED</span>
           </div>
-          <button onClick={onLeave} style={{ background: accentColor, color: '#080808', border: 'none', borderRadius: 6, padding: '7px 18px', fontFamily: "'DM Mono', monospace", fontSize: 11, fontWeight: 700, cursor: 'pointer', letterSpacing: '0.1em' }}>DONE</button>
+          <button onClick={onLeave} style={{
+            background: accentColor, color: '#080808', border: 'none', borderRadius: 6,
+            padding: '7px 18px', fontFamily: "'DM Mono', monospace", fontSize: 11,
+            fontWeight: 700, cursor: 'pointer', letterSpacing: '0.1em',
+          }}>DONE</button>
         </div>
         <div style={{ flex: 1, overflowY: 'auto', padding: '32px 28px', maxWidth: 760, width: '100%', margin: '0 auto' }}>
           <div style={{ fontFamily: "'DM Serif Display', Georgia, serif", fontSize: 28, color: '#f0ebe0', marginBottom: 6 }}>Session Summary</div>
@@ -267,7 +322,11 @@ export default function LiveRoom({ event, profile, isCreator, onLeave, accessTok
           ) : (
             <>
               <div style={{ display: 'grid', gridTemplateColumns: 'repeat(3, 1fr)', gap: 12, marginBottom: 28 }}>
-                {[{ label: 'TOTAL VIEWERS', value: rows.length }, { label: 'REGISTERED FANS', value: rows.filter(r => r.fan_id).length }, { label: 'GUESTS', value: rows.filter(r => !r.fan_id).length }].map(stat => (
+                {[
+                  { label: 'TOTAL VIEWERS', value: rows.length },
+                  { label: 'REGISTERED FANS', value: rows.filter(r => r.fan_id).length },
+                  { label: 'GUESTS', value: rows.filter(r => !r.fan_id).length },
+                ].map(stat => (
                   <div key={stat.label} style={{ background: 'rgba(17,17,20,0.8)', border: '1px solid #ffffff0a', borderRadius: 10, padding: '16px 20px' }}>
                     <div style={{ fontSize: 8, color: '#555', letterSpacing: '0.2em', marginBottom: 8 }}>{stat.label}</div>
                     <div style={{ fontFamily: "'DM Serif Display', Georgia, serif", fontSize: 30, color: accentColor }}>{stat.value}</div>
@@ -287,12 +346,16 @@ export default function LiveRoom({ event, profile, isCreator, onLeave, accessTok
                     const joinedAt = p.joined_at ? new Date(p.joined_at) : null
                     const leftAt = p.left_at ? new Date(p.left_at) : null
                     let duration = '—'
-                    if (joinedAt && leftAt) { const mins = Math.round((leftAt - joinedAt) / 60000); duration = mins < 60 ? `${mins}m` : `${Math.floor(mins / 60)}h ${mins % 60}m` }
-                    else if (joinedAt) { duration = 'Active' }
+                    if (joinedAt && leftAt) {
+                      const mins = Math.round((leftAt - joinedAt) / 60000)
+                      duration = mins < 60 ? `${mins}m` : `${Math.floor(mins / 60)}h ${mins % 60}m`
+                    } else if (joinedAt) { duration = 'Active' }
                     return (
                       <div key={p.id} style={{ display: 'grid', gridTemplateColumns: '1fr 110px 110px 90px', gap: 8, padding: '12px 20px', alignItems: 'center', borderBottom: i < rows.length - 1 ? '1px solid #ffffff05' : 'none', background: i % 2 === 0 ? 'transparent' : 'rgba(255,255,255,0.015)' }}>
                         <div style={{ display: 'flex', alignItems: 'center', gap: 10, minWidth: 0 }}>
-                          <div style={{ width: 28, height: 28, borderRadius: '50%', flexShrink: 0, background: '#111', border: `1px solid ${accentColor}33`, display: 'flex', alignItems: 'center', justifyContent: 'center', fontFamily: "'DM Serif Display', Georgia, serif", fontSize: 11, color: accentColor }}>{(p.display_name || 'G').charAt(0).toUpperCase()}</div>
+                          <div style={{ width: 28, height: 28, borderRadius: '50%', flexShrink: 0, background: '#111', border: `1px solid ${accentColor}33`, display: 'flex', alignItems: 'center', justifyContent: 'center', fontFamily: "'DM Serif Display', Georgia, serif", fontSize: 11, color: accentColor }}>
+                            {(p.display_name || 'G').charAt(0).toUpperCase()}
+                          </div>
                           <div style={{ minWidth: 0 }}>
                             <div style={{ fontSize: 13, color: '#f0ebe0', whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' }}>{p.display_name || 'Guest'}</div>
                             <div style={{ fontSize: 8, color: '#444', letterSpacing: '0.12em', marginTop: 1 }}>{p.fan_id ? 'REGISTERED FAN' : 'GUEST'}</div>
@@ -314,32 +377,82 @@ export default function LiveRoom({ event, profile, isCreator, onLeave, accessTok
     )
   }
 
-  // ── Live room ───────────────────────────────────────────────────────────────
+  // ── Live room view ──────────────────────────────────────────────────────────
+  // Use explicit pixel height from visualViewport so iPhone Safari
+  // renders the container at the correct size regardless of browser chrome.
+  const vph = viewportSize.h
+  const videoTop = isLandscape ? 0 : HEADER_H
+  const videoH = vph - videoTop
+
   return (
-    <div style={{ position: 'fixed', inset: 0, zIndex: 300, background: '#080808', display: 'flex', flexDirection: 'column' }}>
+    <div style={{
+      position: 'fixed', top: 0, left: 0,
+      width: '100%',
+      height: `${vph}px`,
+      zIndex: 300,
+      background: '#080808',
+      overflow: 'hidden',
+    }}>
       <link href="https://fonts.googleapis.com/css2?family=DM+Serif+Display&family=DM+Mono:wght@400;500&display=swap" rel="stylesheet" />
 
-      {/* Header */}
-      <div style={{ flexShrink: 0, height: HEADER_H, display: 'flex', alignItems: 'center', justifyContent: 'space-between', padding: '0 24px', background: '#0a0a0a', borderBottom: '1px solid #ffffff0a' }}>
-        <div style={{ display: 'flex', alignItems: 'center', gap: 12 }}>
-          <span style={{ fontFamily: "'DM Serif Display', Georgia, serif", fontSize: 18, color: accentColor }}>Coveted Stage</span>
-          <span style={{ fontFamily: "'DM Mono', monospace", fontSize: 11, color: '#444' }}>·</span>
-          <span style={{ fontFamily: "'DM Mono', monospace", fontSize: 12, color: '#888' }}>{event.name}</span>
-          {!joining && <span style={{ background: '#e8454522', color: '#e84545', border: '1px solid #e8454544', borderRadius: 4, fontSize: 10, fontWeight: 700, padding: '2px 8px', letterSpacing: '0.12em', fontFamily: "'DM Mono', monospace" }}>● LIVE</span>}
-        </div>
-        <div style={{ display: 'flex', alignItems: 'center', gap: 12 }}>
-          {!joining && <div style={{ fontFamily: "'DM Mono', monospace", fontSize: 11, color: '#555' }}>👥 {participants} live</div>}
-          {isCreator && !joining && <button onClick={handleEndForAll} style={{ background: '#e8454518', color: '#e84545', border: '1px solid #e8454544', borderRadius: 6, padding: '6px 14px', fontFamily: "'DM Mono', monospace", fontSize: 11, cursor: 'pointer', letterSpacing: '0.1em' }}>END FOR ALL</button>}
-          <button onClick={handleLeave} style={{ background: '#ffffff0a', color: '#888', border: '1px solid #ffffff15', borderRadius: 6, padding: '6px 14px', fontFamily: "'DM Mono', monospace", fontSize: 11, cursor: 'pointer', letterSpacing: '0.1em' }}>LEAVE</button>
-        </div>
-      </div>
+      {/* iframe container — explicit pixel width and height so Daily always
+          gets an unambiguous rect on iPhone Safari. bottom:0 alone is not
+          reliable on iOS; explicit height in px is. */}
+      <div
+        ref={containerRef}
+        style={{
+          position: 'absolute',
+          top: videoTop,
+          left: 0,
+          width: `${viewportSize.w}px`,
+          height: `${videoH}px`,
+        }}
+      />
 
-      {/* Daily iframe container — flex:1 fills remaining height */}
-      <div ref={containerRef} style={{ flex: 1, position: 'relative' }} />
+      {/* Portrait header — hidden in landscape so the iframe fills edge-to-edge */}
+      {!isLandscape && (
+        <div style={{
+          position: 'absolute', top: 0, left: 0, right: 0,
+          height: HEADER_H, zIndex: 1,
+          display: 'flex', alignItems: 'center', justifyContent: 'space-between',
+          padding: '0 24px', background: '#0a0a0a',
+          borderBottom: '1px solid #ffffff0a',
+        }}>
+          <div style={{ display: 'flex', alignItems: 'center', gap: 12 }}>
+            <span style={{ fontFamily: "'DM Serif Display', Georgia, serif", fontSize: 18, color: accentColor }}>Coveted Stage</span>
+            <span style={{ fontFamily: "'DM Mono', monospace", fontSize: 11, color: '#444' }}>·</span>
+            <span style={{ fontFamily: "'DM Mono', monospace", fontSize: 12, color: '#888' }}>{event.name}</span>
+            {!joining && (
+              <span style={{ background: '#e8454522', color: '#e84545', border: '1px solid #e8454544', borderRadius: 4, fontSize: 10, fontWeight: 700, padding: '2px 8px', letterSpacing: '0.12em', fontFamily: "'DM Mono', monospace" }}>● LIVE</span>
+            )}
+          </div>
+          <div style={{ display: 'flex', alignItems: 'center', gap: 12 }}>
+            {!joining && <div style={{ fontFamily: "'DM Mono', monospace", fontSize: 11, color: '#555' }}>👥 {participants} live</div>}
+            {isCreator && !joining && (
+              <button onClick={handleEndForAll} style={{ background: '#e8454518', color: '#e84545', border: '1px solid #e8454544', borderRadius: 6, padding: '6px 14px', fontFamily: "'DM Mono', monospace", fontSize: 11, cursor: 'pointer', letterSpacing: '0.1em' }}>END FOR ALL</button>
+            )}
+            <button onClick={handleLeave} style={{ background: '#ffffff0a', color: '#888', border: '1px solid #ffffff15', borderRadius: 6, padding: '6px 14px', fontFamily: "'DM Mono', monospace", fontSize: 11, cursor: 'pointer', letterSpacing: '0.1em' }}>LEAVE</button>
+          </div>
+        </div>
+      )}
+
+      {/* Landscape floating controls — minimal overlay so the video is unobstructed */}
+      {isLandscape && !joining && (
+        <div style={{
+          position: 'absolute', top: 12, right: 16, zIndex: 1,
+          display: 'flex', alignItems: 'center', gap: 8,
+        }}>
+          {!joining && <div style={{ fontFamily: "'DM Mono', monospace", fontSize: 10, color: 'rgba(255,255,255,0.4)' }}>👥 {participants} live</div>}
+          {isCreator && (
+            <button onClick={handleEndForAll} style={{ background: 'rgba(232,69,69,0.15)', color: '#e84545', border: '1px solid rgba(232,69,69,0.3)', borderRadius: 6, padding: '5px 12px', fontFamily: "'DM Mono', monospace", fontSize: 10, cursor: 'pointer', letterSpacing: '0.1em', backdropFilter: 'blur(8px)' }}>END FOR ALL</button>
+          )}
+          <button onClick={handleLeave} style={{ background: 'rgba(255,255,255,0.08)', color: 'rgba(255,255,255,0.6)', border: '1px solid rgba(255,255,255,0.15)', borderRadius: 6, padding: '5px 12px', fontFamily: "'DM Mono', monospace", fontSize: 10, cursor: 'pointer', letterSpacing: '0.1em', backdropFilter: 'blur(8px)' }}>LEAVE</button>
+        </div>
+      )}
 
       {/* Loading overlay */}
       {joining && !error && (
-        <div style={{ position: 'absolute', top: HEADER_H, left: 0, right: 0, bottom: 0, zIndex: 1, background: '#080808', display: 'flex', alignItems: 'center', justifyContent: 'center', flexDirection: 'column', gap: 20 }}>
+        <div style={{ position: 'absolute', inset: 0, zIndex: 1, background: '#080808', display: 'flex', alignItems: 'center', justifyContent: 'center', flexDirection: 'column', gap: 20 }}>
           <div style={{ fontFamily: "'DM Serif Display', Georgia, serif", fontSize: 22, color: '#f0ebe0' }}>{event.name}</div>
           <div style={{ fontFamily: "'DM Mono', monospace", fontSize: 11, color: '#444', letterSpacing: '0.2em' }}>JOINING LIVE ROOM...</div>
           <div style={{ width: 200, height: 2, background: '#1a1a1a', borderRadius: 999, overflow: 'hidden' }}>
@@ -350,7 +463,7 @@ export default function LiveRoom({ event, profile, isCreator, onLeave, accessTok
 
       {/* Error overlay */}
       {error && (
-        <div style={{ position: 'absolute', top: HEADER_H, left: 0, right: 0, bottom: 0, zIndex: 1, background: '#080808', display: 'flex', alignItems: 'center', justifyContent: 'center', flexDirection: 'column', gap: 16 }}>
+        <div style={{ position: 'absolute', inset: 0, zIndex: 1, background: '#080808', display: 'flex', alignItems: 'center', justifyContent: 'center', flexDirection: 'column', gap: 16 }}>
           <div style={{ fontSize: 32 }}>⚠️</div>
           <div style={{ fontFamily: "'DM Serif Display', Georgia, serif", fontSize: 20, color: '#f0ebe0' }}>Couldn't join room</div>
           <div style={{ fontFamily: "'DM Mono', monospace", fontSize: 12, color: '#555', maxWidth: 320, textAlign: 'center' }}>{error}</div>
