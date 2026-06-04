@@ -379,6 +379,13 @@ export default function LiveRoom({ event, profile, isCreator, onLeave, accessTok
         </div>
       )}
 
+      {/* DEBUG: show when joined but no video visible — remove after diagnosis */}
+      {!joining && !error && !isCreator && (
+        <div style={{ position: 'absolute', bottom: 16, left: '50%', transform: 'translateX(-50%)', zIndex: 2, background: 'rgba(0,0,0,0.7)', color: '#c9a84c', fontFamily: 'monospace', fontSize: 11, padding: '6px 14px', borderRadius: 6, pointerEvents: 'none', whiteSpace: 'nowrap' }}>
+          joined ✓ | room: {event.daily_room_name} | participants: {participants}
+        </div>
+      )}
+
       {/* Error overlay */}
       {error && (
         <div style={{ position: 'absolute', top: HEADER_H, left: 0, right: 0, bottom: 0, zIndex: 1, background: '#080808', display: 'flex', alignItems: 'center', justifyContent: 'center', flexDirection: 'column', gap: 16 }}>
