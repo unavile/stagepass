@@ -177,22 +177,6 @@ export default function LiveRoom({ event, profile, isCreator, onLeave, accessTok
         setJoining(false)
         globalJoinInProgress = false
         await logParticipantJoin()
-
-        // Diagnostic: log what the fan can see on join
-        if (!isCreatorRef.current) {
-          try {
-            const parts = frame.participants()
-            console.log('[FAN DEBUG] participants on join:', JSON.stringify(
-              Object.values(parts).map(p => ({
-                id: p.session_id,
-                local: p.local,
-                owner: p.owner,
-                video: p.tracks?.video?.state,
-                audio: p.tracks?.audio?.state,
-              }))
-            ))
-          } catch(e) { console.log('[FAN DEBUG] error:', e.message) }
-        }
       })
 
       frame.on('participant-updated', (e) => {
@@ -200,6 +184,16 @@ export default function LiveRoom({ event, profile, isCreator, onLeave, accessTok
           isJoinedRef.current = true
           setJoining(false)
           globalJoinInProgress = false
+        }
+        // For fans: when the creator's video track becomes playable,
+        // re-assert active speaker mode so Daily features their tile.
+        // On join, creator tracks are "sendable" not yet "playable" —
+        // this fires once they become playable and fixes the black screen.
+        if (!isCreatorRef.current && !e.participant?.local) {
+          const videoState = e.participant?.tracks?.video?.state
+          if (videoState === 'playable') {
+            try { frame.setActiveSpeakerMode(true) } catch (_) {}
+          }
         }
       })
 
