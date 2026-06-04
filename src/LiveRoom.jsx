@@ -151,11 +151,14 @@ export default function LiveRoom({ event, profile, isCreator, onLeave, accessTok
           border: 'none',
         },
         showLeaveButton: false,
-        showFullscreenButton: true,
+        showFullscreenButton: false,
         showUserNameChangeUI: false,
         showLocalVideo: isCreatorRef.current,
         activeSpeakerMode: true,
         showParticipantsBar: isCreatorRef.current,
+        // Hide Daily's bottom UI bar for fans — removes "Home page" label
+        // and Turn on/Unmute controls which take up space and confuse viewers
+        showMeetingURLButton: false,
         theme: {
           colors: {
             accent: '#c9a84c',
@@ -177,6 +180,16 @@ export default function LiveRoom({ event, profile, isCreator, onLeave, accessTok
         setJoining(false)
         globalJoinInProgress = false
         await logParticipantJoin()
+
+        // Creator: pin own tile immediately on join so no fan can displace it
+        if (isCreatorRef.current) {
+          try {
+            const local = frame.participants()?.local
+            if (local?.session_id) {
+              frame.updateParticipant(local.session_id, { setAsPinnedSpeaker: true })
+            }
+          } catch (_) {}
+        }
       })
 
       frame.on('participant-updated', (e) => {
@@ -192,7 +205,18 @@ export default function LiveRoom({ event, profile, isCreator, onLeave, accessTok
         setParticipants(count)
       })
 
-      frame.on('participant-joined', () => setParticipants(prev => prev + 1))
+      frame.on('participant-joined', (e) => {
+        setParticipants(prev => prev + 1)
+        // Re-pin creator's tile each time anyone joins
+        if (isCreatorRef.current) {
+          try {
+            const local = frame.participants()?.local
+            if (local?.session_id) {
+              frame.updateParticipant(local.session_id, { setAsPinnedSpeaker: true })
+            }
+          } catch (_) {}
+        }
+      })
       frame.on('participant-left', () => setParticipants(prev => Math.max(0, prev - 1)))
 
       frame.on('left-meeting', () => {
