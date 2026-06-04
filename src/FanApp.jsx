@@ -7,13 +7,6 @@ import FanLoginModal from './FanLoginModal'
 
 // Parse YYYY-MM-DD as local date — avoids UTC timezone shift
 function parseLocalDate(s) { if (!s) return new Date(); const [y,m,d] = s.split('-').map(Number); return new Date(y, m-1, d) }
-function eventDateTime(e) {
-  const time = e?.start_time || '00:00'
-  const [h, m] = time.split(':').map(Number)
-  const d = parseLocalDate(e?.event_date)
-  d.setHours(h, m, 0, 0)
-  return d
-}
 
 // ─── Design tokens ──────────────────────────────────────────────────────────
 const BG      = '#09090b'
@@ -706,8 +699,9 @@ export default function FanApp({ deepHandle }) {
             </div>
             {(() => {
               const now = new Date()
+              const cutoff = new Date(now - 24 * 60 * 60 * 1000)
               const filtered = creatorEvents.filter(e =>
-                creatorEventFilter === 'current' ? eventDateTime(e) >= now : eventDateTime(e) < now
+                creatorEventFilter === 'current' ? eventDateTime(e) >= cutoff : eventDateTime(e) < cutoff
               )
               if (filtered.length === 0) return (
                 <div style={{ color: TEXT3, fontFamily: "'DM Mono', monospace", fontSize: 11, padding: '12px 0' }}>
@@ -1055,9 +1049,10 @@ export default function FanApp({ deepHandle }) {
                 <div style={{ display: 'flex', flexDirection: 'column', gap: 12 }}>
                   {(() => {
                     const now = new Date()
+                    const cutoff = new Date(now - 24 * 60 * 60 * 1000)
                     const filteredRsvps = fanEvents.filter(r => {
                       if (!r.events?.event_date) return false
-                      return fanEventFilter === 'current' ? eventDateTime(r.events) >= now : eventDateTime(r.events) < now
+                      return fanEventFilter === 'current' ? eventDateTime(r.events) >= cutoff : eventDateTime(r.events) < cutoff
                     })
                     if (filteredRsvps.length === 0) return (
                       <div style={{ textAlign: 'center', padding: '32px 0', color: TEXT3, fontFamily: "'DM Mono', monospace", fontSize: 11 }}>

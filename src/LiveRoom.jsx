@@ -174,37 +174,9 @@ export default function LiveRoom({ event, profile, isCreator, onLeave, accessTok
 
       frame.on('joined-meeting', async () => {
         isJoinedRef.current = true
+        setJoining(false)
         globalJoinInProgress = false
         await logParticipantJoin()
-
-        if (isCreatorRef.current) {
-          setJoining(false)
-          return
-        }
-
-        // For fans: poll until we find a remote participant with
-        // a playable video or audio track, then show the iframe.
-        // Falls back to showing after 5 seconds regardless.
-        let attempts = 0
-        const poll = setInterval(() => {
-          attempts++
-          try {
-            const parts = Object.values(frame.participants())
-            const hasPlayable = parts.some(p =>
-              !p.local && (
-                p.tracks?.video?.state === 'playable' ||
-                p.tracks?.audio?.state === 'playable'
-              )
-            )
-            if (hasPlayable || attempts >= 50) {
-              clearInterval(poll)
-              setJoining(false)
-            }
-          } catch (_) {
-            clearInterval(poll)
-            setJoining(false)
-          }
-        }, 100)
       })
 
       frame.on('participant-updated', (e) => {
@@ -406,8 +378,6 @@ export default function LiveRoom({ event, profile, isCreator, onLeave, accessTok
   }
 
   // ── Live room view ──────────────────────────────────────────────────────────
-  // Use explicit pixel height from visualViewport so iPhone Safari
-  // renders the container at the correct size regardless of browser chrome.
   const vph = viewportSize.h
   const videoTop = isLandscape ? 0 : HEADER_H
   const videoH = vph - videoTop
@@ -423,19 +393,38 @@ export default function LiveRoom({ event, profile, isCreator, onLeave, accessTok
     }}>
       <link href="https://fonts.googleapis.com/css2?family=DM+Serif+Display&family=DM+Mono:wght@400;500&display=swap" rel="stylesheet" />
 
-      {/* iframe container — explicit pixel width and height so Daily always
-          gets an unambiguous rect on iPhone Safari. bottom:0 alone is not
-          reliable on iOS; explicit height in px is. */}
-      <div
-        ref={containerRef}
-        style={{
+      {/* In landscape: fill entire screen (true fullscreen, no cropping).
+          In portrait: use Daily.co recommended padding-bottom:56.25% wrapper
+          so the iframe gets a perfect 16:9 rect — fixes video cropping on iPhone. */}
+      {isLandscape ? (
+        <div
+          ref={containerRef}
+          style={{
+            position: 'absolute',
+            top: 0, left: 0,
+            width: `${viewportSize.w}px`,
+            height: `${vph}px`,
+          }}
+        />
+      ) : (
+        <div style={{
           position: 'absolute',
-          top: videoTop,
-          left: 0,
-          width: `${viewportSize.w}px`,
+          top: HEADER_H, left: 0,
+          width: '100%',
+          display: 'flex',
+          alignItems: 'center',
+          justifyContent: 'center',
           height: `${videoH}px`,
-        }}
-      />
+          background: '#080808',
+        }}>
+          <div style={{ position: 'relative', width: '100%', paddingBottom: '56.25%' }}>
+            <div
+              ref={containerRef}
+              style={{ position: 'absolute', top: 0, left: 0, width: '100%', height: '100%' }}
+            />
+          </div>
+        </div>
+      )}
 
       {/* Portrait header — hidden in landscape so the iframe fills edge-to-edge */}
       {!isLandscape && (

@@ -82,8 +82,9 @@ export default function CreatorApp({ session, profile, onSignOut }) {
   const [loadingParticipants, setLoadingParticipants] = useState({})   // { eventId: bool }
   const [expandedParticipants, setExpandedParticipants] = useState({}) // { eventId: bool }
   // Use local date (not UTC) so US timezones don't get pushed to tomorrow
-  // eventDateTime is defined outside the render-time `now` so comparisons
-  // always use a fresh Date() — prevents stale `now` after refetch
+  const now = new Date()
+  const todayStr = `${now.getFullYear()}-${String(now.getMonth()+1).padStart(2,'0')}-${String(now.getDate()).padStart(2,'0')}`
+
   function eventDateTime(e) {
     const time = e.start_time || '00:00'
     const [h, m] = time.split(':').map(Number)
@@ -92,10 +93,10 @@ export default function CreatorApp({ session, profile, onSignOut }) {
     return d
   }
 
-  const now = new Date()
-  const todayStr = `${now.getFullYear()}-${String(now.getMonth()+1).padStart(2,'0')}-${String(now.getDate()).padStart(2,'0')}`
-  const currentEvents = (events || []).filter(e => eventDateTime(e) >= new Date())
-  const pastEvents    = (events || []).filter(e => eventDateTime(e) <  new Date())
+  // Events move to PAST only after 24 hours from start time
+  const cutoff = new Date(now - 24 * 60 * 60 * 1000)
+  const currentEvents = (events || []).filter(e => eventDateTime(e) >= cutoff)
+  const pastEvents    = (events || []).filter(e => eventDateTime(e) <  cutoff)
   const filteredEvents = eventFilter === 'current' ? currentEvents : pastEvents
 
   useEffect(() => {
@@ -658,7 +659,7 @@ export default function CreatorApp({ session, profile, onSignOut }) {
                         </div>
                       )}
                       {/* ── Live session participants (past events only) ── */}
-                      {event.daily_room_name && eventDateTime(event) < new Date() && (
+                      {event.daily_room_name && eventDateTime(event) < cutoff && (
                         <div style={{ marginTop: 14, paddingTop: 14, borderTop: `1px solid ${BORDER2}` }}>
                           <button
                             onClick={() => fetchParticipants(event.id)}
@@ -773,7 +774,7 @@ export default function CreatorApp({ session, profile, onSignOut }) {
                         </div>
                       )}
 
-                      {event.daily_room_name && eventDateTime(event) >= new Date() && (
+                      {event.daily_room_name && eventDateTime(event) >= cutoff && (
                         <button onClick={() => setLiveEvent(event)} style={{
                           marginTop: 14, width: '100%',
                           background: ac, color: '#080808',
