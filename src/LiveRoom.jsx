@@ -117,20 +117,24 @@ export default function LiveRoom({ event, profile, isCreator, onLeave, accessTok
         showLocalVideo: isCreatorRef.current,
         showParticipantsBar: isCreatorRef.current,
         activeSpeakerMode: true,
-        theme: {
-          colors: {
-            accent: '#c9a84c',
-            accentText: '#080808',
-            background: '#0e0e0e',
-            backgroundAccent: '#161616',
-            baseText: '#e8e2d6',
-            border: '#ffffff15',
-            mainAreaBg: '#080808',
-            mainAreaBgAccent: '#0e0e0e',
-            mainAreaText: '#e8e2d6',
-            supportiveText: '#888',
+        // Only apply dark theme for creator — fan uses Daily's default theme
+        // so we can see if the dark mainAreaBg is masking video content
+        ...(isCreatorRef.current ? {
+          theme: {
+            colors: {
+              accent: '#c9a84c',
+              accentText: '#080808',
+              background: '#0e0e0e',
+              backgroundAccent: '#161616',
+              baseText: '#e8e2d6',
+              border: '#ffffff15',
+              mainAreaBg: '#080808',
+              mainAreaBgAccent: '#0e0e0e',
+              mainAreaText: '#e8e2d6',
+              supportiveText: '#888',
+            }
           }
-        }
+        } : {})
       })
 
       frame.on('joined-meeting', async () => {
@@ -138,6 +142,22 @@ export default function LiveRoom({ event, profile, isCreator, onLeave, accessTok
         setJoining(false)
         globalJoinInProgress = false
         await logParticipantJoin()
+
+        // For fans: find the owner/creator participant and ensure
+        // their video is being received and displayed
+        if (!isCreatorRef.current) {
+          try {
+            const allParticipants = frame.participants()
+            const creator = Object.values(allParticipants).find(
+              p => !p.local && p.owner
+            )
+            if (creator) {
+              frame.updateParticipant(creator.session_id, {
+                setSubscribedTracks: { video: true, audio: true, screenVideo: false }
+              })
+            }
+          } catch (e) { /* non-critical */ }
+        }
       })
 
       frame.on('participant-updated', (e) => {
@@ -145,6 +165,14 @@ export default function LiveRoom({ event, profile, isCreator, onLeave, accessTok
           isJoinedRef.current = true
           setJoining(false)
           globalJoinInProgress = false
+        }
+        // For fans: when the owner's tracks become available, subscribe to them
+        if (!isCreatorRef.current && !e.participant?.local && e.participant?.owner) {
+          try {
+            frame.updateParticipant(e.participant.session_id, {
+              setSubscribedTracks: { video: true, audio: true, screenVideo: false }
+            })
+          } catch (e2) { /* non-critical */ }
         }
       })
 
