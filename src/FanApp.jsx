@@ -7,6 +7,13 @@ import FanLoginModal from './FanLoginModal'
 
 // Parse YYYY-MM-DD as local date — avoids UTC timezone shift
 function parseLocalDate(s) { if (!s) return new Date(); const [y,m,d] = s.split('-').map(Number); return new Date(y, m-1, d) }
+function eventDateTime(e) {
+  const time = e?.start_time || '00:00'
+  const [h, m] = time.split(':').map(Number)
+  const d = parseLocalDate(e?.event_date)
+  d.setHours(h, m, 0, 0)
+  return d
+}
 
 // ─── Design tokens ──────────────────────────────────────────────────────────
 const BG      = '#09090b'
@@ -698,9 +705,9 @@ export default function FanApp({ deepHandle }) {
               ))}
             </div>
             {(() => {
-              const todayStr = new Date().toISOString().split('T')[0]
+              const now = new Date()
               const filtered = creatorEvents.filter(e =>
-                creatorEventFilter === 'current' ? e.event_date >= todayStr : e.event_date < todayStr
+                creatorEventFilter === 'current' ? eventDateTime(e) >= now : eventDateTime(e) < now
               )
               if (filtered.length === 0) return (
                 <div style={{ color: TEXT3, fontFamily: "'DM Mono', monospace", fontSize: 11, padding: '12px 0' }}>
@@ -1047,10 +1054,10 @@ export default function FanApp({ deepHandle }) {
               ) : (
                 <div style={{ display: 'flex', flexDirection: 'column', gap: 12 }}>
                   {(() => {
-                    const todayStr = new Date().toISOString().split('T')[0]
+                    const now = new Date()
                     const filteredRsvps = fanEvents.filter(r => {
-                      const d = r.events?.event_date
-                      return d ? (fanEventFilter === 'current' ? d >= todayStr : d < todayStr) : false
+                      if (!r.events?.event_date) return false
+                      return fanEventFilter === 'current' ? eventDateTime(r.events) >= now : eventDateTime(r.events) < now
                     })
                     if (filteredRsvps.length === 0) return (
                       <div style={{ textAlign: 'center', padding: '32px 0', color: TEXT3, fontFamily: "'DM Mono', monospace", fontSize: 11 }}>
