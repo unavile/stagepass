@@ -47,10 +47,20 @@ exports.handler = async (event) => {
         room_name: roomName,
         is_owner: isOwner,
         user_name: userName,
-        enable_screenshare: isOwner,
-        start_video_off: !isOwner,
-        start_audio_off: !isOwner,
+        enable_screenshare: isOwner,       // only creators can screenshare
+        start_video_off: !isOwner,         // fans join with camera off
+        start_audio_off: !isOwner,         // fans join with mic off
         exp: Math.floor(Date.now() / 1000) + 86400,
+        // Explicitly grant fans permission to receive all media tracks.
+        // Without this, owner_only_broadcast may not deliver the creator's
+        // video and audio to non-owner participants, causing a black screen.
+        ...(isOwner ? {} : {
+          permissions: {
+            hasPresence: true,
+            canSend: false,
+            canReceive: { base: 'all' },
+          }
+        }),
       }
     })
 
