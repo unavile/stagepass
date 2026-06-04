@@ -447,14 +447,17 @@ export default function LiveRoom({ event, profile, isCreator, onLeave, accessTok
   return (
     <div style={{
       position: 'fixed', inset: 0, zIndex: 300,
-      background: '#080808',
+      // No background here — the Daily iframe sits at z-index 298 mounted to
+      // document.body and must be visible. Only the 60px header needs to cover it.
+      background: 'transparent',
       display: 'flex', flexDirection: 'column',
+      pointerEvents: 'none', // let clicks pass through to the iframe below
     }}>
       <link href="https://fonts.googleapis.com/css2?family=DM+Serif+Display&family=DM+Mono:wght@400;500&display=swap" rel="stylesheet" />
 
-      {/* Header */}
+      {/* Header — pointer events re-enabled so buttons are clickable */}
       <div style={{
-        flexShrink: 0,
+        flexShrink: 0, pointerEvents: 'auto',
         display: 'flex', alignItems: 'center', justifyContent: 'space-between',
         padding: '0 24px', height: 60, background: '#0a0a0a',
         borderBottom: '1px solid #ffffff0a',
