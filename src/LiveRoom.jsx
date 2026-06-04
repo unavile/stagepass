@@ -25,16 +25,36 @@ export default function LiveRoom({ event, profile, isCreator, onLeave, accessTok
     () => window.innerWidth > window.innerHeight
   )
 
-  // Update landscape state on resize / orientation change
+  // Update landscape state on resize / orientation change.
+  // orientationchange fires before the browser updates innerWidth/innerHeight
+  // on iOS, so we defer the check by 100ms.
   useEffect(() => {
-    function onResize() { setIsLandscape(window.innerWidth > window.innerHeight) }
-    window.addEventListener('resize', onResize)
-    window.addEventListener('orientationchange', onResize)
+    function check() { setIsLandscape(window.innerWidth > window.innerHeight) }
+    function onOrientation() { setTimeout(check, 100) }
+    window.addEventListener('resize', check)
+    window.addEventListener('orientationchange', onOrientation)
     return () => {
-      window.removeEventListener('resize', onResize)
-      window.removeEventListener('orientationchange', onResize)
+      window.removeEventListener('resize', check)
+      window.removeEventListener('orientationchange', onOrientation)
     }
   }, [])
+
+  // When landscape state changes after the frame is mounted, tell Daily to
+  // resize its iframe — it doesn't watch the container for size changes.
+  useEffect(() => {
+    if (!frameRef.current) return
+    const top = isLandscape ? 0 : HEADER_H
+    try {
+      frameRef.current.setIframeStyle({
+        position: 'absolute',
+        top: `${top}px`,
+        left: '0',
+        width: '100%',
+        height: `calc(100% - ${top}px)`,
+        border: 'none',
+      })
+    } catch (e) { /* frame may not be ready yet — containerRef resize handles it */ }
+  }, [isLandscape])
 
   useEffect(() => { onLeaveRef.current = onLeave }, [onLeave])
   useEffect(() => { eventRef.current = event }, [event])
@@ -362,13 +382,28 @@ export default function LiveRoom({ event, profile, isCreator, onLeave, accessTok
   const videoTop = isLandscape ? 0 : HEADER_H
 
   return (
-    <div style={{ position: 'fixed', inset: 0, zIndex: 300, background: '#080808' }}>
+    <div style={{
+      position: 'fixed', top: 0, left: 0,
+      width: '100%',
+      // 100dvh accounts for mobile browser chrome (address bar, bottom nav).
+      // Falls back to 100vh on older browsers.
+      height: '100dvh',
+      zIndex: 300,
+      background: '#080808',
+    }}>
       <link href="https://fonts.googleapis.com/css2?family=DM+Serif+Display&family=DM+Mono:wght@400;500&display=swap" rel="stylesheet" />
 
-      {/* iframe container — fills from videoTop to bottom of screen */}
+      {/* iframe container — fills from videoTop to bottom.
+          Daily fills this div exactly because it has explicit pixel dimensions. */}
       <div
         ref={containerRef}
-        style={{ position: 'absolute', top: videoTop, left: 0, right: 0, bottom: 0 }}
+        style={{
+          position: 'absolute',
+          top: videoTop,
+          left: 0,
+          right: 0,
+          bottom: 0,
+        }}
       />
 
       {/* Portrait header — hidden in landscape so the iframe fills edge-to-edge */}
