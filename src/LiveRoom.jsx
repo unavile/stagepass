@@ -177,6 +177,22 @@ export default function LiveRoom({ event, profile, isCreator, onLeave, accessTok
         setJoining(false)
         globalJoinInProgress = false
         await logParticipantJoin()
+
+        // Diagnostic: log what the fan can see on join
+        if (!isCreatorRef.current) {
+          try {
+            const parts = frame.participants()
+            console.log('[FAN DEBUG] participants on join:', JSON.stringify(
+              Object.values(parts).map(p => ({
+                id: p.session_id,
+                local: p.local,
+                owner: p.owner,
+                video: p.tracks?.video?.state,
+                audio: p.tracks?.audio?.state,
+              }))
+            ))
+          } catch(e) { console.log('[FAN DEBUG] error:', e.message) }
+        }
       })
 
       frame.on('participant-updated', (e) => {
@@ -192,19 +208,7 @@ export default function LiveRoom({ event, profile, isCreator, onLeave, accessTok
         setParticipants(count)
       })
 
-      frame.on('participant-joined', (e) => {
-        setParticipants(prev => prev + 1)
-        // Creator: immediately suppress fan's video+audio so Daily never
-        // promotes their blank tile as the active speaker
-        if (isCreatorRef.current && e?.participant && !e.participant.local) {
-          try {
-            frame.updateParticipant(e.participant.session_id, {
-              setVideo: false,
-              setAudio: false,
-            })
-          } catch (_) {}
-        }
-      })
+      frame.on('participant-joined', () => setParticipants(prev => prev + 1))
       frame.on('participant-left', () => setParticipants(prev => Math.max(0, prev - 1)))
 
       frame.on('left-meeting', () => {
