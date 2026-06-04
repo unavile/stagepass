@@ -153,15 +153,13 @@ export default function LiveRoom({ event, profile, isCreator, onLeave, accessTok
         showLeaveButton: false,
         showFullscreenButton: true,
         showUserNameChangeUI: false,
-        // Creator sees their own camera preview and participant bar.
-        // Fans see neither — they are audience-only viewers.
         showLocalVideo: isCreatorRef.current,
         showParticipantsBar: isCreatorRef.current,
-        // activeSpeakerMode: true for BOTH roles — this keeps the creator's
-        // video as the dominant featured tile. With false, Daily uses grid mode
-        // which promotes fan tiles (black/camera-off) when they join, darkening
-        // the screen. true ensures the active speaker (creator) stays front and centre.
         activeSpeakerMode: true,
+        // Fans are audience-only — stop Daily auto-subscribing to their (empty)
+        // media tracks, which prevents their tile being treated as an active
+        // media source and promoted to the featured position.
+        subscribeToTracksAutomatically: isCreatorRef.current ? true : false,
         theme: {
           colors: {
             accent: '#c9a84c',
