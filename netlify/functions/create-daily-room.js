@@ -43,18 +43,19 @@ exports.handler = async (event) => {
     console.log('Creating Daily room for event:', eventName)
     console.log('DAILY_API_KEY exists:', !!process.env.DAILY_API_KEY)
 
-    const expiry = Math.floor(Date.now() / 1000) + (durationMinutes * 60) + (7 * 24 * 60 * 60)
+    const expiry = Math.floor(Date.now() / 1000) + (durationMinutes * 60) + (7 * 24 * 60 * 60) // expires 7 days from now
 
     const result = await dailyRequest('/v1/rooms', {
       name: `stagepass-${eventId}`,
-      privacy: 'public',
+      privacy: 'private',
       properties: {
-        start_audio_off: true,
-        start_video_off: true,
         enable_chat: true,
         enable_screenshare: true,
         exp: expiry,
         owner_only_broadcast: true,
+        // Do NOT set start_video_off or start_audio_off at room level —
+        // these override the creator's token and prevent video being published.
+        // Per-participant AV state is controlled via meeting tokens instead.
       }
     })
 
