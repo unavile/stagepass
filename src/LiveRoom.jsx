@@ -25,36 +25,37 @@ export default function LiveRoom({ event, profile, isCreator, onLeave, accessTok
     () => window.innerWidth > window.innerHeight
   )
 
-  // Update landscape state on resize / orientation change.
-  // orientationchange fires before the browser updates innerWidth/innerHeight
-  // on iOS, so we defer the check by 100ms.
+  // viewportSize tracks the actual visible pixel dimensions reported by
+  // visualViewport (the correct API for iPhone Safari). Falls back to
+  // window dimensions on browsers without visualViewport support.
+  const [viewportSize, setViewportSize] = useState(() => ({
+    w: window.visualViewport?.width  ?? window.innerWidth,
+    h: window.visualViewport?.height ?? window.innerHeight,
+  }))
+
   useEffect(() => {
-    function check() { setIsLandscape(window.innerWidth > window.innerHeight) }
-    function onOrientation() { setTimeout(check, 100) }
-    window.addEventListener('resize', check)
-    window.addEventListener('orientationchange', onOrientation)
+    function update() {
+      const w = window.visualViewport?.width  ?? window.innerWidth
+      const h = window.visualViewport?.height ?? window.innerHeight
+      setViewportSize({ w, h })
+      setIsLandscape(w > h)
+    }
+    // visualViewport fires 'resize' correctly on iPhone including after
+    // browser chrome show/hide — more reliable than orientationchange
+    if (window.visualViewport) {
+      window.visualViewport.addEventListener('resize', update)
+    } else {
+      window.addEventListener('resize', update)
+    }
+    window.addEventListener('orientationchange', () => setTimeout(update, 100))
     return () => {
-      window.removeEventListener('resize', check)
-      window.removeEventListener('orientationchange', onOrientation)
+      if (window.visualViewport) {
+        window.visualViewport.removeEventListener('resize', update)
+      } else {
+        window.removeEventListener('resize', update)
+      }
     }
   }, [])
-
-  // When landscape state changes after the frame is mounted, tell Daily to
-  // resize its iframe — it doesn't watch the container for size changes.
-  useEffect(() => {
-    if (!frameRef.current) return
-    const top = isLandscape ? 0 : HEADER_H
-    try {
-      frameRef.current.setIframeStyle({
-        position: 'absolute',
-        top: `${top}px`,
-        left: '0',
-        width: '100%',
-        height: `calc(100% - ${top}px)`,
-        border: 'none',
-      })
-    } catch (e) { /* frame may not be ready yet — containerRef resize handles it */ }
-  }, [isLandscape])
 
   useEffect(() => { onLeaveRef.current = onLeave }, [onLeave])
   useEffect(() => { eventRef.current = event }, [event])
@@ -377,32 +378,34 @@ export default function LiveRoom({ event, profile, isCreator, onLeave, accessTok
   }
 
   // ── Live room view ──────────────────────────────────────────────────────────
-  // In landscape the header hides and the iframe fills the full screen (true 16:9).
-  // In portrait the header is 60px tall and the iframe fills the space below it.
+  // Use explicit pixel height from visualViewport so iPhone Safari
+  // renders the container at the correct size regardless of browser chrome.
+  const vph = viewportSize.h
   const videoTop = isLandscape ? 0 : HEADER_H
+  const videoH = vph - videoTop
 
   return (
     <div style={{
       position: 'fixed', top: 0, left: 0,
       width: '100%',
-      // 100dvh accounts for mobile browser chrome (address bar, bottom nav).
-      // Falls back to 100vh on older browsers.
-      height: '100dvh',
+      height: `${vph}px`,
       zIndex: 300,
       background: '#080808',
+      overflow: 'hidden',
     }}>
       <link href="https://fonts.googleapis.com/css2?family=DM+Serif+Display&family=DM+Mono:wght@400;500&display=swap" rel="stylesheet" />
 
-      {/* iframe container — fills from videoTop to bottom.
-          Daily fills this div exactly because it has explicit pixel dimensions. */}
+      {/* iframe container — explicit pixel width and height so Daily always
+          gets an unambiguous rect on iPhone Safari. bottom:0 alone is not
+          reliable on iOS; explicit height in px is. */}
       <div
         ref={containerRef}
         style={{
           position: 'absolute',
           top: videoTop,
           left: 0,
-          right: 0,
-          bottom: 0,
+          width: `${viewportSize.w}px`,
+          height: `${videoH}px`,
         }}
       />
 
