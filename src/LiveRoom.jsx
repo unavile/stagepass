@@ -393,38 +393,21 @@ export default function LiveRoom({ event, profile, isCreator, onLeave, accessTok
     }}>
       <link href="https://fonts.googleapis.com/css2?family=DM+Serif+Display&family=DM+Mono:wght@400;500&display=swap" rel="stylesheet" />
 
-      {/* In landscape: fill entire screen (true fullscreen, no cropping).
-          In portrait: use Daily.co recommended padding-bottom:56.25% wrapper
-          so the iframe gets a perfect 16:9 rect — fixes video cropping on iPhone. */}
-      {isLandscape ? (
-        <div
-          ref={containerRef}
-          style={{
-            position: 'absolute',
-            top: 0, left: 0,
-            width: `${viewportSize.w}px`,
-            height: `${vph}px`,
-          }}
-        />
-      ) : (
-        <div style={{
+      {/* Single containerRef div that never unmounts — just resizes.
+          Two separate JSX branches with ref={containerRef} causes Daily's
+          iframe to be orphaned when orientation changes.
+          Portrait: 16:9 aspect ratio via explicit pixel height.
+          Landscape: full screen edge-to-edge. */}
+      <div
+        ref={containerRef}
+        style={{
           position: 'absolute',
-          top: HEADER_H, left: 0,
-          width: '100%',
-          display: 'flex',
-          alignItems: 'center',
-          justifyContent: 'center',
-          height: `${videoH}px`,
-          background: '#080808',
-        }}>
-          <div style={{ position: 'relative', width: '100%', paddingBottom: '56.25%' }}>
-            <div
-              ref={containerRef}
-              style={{ position: 'absolute', top: 0, left: 0, width: '100%', height: '100%' }}
-            />
-          </div>
-        </div>
-      )}
+          top: isLandscape ? 0 : HEADER_H,
+          left: 0,
+          width: `${viewportSize.w}px`,
+          height: isLandscape ? `${vph}px` : `${Math.round(viewportSize.w * 9 / 16)}px`,
+        }}
+      />
 
       {/* Portrait header — hidden in landscape so the iframe fills edge-to-edge */}
       {!isLandscape && (
