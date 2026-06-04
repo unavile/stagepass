@@ -81,9 +81,22 @@ export default function CreatorApp({ session, profile, onSignOut }) {
   const [eventParticipants, setEventParticipants] = useState({})       // { eventId: [...rows] }
   const [loadingParticipants, setLoadingParticipants] = useState({})   // { eventId: bool }
   const [expandedParticipants, setExpandedParticipants] = useState({}) // { eventId: bool }
-  const todayStr = new Date().toISOString().split('T')[0]
-  const currentEvents = (events || []).filter(e => e.event_date >= todayStr)
-  const pastEvents = (events || []).filter(e => e.event_date < todayStr)
+  // Use local date (not UTC) so US timezones don't get pushed to tomorrow
+  const now = new Date()
+  const todayStr = `${now.getFullYear()}-${String(now.getMonth()+1).padStart(2,'0')}-${String(now.getDate()).padStart(2,'0')}`
+
+  // Compare using full event datetime (date + start_time) so events today
+  // that haven't started yet correctly appear in CURRENT & UPCOMING
+  function eventDateTime(e) {
+    const time = e.start_time || '00:00'
+    const [h, m] = time.split(':').map(Number)
+    const d = parseLocalDate(e.event_date)
+    d.setHours(h, m, 0, 0)
+    return d
+  }
+
+  const currentEvents = (events || []).filter(e => eventDateTime(e) >= now)
+  const pastEvents    = (events || []).filter(e => eventDateTime(e) <  now)
   const filteredEvents = eventFilter === 'current' ? currentEvents : pastEvents
 
   useEffect(() => {
@@ -646,7 +659,7 @@ export default function CreatorApp({ session, profile, onSignOut }) {
                         </div>
                       )}
                       {/* ── Live session participants (past events only) ── */}
-                      {event.daily_room_name && event.event_date < todayStr && (
+                      {event.daily_room_name && eventDateTime(event) < now && (
                         <div style={{ marginTop: 14, paddingTop: 14, borderTop: `1px solid ${BORDER2}` }}>
                           <button
                             onClick={() => fetchParticipants(event.id)}
@@ -761,7 +774,7 @@ export default function CreatorApp({ session, profile, onSignOut }) {
                         </div>
                       )}
 
-                      {event.daily_room_name && event.event_date >= todayStr && (
+                      {event.daily_room_name && eventDateTime(event) >= now && (
                         <button onClick={() => setLiveEvent(event)} style={{
                           marginTop: 14, width: '100%',
                           background: ac, color: '#080808',
