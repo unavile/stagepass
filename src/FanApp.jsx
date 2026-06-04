@@ -7,6 +7,13 @@ import FanLoginModal from './FanLoginModal'
 
 // Parse YYYY-MM-DD as local date — avoids UTC timezone shift
 function parseLocalDate(s) { if (!s) return new Date(); const [y,m,d] = s.split('-').map(Number); return new Date(y, m-1, d) }
+function eventDateTime(e) {
+  const time = e?.start_time || '00:00'
+  const [h, m] = time.split(':').map(Number)
+  const d = parseLocalDate(e?.event_date)
+  d.setHours(h, m, 0, 0)
+  return d
+}
 
 // ─── Design tokens ──────────────────────────────────────────────────────────
 const BG      = '#09090b'
