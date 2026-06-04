@@ -154,7 +154,7 @@ export default function LiveRoom({ event, profile, isCreator, onLeave, accessTok
         showFullscreenButton: true,
         showUserNameChangeUI: false,
         showLocalVideo: isCreatorRef.current,
-        activeSpeakerMode: isCreatorRef.current,
+        activeSpeakerMode: true,
         showParticipantsBar: isCreatorRef.current,
         theme: {
           colors: {
