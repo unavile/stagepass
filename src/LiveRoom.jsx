@@ -174,9 +174,13 @@ export default function LiveRoom({ event, profile, isCreator, onLeave, accessTok
 
       frame.on('joined-meeting', async () => {
         isJoinedRef.current = true
-        setJoining(false)
         globalJoinInProgress = false
         await logParticipantJoin()
+        // Short delay so creator's tracks transition from "sendable" to
+        // "playable" before the loading overlay is removed and Daily
+        // renders the active speaker view. Without this, Daily renders
+        // before the track is ready and shows a black screen.
+        setTimeout(() => setJoining(false), 800)
       })
 
       frame.on('participant-updated', (e) => {
@@ -184,16 +188,6 @@ export default function LiveRoom({ event, profile, isCreator, onLeave, accessTok
           isJoinedRef.current = true
           setJoining(false)
           globalJoinInProgress = false
-        }
-        // For fans: when the creator's video track becomes playable,
-        // re-assert active speaker mode so Daily features their tile.
-        // On join, creator tracks are "sendable" not yet "playable" —
-        // this fires once they become playable and fixes the black screen.
-        if (!isCreatorRef.current && !e.participant?.local) {
-          const videoState = e.participant?.tracks?.video?.state
-          if (videoState === 'playable') {
-            try { frame.setActiveSpeakerMode(true) } catch (_) {}
-          }
         }
       })
 
