@@ -176,18 +176,27 @@ export default function LiveRoom({ event, profile, isCreator, onLeave, accessTok
         isJoinedRef.current = true
         globalJoinInProgress = false
         await logParticipantJoin()
-        // Short delay so creator's tracks transition from "sendable" to
-        // "playable" before the loading overlay is removed and Daily
-        // renders the active speaker view. Without this, Daily renders
-        // before the track is ready and shows a black screen.
-        setTimeout(() => setJoining(false), 800)
+        // For creators, show immediately. For fans, wait until
+        // participant-updated confirms creator tracks are playable.
+        if (isCreatorRef.current) {
+          setJoining(false)
+        }
       })
 
       frame.on('participant-updated', (e) => {
         if (e.participant?.local) {
           isJoinedRef.current = true
-          setJoining(false)
+          if (isCreatorRef.current) setJoining(false)
           globalJoinInProgress = false
+        }
+        // For fans: show the iframe only once the creator's video
+        // track is confirmed playable — not before.
+        if (!isCreatorRef.current && !e.participant?.local && e.participant?.owner) {
+          const video = e.participant?.tracks?.video?.state
+          const audio = e.participant?.tracks?.audio?.state
+          if (video === 'playable' || audio === 'playable') {
+            setJoining(false)
+          }
         }
       })
 
