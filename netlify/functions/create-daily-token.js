@@ -51,16 +51,6 @@ exports.handler = async (event) => {
         start_video_off: !isOwner,         // fans join with camera off
         start_audio_off: !isOwner,         // fans join with mic off
         exp: Math.floor(Date.now() / 1000) + 86400,
-        // Explicitly grant fans permission to receive all media tracks.
-        // Without this, owner_only_broadcast may not deliver the creator's
-        // video and audio to non-owner participants, causing a black screen.
-        ...(isOwner ? {} : {
-          permissions: {
-            hasPresence: true,
-            canSend: false,
-            canReceive: { base: 'all' },
-          }
-        }),
       }
     })
 
