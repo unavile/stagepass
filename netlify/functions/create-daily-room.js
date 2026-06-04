@@ -43,20 +43,17 @@ exports.handler = async (event) => {
     console.log('Creating Daily room for event:', eventName)
     console.log('DAILY_API_KEY exists:', !!process.env.DAILY_API_KEY)
 
-    const expiry = Math.floor(Date.now() / 1000) + (durationMinutes * 60) + (7 * 24 * 60 * 60) // expires 7 days from now
+    const expiry = Math.floor(Date.now() / 1000) + (durationMinutes * 60) + (7 * 24 * 60 * 60)
 
     const result = await dailyRequest('/v1/rooms', {
       name: `stagepass-${eventId}`,
-      privacy: 'private',
+      privacy: 'public',
       properties: {
         start_audio_off: true,
         start_video_off: true,
         enable_chat: true,
         enable_screenshare: true,
         exp: expiry,
-        // owner_only_broadcast hides fan tiles entirely in Daily Prebuilt
-        // so the creator's video always stays as the featured tile.
-        // Without this, fan tiles (black/camera-off) take over the main view.
         owner_only_broadcast: true,
       }
     })

@@ -117,24 +117,20 @@ export default function LiveRoom({ event, profile, isCreator, onLeave, accessTok
         showLocalVideo: isCreatorRef.current,
         showParticipantsBar: isCreatorRef.current,
         activeSpeakerMode: true,
-        // Only apply dark theme for creator — fan uses Daily's default theme
-        // so we can see if the dark mainAreaBg is masking video content
-        ...(isCreatorRef.current ? {
-          theme: {
-            colors: {
-              accent: '#c9a84c',
-              accentText: '#080808',
-              background: '#0e0e0e',
-              backgroundAccent: '#161616',
-              baseText: '#e8e2d6',
-              border: '#ffffff15',
-              mainAreaBg: '#080808',
-              mainAreaBgAccent: '#0e0e0e',
-              mainAreaText: '#e8e2d6',
-              supportiveText: '#888',
-            }
+        theme: {
+          colors: {
+            accent: '#c9a84c',
+            accentText: '#080808',
+            background: '#0e0e0e',
+            backgroundAccent: '#161616',
+            baseText: '#e8e2d6',
+            border: '#ffffff15',
+            mainAreaBg: '#080808',
+            mainAreaBgAccent: '#0e0e0e',
+            mainAreaText: '#e8e2d6',
+            supportiveText: '#888',
           }
-        } : {})
+        }
       })
 
       frame.on('joined-meeting', async () => {
@@ -142,22 +138,6 @@ export default function LiveRoom({ event, profile, isCreator, onLeave, accessTok
         setJoining(false)
         globalJoinInProgress = false
         await logParticipantJoin()
-
-        // For fans: find the owner/creator participant and ensure
-        // their video is being received and displayed
-        if (!isCreatorRef.current) {
-          try {
-            const allParticipants = frame.participants()
-            const creator = Object.values(allParticipants).find(
-              p => !p.local && p.owner
-            )
-            if (creator) {
-              frame.updateParticipant(creator.session_id, {
-                setSubscribedTracks: { video: true, audio: true, screenVideo: false }
-              })
-            }
-          } catch (e) { /* non-critical */ }
-        }
       })
 
       frame.on('participant-updated', (e) => {
@@ -165,14 +145,6 @@ export default function LiveRoom({ event, profile, isCreator, onLeave, accessTok
           isJoinedRef.current = true
           setJoining(false)
           globalJoinInProgress = false
-        }
-        // For fans: when the owner's tracks become available, subscribe to them
-        if (!isCreatorRef.current && !e.participant?.local && e.participant?.owner) {
-          try {
-            frame.updateParticipant(e.participant.session_id, {
-              setSubscribedTracks: { video: true, audio: true, screenVideo: false }
-            })
-          } catch (e2) { /* non-critical */ }
         }
       })
 
@@ -271,17 +243,9 @@ export default function LiveRoom({ event, profile, isCreator, onLeave, accessTok
     const rows = Array.isArray(sessionSummary) ? sessionSummary : []
     const loading = sessionSummary === 'loading'
     return (
-      <div style={{
-        position: 'fixed', inset: 0, zIndex: 300,
-        background: '#080808', display: 'flex', flexDirection: 'column',
-        fontFamily: "'DM Mono', monospace",
-      }}>
+      <div style={{ position: 'fixed', inset: 0, zIndex: 300, background: '#080808', display: 'flex', flexDirection: 'column', fontFamily: "'DM Mono', monospace" }}>
         <link href="https://fonts.googleapis.com/css2?family=DM+Serif+Display&family=DM+Mono:wght@400;500&display=swap" rel="stylesheet" />
-        <div style={{
-          display: 'flex', alignItems: 'center', justifyContent: 'space-between',
-          padding: '0 24px', height: HEADER_H, background: '#0a0a0a',
-          borderBottom: '1px solid #ffffff0a', flexShrink: 0,
-        }}>
+        <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', padding: '0 24px', height: HEADER_H, background: '#0a0a0a', borderBottom: '1px solid #ffffff0a', flexShrink: 0 }}>
           <div style={{ display: 'flex', alignItems: 'center', gap: 12 }}>
             <span style={{ fontFamily: "'DM Serif Display', Georgia, serif", fontSize: 18, color: accentColor }}>Coveted Stage</span>
             <span style={{ fontSize: 11, color: '#444' }}>·</span>
@@ -303,11 +267,7 @@ export default function LiveRoom({ event, profile, isCreator, onLeave, accessTok
           ) : (
             <>
               <div style={{ display: 'grid', gridTemplateColumns: 'repeat(3, 1fr)', gap: 12, marginBottom: 28 }}>
-                {[
-                  { label: 'TOTAL VIEWERS', value: rows.length },
-                  { label: 'REGISTERED FANS', value: rows.filter(r => r.fan_id).length },
-                  { label: 'GUESTS', value: rows.filter(r => !r.fan_id).length },
-                ].map(stat => (
+                {[{ label: 'TOTAL VIEWERS', value: rows.length }, { label: 'REGISTERED FANS', value: rows.filter(r => r.fan_id).length }, { label: 'GUESTS', value: rows.filter(r => !r.fan_id).length }].map(stat => (
                   <div key={stat.label} style={{ background: 'rgba(17,17,20,0.8)', border: '1px solid #ffffff0a', borderRadius: 10, padding: '16px 20px' }}>
                     <div style={{ fontSize: 8, color: '#555', letterSpacing: '0.2em', marginBottom: 8 }}>{stat.label}</div>
                     <div style={{ fontFamily: "'DM Serif Display', Georgia, serif", fontSize: 30, color: accentColor }}>{stat.value}</div>
@@ -327,16 +287,12 @@ export default function LiveRoom({ event, profile, isCreator, onLeave, accessTok
                     const joinedAt = p.joined_at ? new Date(p.joined_at) : null
                     const leftAt = p.left_at ? new Date(p.left_at) : null
                     let duration = '—'
-                    if (joinedAt && leftAt) {
-                      const mins = Math.round((leftAt - joinedAt) / 60000)
-                      duration = mins < 60 ? `${mins}m` : `${Math.floor(mins / 60)}h ${mins % 60}m`
-                    } else if (joinedAt) { duration = 'Active' }
+                    if (joinedAt && leftAt) { const mins = Math.round((leftAt - joinedAt) / 60000); duration = mins < 60 ? `${mins}m` : `${Math.floor(mins / 60)}h ${mins % 60}m` }
+                    else if (joinedAt) { duration = 'Active' }
                     return (
                       <div key={p.id} style={{ display: 'grid', gridTemplateColumns: '1fr 110px 110px 90px', gap: 8, padding: '12px 20px', alignItems: 'center', borderBottom: i < rows.length - 1 ? '1px solid #ffffff05' : 'none', background: i % 2 === 0 ? 'transparent' : 'rgba(255,255,255,0.015)' }}>
                         <div style={{ display: 'flex', alignItems: 'center', gap: 10, minWidth: 0 }}>
-                          <div style={{ width: 28, height: 28, borderRadius: '50%', flexShrink: 0, background: '#111', border: `1px solid ${accentColor}33`, display: 'flex', alignItems: 'center', justifyContent: 'center', fontFamily: "'DM Serif Display', Georgia, serif", fontSize: 11, color: accentColor }}>
-                            {(p.display_name || 'G').charAt(0).toUpperCase()}
-                          </div>
+                          <div style={{ width: 28, height: 28, borderRadius: '50%', flexShrink: 0, background: '#111', border: `1px solid ${accentColor}33`, display: 'flex', alignItems: 'center', justifyContent: 'center', fontFamily: "'DM Serif Display', Georgia, serif", fontSize: 11, color: accentColor }}>{(p.display_name || 'G').charAt(0).toUpperCase()}</div>
                           <div style={{ minWidth: 0 }}>
                             <div style={{ fontSize: 13, color: '#f0ebe0', whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' }}>{p.display_name || 'Guest'}</div>
                             <div style={{ fontSize: 8, color: '#444', letterSpacing: '0.12em', marginTop: 1 }}>{p.fan_id ? 'REGISTERED FAN' : 'GUEST'}</div>
@@ -360,41 +316,26 @@ export default function LiveRoom({ event, profile, isCreator, onLeave, accessTok
 
   // ── Live room ───────────────────────────────────────────────────────────────
   return (
-    <div style={{
-      position: 'fixed', inset: 0, zIndex: 300,
-      background: '#080808', display: 'flex', flexDirection: 'column',
-    }}>
+    <div style={{ position: 'fixed', inset: 0, zIndex: 300, background: '#080808', display: 'flex', flexDirection: 'column' }}>
       <link href="https://fonts.googleapis.com/css2?family=DM+Serif+Display&family=DM+Mono:wght@400;500&display=swap" rel="stylesheet" />
 
       {/* Header */}
-      <div style={{
-        flexShrink: 0, height: HEADER_H,
-        display: 'flex', alignItems: 'center', justifyContent: 'space-between',
-        padding: '0 24px', background: '#0a0a0a',
-        borderBottom: '1px solid #ffffff0a',
-      }}>
+      <div style={{ flexShrink: 0, height: HEADER_H, display: 'flex', alignItems: 'center', justifyContent: 'space-between', padding: '0 24px', background: '#0a0a0a', borderBottom: '1px solid #ffffff0a' }}>
         <div style={{ display: 'flex', alignItems: 'center', gap: 12 }}>
           <span style={{ fontFamily: "'DM Serif Display', Georgia, serif", fontSize: 18, color: accentColor }}>Coveted Stage</span>
           <span style={{ fontFamily: "'DM Mono', monospace", fontSize: 11, color: '#444' }}>·</span>
           <span style={{ fontFamily: "'DM Mono', monospace", fontSize: 12, color: '#888' }}>{event.name}</span>
-          {!joining && (
-            <span style={{ background: '#e8454522', color: '#e84545', border: '1px solid #e8454544', borderRadius: 4, fontSize: 10, fontWeight: 700, padding: '2px 8px', letterSpacing: '0.12em', fontFamily: "'DM Mono', monospace" }}>● LIVE</span>
-          )}
+          {!joining && <span style={{ background: '#e8454522', color: '#e84545', border: '1px solid #e8454544', borderRadius: 4, fontSize: 10, fontWeight: 700, padding: '2px 8px', letterSpacing: '0.12em', fontFamily: "'DM Mono', monospace" }}>● LIVE</span>}
         </div>
         <div style={{ display: 'flex', alignItems: 'center', gap: 12 }}>
           {!joining && <div style={{ fontFamily: "'DM Mono', monospace", fontSize: 11, color: '#555' }}>👥 {participants} live</div>}
-          {isCreator && !joining && (
-            <button onClick={handleEndForAll} style={{ background: '#e8454518', color: '#e84545', border: '1px solid #e8454544', borderRadius: 6, padding: '6px 14px', fontFamily: "'DM Mono', monospace", fontSize: 11, cursor: 'pointer', letterSpacing: '0.1em' }}>END FOR ALL</button>
-          )}
+          {isCreator && !joining && <button onClick={handleEndForAll} style={{ background: '#e8454518', color: '#e84545', border: '1px solid #e8454544', borderRadius: 6, padding: '6px 14px', fontFamily: "'DM Mono', monospace", fontSize: 11, cursor: 'pointer', letterSpacing: '0.1em' }}>END FOR ALL</button>}
           <button onClick={handleLeave} style={{ background: '#ffffff0a', color: '#888', border: '1px solid #ffffff15', borderRadius: 6, padding: '6px 14px', fontFamily: "'DM Mono', monospace", fontSize: 11, cursor: 'pointer', letterSpacing: '0.1em' }}>LEAVE</button>
         </div>
       </div>
 
-      {/* Daily iframe mounts here — fills remaining height below header */}
-      <div
-        ref={containerRef}
-        style={{ flex: 1, position: 'relative' }}
-      />
+      {/* Daily iframe container — flex:1 fills remaining height */}
+      <div ref={containerRef} style={{ flex: 1, position: 'relative' }} />
 
       {/* Loading overlay */}
       {joining && !error && (
@@ -404,13 +345,6 @@ export default function LiveRoom({ event, profile, isCreator, onLeave, accessTok
           <div style={{ width: 200, height: 2, background: '#1a1a1a', borderRadius: 999, overflow: 'hidden' }}>
             <div style={{ width: '60%', height: '100%', background: accentColor, borderRadius: 999 }} />
           </div>
-        </div>
-      )}
-
-      {/* DEBUG: show when joined but no video visible — remove after diagnosis */}
-      {!joining && !error && !isCreator && (
-        <div style={{ position: 'absolute', bottom: 16, left: '50%', transform: 'translateX(-50%)', zIndex: 2, background: 'rgba(0,0,0,0.7)', color: '#c9a84c', fontFamily: 'monospace', fontSize: 11, padding: '6px 14px', borderRadius: 6, pointerEvents: 'none', whiteSpace: 'nowrap' }}>
-          joined ✓ | room: {event.daily_room_name} | participants: {participants}
         </div>
       )}
 
