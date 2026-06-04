@@ -393,11 +393,9 @@ export default function LiveRoom({ event, profile, isCreator, onLeave, accessTok
     }}>
       <link href="https://fonts.googleapis.com/css2?family=DM+Serif+Display&family=DM+Mono:wght@400;500&display=swap" rel="stylesheet" />
 
-      {/* Single containerRef div that never unmounts — just resizes.
-          Two separate JSX branches with ref={containerRef} causes Daily's
-          iframe to be orphaned when orientation changes.
-          Portrait: 16:9 aspect ratio via explicit pixel height.
-          Landscape: full screen edge-to-edge. */}
+      {/* Single containerRef div — never unmounts, style changes on orientation.
+          Both portrait and landscape fill all available space so Daily
+          renders the video as large as possible. */}
       <div
         ref={containerRef}
         style={{
@@ -405,7 +403,7 @@ export default function LiveRoom({ event, profile, isCreator, onLeave, accessTok
           top: isLandscape ? 0 : HEADER_H,
           left: 0,
           width: `${viewportSize.w}px`,
-          height: isLandscape ? `${vph}px` : `${Math.round(viewportSize.w * 9 / 16)}px`,
+          height: `${videoH}px`,
         }}
       />
 
