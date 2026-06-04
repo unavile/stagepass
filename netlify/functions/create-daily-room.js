@@ -54,12 +54,10 @@ exports.handler = async (event) => {
         enable_chat: true,
         enable_screenshare: true,
         exp: expiry,
-        // owner_only_broadcast is intentionally NOT set here.
-        // When enabled it forces Daily into webinar/spotlight layout which
-        // crops the video with object-fit:cover and cannot be overridden.
-        // Fan audio/video is controlled instead via meeting tokens (is_owner,
-        // start_video_off, start_audio_off) which already enforce the same
-        // restriction without triggering the forced spotlight crop layout.
+        // owner_only_broadcast hides fan tiles entirely in Daily Prebuilt
+        // so the creator's video always stays as the featured tile.
+        // Without this, fan tiles (black/camera-off) take over the main view.
+        owner_only_broadcast: true,
       }
     })
 
