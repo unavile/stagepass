@@ -192,7 +192,19 @@ export default function LiveRoom({ event, profile, isCreator, onLeave, accessTok
         setParticipants(count)
       })
 
-      frame.on('participant-joined', () => setParticipants(prev => prev + 1))
+      frame.on('participant-joined', (e) => {
+        setParticipants(prev => prev + 1)
+        // Creator: immediately suppress fan's video+audio so Daily never
+        // promotes their blank tile as the active speaker
+        if (isCreatorRef.current && e?.participant && !e.participant.local) {
+          try {
+            frame.updateParticipant(e.participant.session_id, {
+              setVideo: false,
+              setAudio: false,
+            })
+          } catch (_) {}
+        }
+      })
       frame.on('participant-left', () => setParticipants(prev => Math.max(0, prev - 1)))
 
       frame.on('left-meeting', () => {
