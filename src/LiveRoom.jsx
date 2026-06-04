@@ -154,9 +154,6 @@ export default function LiveRoom({ event, profile, isCreator, onLeave, accessTok
         showFullscreenButton: true,
         showUserNameChangeUI: false,
         showLocalVideo: isCreatorRef.current,
-        // true for all participants — keeps the creator (active speaker/broadcaster)
-        // as the featured tile. false puts Daily into grid mode which promotes
-        // the fan's black tile when they join, darkening the screen.
         activeSpeakerMode: true,
         showParticipantsBar: isCreatorRef.current,
         theme: {
