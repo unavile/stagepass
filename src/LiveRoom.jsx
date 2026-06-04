@@ -183,6 +183,18 @@ export default function LiveRoom({ event, profile, isCreator, onLeave, accessTok
         await logParticipantJoin()
       })
 
+      // When a new participant joins, if this is the creator's view,
+      // pin the local (creator) tile so Daily never switches featured speaker.
+      frame.on('participant-joined', () => {
+        if (!isCreatorRef.current) return
+        try {
+          const localId = frame.participants()?.local?.session_id
+          if (localId) {
+            frame.updateParticipant(localId, { setAsPinnedSpeaker: true })
+          }
+        } catch (e) { /* updateParticipant may not be available in all Daily versions */ }
+      })
+
       frame.on('participant-updated', (e) => {
         if (e.participant?.local) {
           isJoinedRef.current = true

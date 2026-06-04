@@ -50,11 +50,6 @@ exports.handler = async (event) => {
         enable_screenshare: isOwner,        // only creators can screenshare
         start_video_off: !isOwner,          // fans join with camera off
         start_audio_off: !isOwner,          // fans join with mic off
-        // Prevents fans from being promoted to active speaker / featured tile.
-        // This is the token-level equivalent of owner_only_broadcast — it marks
-        // this participant as a viewer rather than a broadcaster without forcing
-        // Daily's spotlight layout (which caused video cropping at room level).
-        owner_only_broadcast: !isOwner,
         exp: Math.floor(Date.now() / 1000) + 86400,
       }
     })
