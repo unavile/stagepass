@@ -176,27 +176,42 @@ export default function LiveRoom({ event, profile, isCreator, onLeave, accessTok
         isJoinedRef.current = true
         globalJoinInProgress = false
         await logParticipantJoin()
-        // For creators, show immediately. For fans, wait until
-        // participant-updated confirms creator tracks are playable.
+
         if (isCreatorRef.current) {
           setJoining(false)
+          return
         }
+
+        // For fans: poll until we find a remote participant with
+        // a playable video or audio track, then show the iframe.
+        // Falls back to showing after 5 seconds regardless.
+        let attempts = 0
+        const poll = setInterval(() => {
+          attempts++
+          try {
+            const parts = Object.values(frame.participants())
+            const hasPlayable = parts.some(p =>
+              !p.local && (
+                p.tracks?.video?.state === 'playable' ||
+                p.tracks?.audio?.state === 'playable'
+              )
+            )
+            if (hasPlayable || attempts >= 50) {
+              clearInterval(poll)
+              setJoining(false)
+            }
+          } catch (_) {
+            clearInterval(poll)
+            setJoining(false)
+          }
+        }, 100)
       })
 
       frame.on('participant-updated', (e) => {
         if (e.participant?.local) {
           isJoinedRef.current = true
-          if (isCreatorRef.current) setJoining(false)
+          setJoining(false)
           globalJoinInProgress = false
-        }
-        // For fans: show the iframe only once the creator's video
-        // track is confirmed playable — not before.
-        if (!isCreatorRef.current && !e.participant?.local && e.participant?.owner) {
-          const video = e.participant?.tracks?.video?.state
-          const audio = e.participant?.tracks?.audio?.state
-          if (video === 'playable' || audio === 'playable') {
-            setJoining(false)
-          }
         }
       })
 
