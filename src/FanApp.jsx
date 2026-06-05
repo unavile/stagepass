@@ -7,13 +7,6 @@ import FanLoginModal from './FanLoginModal'
 
 // Parse YYYY-MM-DD as local date — avoids UTC timezone shift
 function parseLocalDate(s) { if (!s) return new Date(); const [y,m,d] = s.split('-').map(Number); return new Date(y, m-1, d) }
-function eventDateTime(e) {
-  const time = e?.start_time || '00:00'
-  const [h, m] = time.split(':').map(Number)
-  const d = parseLocalDate(e?.event_date)
-  d.setHours(h, m, 0, 0)
-  return d
-}
 
 // ─── Design tokens ──────────────────────────────────────────────────────────
 const BG      = '#09090b'
@@ -60,14 +53,40 @@ function SectionLabel({ children }) {
   )
 }
 
+// Returns the event's full start datetime
+function eventStartDateTime(event) {
+  if (!event?.event_date) return null
+  const time = event.start_time || '00:00'
+  const [h, m] = time.split(':').map(Number)
+  const d = parseLocalDate(event.event_date)
+  d.setHours(h, m, 0, 0)
+  return d
+}
+
+// Returns how many minutes until the event starts (negative = already started)
+function minutesUntilStart(event) {
+  const start = eventStartDateTime(event)
+  if (!start) return null
+  return Math.round((start - new Date()) / 60000)
+}
+
+// Event is "active" (fan can join) if it started up to 24 hours ago
+// or starts within the next 30 minutes
 function isEventActive(event) {
-  if (!event?.event_date) return false
-  const today = new Date()
-  today.setHours(0, 0, 0, 0)
-  const eventDate = parseLocalDate(event.event_date)
-  eventDate.setHours(0, 0, 0, 0)
-  const diffDays = Math.floor((today - eventDate) / (1000 * 60 * 60 * 24))
-  return diffDays >= 0 && diffDays <= 1
+  const mins = minutesUntilStart(event)
+  if (mins === null) return false
+  return mins <= 30 && mins >= -24 * 60
+}
+
+// Human-readable label for when the event starts
+function eventStartsInLabel(event) {
+  const mins = minutesUntilStart(event)
+  if (mins === null) return ''
+  if (mins <= 0) return 'Live now'
+  if (mins < 60) return `Starts in ${mins}m`
+  const hrs = Math.floor(mins / 60)
+  const rem = mins % 60
+  return rem > 0 ? `Starts in ${hrs}h ${rem}m` : `Starts in ${hrs}h`
 }
 
 function Avatar({ c, size = 50 }) {
@@ -705,10 +724,9 @@ export default function FanApp({ deepHandle }) {
               ))}
             </div>
             {(() => {
-              const now = new Date()
-              const cutoff = new Date(now - 24 * 60 * 60 * 1000)
+              const todayStr = new Date().toISOString().split('T')[0]
               const filtered = creatorEvents.filter(e =>
-                creatorEventFilter === 'current' ? eventDateTime(e) >= cutoff : eventDateTime(e) < cutoff
+                creatorEventFilter === 'current' ? e.event_date >= todayStr : e.event_date < todayStr
               )
               if (filtered.length === 0) return (
                 <div style={{ color: TEXT3, fontFamily: "'DM Mono', monospace", fontSize: 11, padding: '12px 0' }}>
@@ -1055,11 +1073,10 @@ export default function FanApp({ deepHandle }) {
               ) : (
                 <div style={{ display: 'flex', flexDirection: 'column', gap: 12 }}>
                   {(() => {
-                    const now = new Date()
-                    const cutoff = new Date(now - 24 * 60 * 60 * 1000)
+                    const todayStr = new Date().toISOString().split('T')[0]
                     const filteredRsvps = fanEvents.filter(r => {
-                      if (!r.events?.event_date) return false
-                      return fanEventFilter === 'current' ? eventDateTime(r.events) >= cutoff : eventDateTime(r.events) < cutoff
+                      const d = r.events?.event_date
+                      return d ? (fanEventFilter === 'current' ? d >= todayStr : d < todayStr) : false
                     })
                     if (filteredRsvps.length === 0) return (
                       <div style={{ textAlign: 'center', padding: '32px 0', color: TEXT3, fontFamily: "'DM Mono', monospace", fontSize: 11 }}>
@@ -1092,13 +1109,28 @@ export default function FanApp({ deepHandle }) {
                           {event.venue && <div style={{ fontSize: 11, color: TEXT3 }}>📍 {event.venue}</div>}
                           <div style={{ fontSize: 11, color: TEXT3 }}>By <span style={{ color: TEXT2 }}>{event.creators?.profiles?.display_name || 'Creator'}</span></div>
                         </div>
-                        <div style={{ display: 'flex', gap: 8, flexWrap: 'wrap' }}>
-                          {event.daily_room_name && active && (
-                            <button onClick={() => setLiveEvent(rsvp.events)} style={{ background: ACCENT, color: '#080808', border: 'none', borderRadius: 7, padding: '9px 18px', fontFamily: "'DM Mono', monospace", fontSize: 11, fontWeight: 700, cursor: 'pointer', letterSpacing: '0.1em', boxShadow: `0 4px 16px ${ACCENT}50` }}>🎙 JOIN LIVE</button>
-                          )}
-                          {event.daily_room_name && !active && (
-                            <button onClick={() => setLiveEvent(rsvp.events)} style={{ background: ACCENT + '14', color: ACCENT, border: `1px solid ${ACCENT}40`, borderRadius: 7, padding: '9px 18px', fontFamily: "'DM Mono', monospace", fontSize: 11, fontWeight: 700, cursor: 'pointer', letterSpacing: '0.1em' }}>🎙 ENTER ROOM</button>
-                          )}
+                        <div style={{ display: 'flex', gap: 8, flexWrap: 'wrap', alignItems: 'center' }}>
+                          {event.daily_room_name && (() => {
+                            const mins = minutesUntilStart(rsvp.events)
+                            const tooEarly = mins !== null && mins > 30
+                            if (tooEarly) {
+                              // Show countdown — don't allow entry yet
+                              return (
+                                <div style={{ display: 'flex', flexDirection: 'column', gap: 4 }}>
+                                  <div style={{ background: ACCENT + '14', color: ACCENT, border: `1px solid ${ACCENT}40`, borderRadius: 7, padding: '9px 18px', fontFamily: "'DM Mono', monospace", fontSize: 11, fontWeight: 700, letterSpacing: '0.1em', opacity: 0.6 }}>
+                                    🕐 {eventStartsInLabel(rsvp.events)}
+                                  </div>
+                                  <div style={{ fontFamily: "'DM Mono', monospace", fontSize: 9, color: TEXT3, letterSpacing: '0.1em', paddingLeft: 4 }}>
+                                    ROOM OPENS 30 MINS BEFORE START
+                                  </div>
+                                </div>
+                              )
+                            }
+                            if (active) {
+                              return <button onClick={() => setLiveEvent(rsvp.events)} style={{ background: ACCENT, color: '#080808', border: 'none', borderRadius: 7, padding: '9px 18px', fontFamily: "'DM Mono', monospace", fontSize: 11, fontWeight: 700, cursor: 'pointer', letterSpacing: '0.1em', boxShadow: `0 4px 16px ${ACCENT}50` }}>🎙 JOIN LIVE</button>
+                            }
+                            return <button onClick={() => setLiveEvent(rsvp.events)} style={{ background: ACCENT + '14', color: ACCENT, border: `1px solid ${ACCENT}40`, borderRadius: 7, padding: '9px 18px', fontFamily: "'DM Mono', monospace", fontSize: 11, fontWeight: 700, cursor: 'pointer', letterSpacing: '0.1em' }}>🎙 ENTER ROOM</button>
+                          })()}
                           <button onClick={async () => {
                               const sbUrl = import.meta.env.VITE_SUPABASE_URL
                               const sbKey = import.meta.env.VITE_SUPABASE_ANON_KEY
