@@ -56,12 +56,8 @@ exports.handler = async (event) => {
         // Do NOT set start_video_off or start_audio_off at room level —
         // these override the creator's token and prevent video being published.
         // Per-participant AV state is controlled via meeting tokens instead.
-        // Stream quality settings
-        max_cam_resolution: 'fullHd',   // up to 1080p
-        video_codec: 'H264',            // H.264 for best compatibility on iOS/iPad
-        max_cam_fps: 30,                // up to 30fps
-        // Bitrate is left adaptive (Daily default) — SFU adjusts automatically
-        // based on network conditions for best quality/stability balance
+        // Note: video quality (resolution, codec, fps) cannot be set via room
+        // properties — Daily controls this adaptively via its SFU.
       }
     })
 
