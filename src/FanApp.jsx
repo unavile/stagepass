@@ -63,6 +63,15 @@ function eventStartDateTime(event) {
   return d
 }
 
+// Returns the event's end datetime (start + duration_minutes + 2hr buffer)
+function eventEndDateTime(event) {
+  const start = eventStartDateTime(event)
+  if (!start) return null
+  const durationMins = event.duration_minutes || 60
+  const end = new Date(start.getTime() + (durationMins + 120) * 60000)
+  return end
+}
+
 // Returns how many minutes until the event starts (negative = already started)
 function minutesUntilStart(event) {
   const start = eventStartDateTime(event)
@@ -70,12 +79,14 @@ function minutesUntilStart(event) {
   return Math.round((start - new Date()) / 60000)
 }
 
-// Event is "active" (fan can join) if it started up to 24 hours ago
+// Event is "active" (fan can join) if end time hasn't passed
 // or starts within the next 30 minutes
 function isEventActive(event) {
   const mins = minutesUntilStart(event)
   if (mins === null) return false
-  return mins <= 30 && mins >= -24 * 60
+  if (mins > 30) return false  // too early
+  const end = eventEndDateTime(event)
+  return end ? new Date() <= end : mins >= -24 * 60
 }
 
 // Human-readable label for when the event starts
@@ -644,11 +655,9 @@ export default function FanApp({ deepHandle }) {
           return (
             <div key={post.id} style={{ ...card({ padding: '14px 16px', marginBottom: 10 }), opacity: canView ? 1 : 0.55 }}>
               <div style={{ display: 'flex', gap: 12, alignItems: 'center' }}>
-                <div style={{ width: 38, height: 38, background: BG3, borderRadius: 8, overflow: 'hidden', display: 'flex', alignItems: 'center', justifyContent: 'center', fontSize: 18, flexShrink: 0 }}>
-                {post.thumbnail_url
-                  ? <img src={post.thumbnail_url} alt={post.title} style={{ width: '100%', height: '100%', objectFit: 'cover' }} />
-                  : post.thumbnail_emoji}
-              </div>
+                <div style={{ width: 38, height: 38, background: BG3, borderRadius: 8, display: 'flex', alignItems: 'center', justifyContent: 'center', fontSize: 18, flexShrink: 0 }}>
+                  {post.thumbnail_emoji}
+                </div>
                 <div style={{ flex: 1, minWidth: 0 }}>
                   <div style={{ fontSize: 13, color: canView ? TEXT1 : TEXT3, marginBottom: 4 }}>{post.title}</div>
                   <div style={{ display: 'flex', gap: 6, flexWrap: 'wrap' }}>
@@ -664,32 +673,59 @@ export default function FanApp({ deepHandle }) {
                   {post.file_url && (
                     <div style={{ flexShrink: 0 }}>
                       {post.type === 'video' && (
-                        <button
-                          onClick={() => setVideoPost(post)}
-                          style={{
-                            background: 'none', border: 'none', padding: 0,
-                            cursor: 'pointer', display: 'inline-flex',
-                            flexDirection: 'column', alignItems: 'center', gap: 4,
-                          }}
-                        >
-                          {post.thumbnail_url ? (
-                          <img
-                            src={post.thumbnail_url}
-                            alt={post.title}
-                            style={{ width: 44, height: 44, borderRadius: 10, objectFit: 'cover' }}
-                          />
+                        post.thumbnail_url ? (
+                          // Thumbnail available: show as a wide clickable image with play overlay
+                          <button
+                            onClick={() => setVideoPost(post)}
+                            style={{
+                              background: 'none', border: 'none', padding: 0,
+                              cursor: 'pointer', position: 'relative',
+                              display: 'block', borderRadius: 10, overflow: 'hidden',
+                              width: 160, flexShrink: 0,
+                            }}
+                          >
+                            <img
+                              src={post.thumbnail_url}
+                              alt={post.title}
+                              style={{ width: '100%', aspectRatio: '16/9', objectFit: 'cover', display: 'block' }}
+                            />
+                            {/* Play overlay */}
+                            <div style={{
+                              position: 'absolute', inset: 0,
+                              background: 'rgba(0,0,0,0.35)',
+                              display: 'flex', alignItems: 'center', justifyContent: 'center',
+                              transition: 'background 0.15s',
+                            }}>
+                              <div style={{
+                                width: 36, height: 36, borderRadius: '50%',
+                                background: ACCENT,
+                                display: 'flex', alignItems: 'center', justifyContent: 'center',
+                              }}>
+                                <span style={{ fontSize: 14, marginLeft: 3, color: '#080808' }}>▶</span>
+                              </div>
+                            </div>
+                          </button>
                         ) : (
-                          <img
-                            src="data:image/png;base64,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"
-                            alt="Play video"
-                            style={{ width: 44, height: 44, borderRadius: 10 }}
-                          />
-                        )}
-                          <span style={{
-                            fontFamily: "'DM Mono', monospace", fontSize: 9,
-                            color: ACCENT, letterSpacing: '0.08em',
-                          }}>PLAY</span>
-                        </button>
+                          // No thumbnail: show default play icon
+                          <button
+                            onClick={() => setVideoPost(post)}
+                            style={{
+                              background: 'none', border: 'none', padding: 0,
+                              cursor: 'pointer', display: 'inline-flex',
+                              flexDirection: 'column', alignItems: 'center', gap: 4,
+                            }}
+                          >
+                            <img
+                              src="data:image/png;base64,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"
+                              alt="Play video"
+                              style={{ width: 44, height: 44, borderRadius: 10 }}
+                            />
+                            <span style={{
+                              fontFamily: "'DM Mono', monospace", fontSize: 9,
+                              color: ACCENT, letterSpacing: '0.08em',
+                            }}>PLAY</span>
+                          </button>
+                        )
                       )}
                       {post.type === 'audio' && <audio controls src={post.file_url} style={{ width: 180 }} />}
                       {post.type === 'text' && (
@@ -736,10 +772,11 @@ export default function FanApp({ deepHandle }) {
               ))}
             </div>
             {(() => {
-              const cutoff = new Date(new Date() - 24 * 60 * 60 * 1000)
-              const filtered = creatorEvents.filter(e =>
-                creatorEventFilter === 'current' ? eventStartDateTime(e) >= cutoff : eventStartDateTime(e) < cutoff
-              )
+              const now = new Date()
+              const filtered = creatorEvents.filter(e => {
+                const end = eventEndDateTime(e)
+                return creatorEventFilter === 'current' ? (end ? now <= end : false) : (end ? now > end : true)
+              })
               if (filtered.length === 0) return (
                 <div style={{ color: TEXT3, fontFamily: "'DM Mono', monospace", fontSize: 11, padding: '12px 0' }}>
                   No {creatorEventFilter === 'current' ? 'upcoming' : 'past'} events.
@@ -1085,11 +1122,13 @@ export default function FanApp({ deepHandle }) {
               ) : (
                 <div style={{ display: 'flex', flexDirection: 'column', gap: 12 }}>
                   {(() => {
-                    const cutoff = new Date(new Date() - 24 * 60 * 60 * 1000)
+                    const now = new Date()
                     const filteredRsvps = fanEvents.filter(r => {
                       if (!r.events?.event_date) return false
-                      const start = eventStartDateTime(r.events)
-                      return start ? (fanEventFilter === 'current' ? start >= cutoff : start < cutoff) : false
+                      const end = eventEndDateTime(r.events)
+                      return end
+                        ? (fanEventFilter === 'current' ? now <= end : now > end)
+                        : false
                     })
                     if (filteredRsvps.length === 0) return (
                       <div style={{ textAlign: 'center', padding: '32px 0', color: TEXT3, fontFamily: "'DM Mono', monospace", fontSize: 11 }}>

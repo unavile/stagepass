@@ -93,10 +93,17 @@ export default function CreatorApp({ session, profile, onSignOut }) {
     return d
   }
 
-  // Events move to PAST only after 24 hours from start time
-  const cutoff = new Date(now - 24 * 60 * 60 * 1000)
-  const currentEvents = (events || []).filter(e => eventDateTime(e) >= cutoff)
-  const pastEvents    = (events || []).filter(e => eventDateTime(e) <  cutoff)
+  // Returns event end time: start + duration_minutes + 2hr buffer
+  function eventEndDateTime(e) {
+    const start = eventDateTime(e)
+    if (!start) return null
+    const durationMins = e.duration_minutes || 60
+    return new Date(start.getTime() + (durationMins + 120) * 60000)
+  }
+
+  // Events move to PAST only after end time + 2hr buffer
+  const currentEvents = (events || []).filter(e => { const end = eventEndDateTime(e); return end ? now <= end : false })
+  const pastEvents    = (events || []).filter(e => { const end = eventEndDateTime(e); return end ? now > end  : true  })
   const filteredEvents = eventFilter === 'current' ? currentEvents : pastEvents
 
   useEffect(() => {
@@ -667,7 +674,7 @@ export default function CreatorApp({ session, profile, onSignOut }) {
                         </div>
                       )}
                       {/* ── Live session participants (past events only) ── */}
-                      {event.daily_room_name && eventDateTime(event) < cutoff && (
+                      {event.daily_room_name && (() => { const end = eventEndDateTime(event); return end ? now > end : true })() && (
                         <div style={{ marginTop: 14, paddingTop: 14, borderTop: `1px solid ${BORDER2}` }}>
                           <button
                             onClick={() => fetchParticipants(event.id)}
@@ -782,7 +789,7 @@ export default function CreatorApp({ session, profile, onSignOut }) {
                         </div>
                       )}
 
-                      {event.daily_room_name && eventDateTime(event) >= cutoff && (
+                      {event.daily_room_name && (() => { const end = eventEndDateTime(event); return end ? now <= end : false })() && (
                         <button onClick={() => setLiveEvent(event)} style={{
                           marginTop: 14, width: '100%',
                           background: ac, color: '#080808',
