@@ -169,6 +169,28 @@ export default function FanApp({ deepHandle }) {
   const [guestJoinEvent, setGuestJoinEvent] = useState(null)
   const [showDonateModal, setShowDonateModal] = useState(false)
   const [videoPost, setVideoPost] = useState(null) // post object for video popup
+
+  async function logPostView(post) {
+    try {
+      const sbUrl = import.meta.env.VITE_SUPABASE_URL
+      const sbKey = import.meta.env.VITE_SUPABASE_ANON_KEY
+      await fetch(`${sbUrl}/rest/v1/post_views`, {
+        method: 'POST',
+        headers: {
+          'apikey': sbKey,
+          'Authorization': `Bearer ${fanSession?.access_token || sbKey}`,
+          'Content-Type': 'application/json',
+          'Prefer': 'return=minimal',
+        },
+        body: JSON.stringify({
+          post_id:      post.id,
+          creator_id:   post.creator_id,
+          fan_id:       fanSession?.user?.id || null,
+          display_name: fanProfile?.display_name || guestName?.trim() || 'Guest',
+        }),
+      })
+    } catch (e) { console.error('logPostView error:', e) }
+  }
   const [donateAmount, setDonateAmount] = useState('10')
   const [donateLoading, setDonateLoading] = useState(false) // event pending guest name entry
   const [guestName, setGuestName] = useState('')
@@ -676,7 +698,7 @@ export default function FanApp({ deepHandle }) {
                         post.thumbnail_url ? (
                           // Thumbnail available: show as a wide clickable image with play overlay
                           <button
-                            onClick={() => setVideoPost(post)}
+                            onClick={() => { setVideoPost(post); logPostView(post) }}
                             style={{
                               background: 'none', border: 'none', padding: 0,
                               cursor: 'pointer', position: 'relative',
@@ -708,7 +730,7 @@ export default function FanApp({ deepHandle }) {
                         ) : (
                           // No thumbnail: show default play icon
                           <button
-                            onClick={() => setVideoPost(post)}
+                            onClick={() => { setVideoPost(post); logPostView(post) }}
                             style={{
                               background: 'none', border: 'none', padding: 0,
                               cursor: 'pointer', display: 'inline-flex',
@@ -727,9 +749,9 @@ export default function FanApp({ deepHandle }) {
                           </button>
                         )
                       )}
-                      {post.type === 'audio' && <audio controls src={post.file_url} style={{ width: 180 }} />}
+                      {post.type === 'audio' && <audio controls src={post.file_url} style={{ width: 180 }} onPlay={() => logPostView(post)} />}
                       {post.type === 'text' && (
-                        <a href={post.file_url} target="_blank" rel="noreferrer" style={{
+                        <a href={post.file_url} target="_blank" rel="noreferrer" onClick={() => logPostView(post)} style={{
                           color: ACCENT, fontFamily: "'DM Mono', monospace", fontSize: 11,
                           display: 'inline-flex', flexDirection: 'column', alignItems: 'center', gap: 4,
                         }}>

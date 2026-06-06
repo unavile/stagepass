@@ -477,6 +477,58 @@ export default function AdminPortal() {
           description: (p.description || '').replace(/,/g, ' '),
         })))
       }
+      // ── Creator-level access summary ──────────────────────────────────
+      } else if (reportType === 'creator_access') {
+        let data = await sbFetch('v_creator_access_stats?order=total_post_views.desc')
+        data = Array.isArray(data) ? data : []
+        setReportData(data.map(r => ({
+          creator_name:          r.creator_name || '',
+          handle:                r.handle || '',
+          total_post_views:      r.total_post_views || 0,
+          registered_post_views: r.registered_post_views || 0,
+          guest_post_views:      r.guest_post_views || 0,
+          total_event_attendances:   r.total_event_attendances || 0,
+          registered_attendances:    r.registered_attendances || 0,
+          guest_attendances:         r.guest_attendances || 0,
+        })))
+
+      // ── Post-level access ───────────────────────────────────────────────
+      } else if (reportType === 'post_access') {
+        let data = await sbFetch('v_post_access_stats?order=total_views.desc')
+        data = Array.isArray(data) ? data : []
+        if (reportFilter === 'video') data = data.filter(p => p.type === 'video')
+        if (reportFilter === 'audio') data = data.filter(p => p.type === 'audio')
+        if (reportFilter === 'pdf')   data = data.filter(p => p.type === 'text')
+        setReportData(data.map(p => ({
+          title:            p.title || '',
+          type:             p.type === 'text' ? 'PDF' : (p.type || ''),
+          creator_name:     p.creator_name || '',
+          handle:           p.creator_handle || '',
+          total_views:      p.total_views || 0,
+          registered_views: p.registered_views || 0,
+          guest_views:      p.guest_views || 0,
+          first_view:       p.first_view ? p.first_view.split('T')[0] : '—',
+          last_view:        p.last_view  ? p.last_view.split('T')[0]  : '—',
+        })))
+
+      // ── Event-level access ──────────────────────────────────────────────
+      } else if (reportType === 'event_access') {
+        let data = await sbFetch('v_event_access_stats?order=event_date.desc')
+        data = Array.isArray(data) ? data : []
+        if (reportFilter === 'virtual')   data = data.filter(e => e.event_type === 'virtual')
+        if (reportFilter === 'in_person') data = data.filter(e => e.event_type === 'in_person')
+        setReportData(data.map(e => ({
+          event_name:              e.event_name || '',
+          creator_name:            e.creator_name || '',
+          handle:                  e.creator_handle || '',
+          event_date:              e.event_date || '',
+          event_type:              e.event_type || '',
+          total_rsvps:             e.total_rsvps || 0,
+          total_attendances:       e.total_attendances || 0,
+          registered_attendances:  e.registered_attendances || 0,
+          guest_attendances:       e.guest_attendances || 0,
+        })))
+      }
     } catch(e) { console.error('Report error:', e) }
     setReportLoading(false)
   }
@@ -1085,10 +1137,13 @@ export default function AdminPortal() {
           {/* Report type */}
           <div style={{ display: 'flex', gap: 8, flexWrap: 'wrap', marginBottom: 16 }}>
             {[
-              { id: 'creators', label: '♪ Creators' },
-              { id: 'events',   label: '◈ Events'   },
-              { id: 'rsvps',    label: '✓ RSVPs'    },
-              { id: 'content',  label: '▤ Content'  },
+              { id: 'creators',       label: '♪ Creators'       },
+              { id: 'events',         label: '◈ Events'         },
+              { id: 'rsvps',          label: '✓ RSVPs'          },
+              { id: 'content',        label: '▤ Content'        },
+              { id: 'creator_access', label: '◉ Creator Access' },
+              { id: 'post_access',    label: '▶ Post Access'    },
+              { id: 'event_access',   label: '⬡ Event Access'   },
             ].map(t => (
               <button key={t.id} onClick={() => { setReportType(t.id); setReportFilter('all'); setReportData([]) }} style={{
                 background: reportType === t.id ? ACCENT + '18' : BG2,
@@ -1104,7 +1159,9 @@ export default function AdminPortal() {
           <div style={{ display: 'flex', gap: 8, flexWrap: 'wrap', marginBottom: 20 }}>
             {(reportType === 'creators' ? ['all','active','suspended'] :
               reportType === 'events' ? ['all','current','past'] :
-              reportType === 'content' ? ['all','video','audio','pdf'] : ['all']
+              reportType === 'content' ? ['all','video','audio','pdf'] :
+              reportType === 'post_access' ? ['all','video','audio','pdf'] :
+              reportType === 'event_access' ? ['all','virtual','in_person'] : ['all']
             ).map(f => (
               <button key={f} onClick={() => setReportFilter(f)} style={{
                 background: reportFilter === f ? ACCENT : BG2,
