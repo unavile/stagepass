@@ -1,63 +1,118 @@
-import { useState, useRef } from 'react'
+import { useState, useCallback } from 'react'
+import { useDropzone } from 'react-dropzone'
+
+const ACCEPTED = {
+  video:    { 'video/*': ['.mp4', '.mov', '.webm'] },
+  audio:    { 'audio/*': ['.mp3', '.wav', '.m4a'] },
+  document: { 'application/pdf': ['.pdf'] },
+}
 
 const BUCKET_MAP = { video: 'videos', audio: 'audio', document: 'documents' }
 const EMOJI_MAP  = { video: '🎛️', audio: '🎵', document: '📖' }
 
 export default function Upload({ creatorId, accentColor, accessToken, onPostCreated }) {
-  const fileInputRef = useRef(null)
   const [step, setStep]         = useState('form')   // 'form' | 'uploading' | 'done'
   const [type, setType]         = useState('video')
   const [title, setTitle]       = useState('')
   const [desc, setDesc]         = useState('')
   const [isLocked, setIsLocked] = useState(true)
   const [file, setFile]         = useState(null)
+  const [thumbnail, setThumbnail] = useState(null)     // optional thumbnail image
+  const [thumbnailPreview, setThumbnailPreview] = useState(null)
   const [progress, setProgress] = useState(0)
   const [error, setError]       = useState(null)
 
+  const onDrop = useCallback(accepted => {
+    if (accepted.length > 0) setFile(accepted[0])
+  }, [])
+
+  function handleThumbnailChange(e) {
+    const f = e.target.files?.[0]
+    if (!f) return
+    setThumbnail(f)
+    setThumbnailPreview(URL.createObjectURL(f))
+  }
+
+  const { getRootProps, getInputProps, isDragActive } = useDropzone({
+    onDrop,
+    accept: ACCEPTED[type],
+    maxFiles: 1,
+  })
+
   async function handleSubmit() {
     if (!title.trim()) { setError('Please add a title.'); return }
+    if (!desc.trim()) { setError('Please add a description.'); return }
     if (!file) { setError('Please select a file to upload.'); return }
     setError(null)
     setStep('uploading')
 
-    const sbUrl = import.meta.env.VITE_SUPABASE_URL
-    const sbKey = import.meta.env.VITE_SUPABASE_ANON_KEY
-    const bucket = BUCKET_MAP[type]
-    const ext = file.name.split('.').pop()
-    const path = `${creatorId}/${Date.now()}.${ext}`
+    let fileUrl = null
+    let thumbnailUrl = null
 
-    // Upload to Supabase Storage
-    const uploadRes = await fetch(`${sbUrl}/storage/v1/object/${bucket}/${path}`, {
-      method: 'POST',
-      headers: {
-        'apikey': sbKey,
-        'Authorization': `Bearer ${accessToken || sbKey}`,
-        'x-upsert': 'true',
-        'Cache-Control': '3600',
-      },
-      body: file,
-    })
-    if (!uploadRes.ok) {
-      const err = await uploadRes.json().catch(() => ({}))
-      setError(err.message || err.error || `Upload failed (${uploadRes.status})`)
-      setStep('form')
-      return
+    // Upload thumbnail image if provided
+    if (thumbnail) {
+      const thumbExt = thumbnail.name.split('.').pop()
+      const thumbPath = `${creatorId}/thumb_${Date.now()}.${thumbExt}`
+      const sbUrl = import.meta.env.VITE_SUPABASE_URL
+      const sbKey = import.meta.env.VITE_SUPABASE_ANON_KEY
+      const thumbRes = await fetch(`${sbUrl}/storage/v1/object/thumbnails/${thumbPath}`, {
+        method: 'POST',
+        headers: {
+          'apikey': sbKey,
+          'Authorization': `Bearer ${accessToken || sbKey}`,
+          'x-upsert': 'false',
+          'Cache-Control': '3600',
+        },
+        body: thumbnail,
+      })
+      if (thumbRes.ok) {
+        thumbnailUrl = `${sbUrl}/storage/v1/object/public/thumbnails/${thumbPath}`
+      } else {
+        console.warn('Thumbnail upload failed — continuing without thumbnail')
+      }
     }
 
-    const fileUrl = `${sbUrl}/storage/v1/object/public/${bucket}/${path}`
+    if (file) {
+      const bucket = BUCKET_MAP[type]
+      const ext    = file.name.split('.').pop()
+      const path   = `${creatorId}/${Date.now()}.${ext}`
 
-    // Progress bar
+      const sbUrl = import.meta.env.VITE_SUPABASE_URL
+      const sbKey = import.meta.env.VITE_SUPABASE_ANON_KEY
+      const uploadRes = await fetch(`${sbUrl}/storage/v1/object/${bucket}/${path}`, {
+        method: 'POST',
+        headers: {
+          'apikey': sbKey,
+          'Authorization': `Bearer ${accessToken || sbKey}`,
+          'x-upsert': 'false',
+          'Cache-Control': '3600',
+        },
+        body: file,
+      })
+      if (!uploadRes.ok) {
+        const uploadErr = await uploadRes.json().catch(() => ({}))
+        const errMsg = uploadErr.message || uploadErr.error || `Upload failed (${uploadRes.status})`
+        console.error('Storage upload error:', uploadRes.status, uploadErr)
+        setError(errMsg)
+        setStep('form')
+        return
+      }
+      fileUrl = `${sbUrl}/storage/v1/object/public/${bucket}/${path}`
+    }
+
+    // Simulate progress bar (Supabase JS v2 doesn't expose upload progress natively)
     for (let i = 0; i <= 100; i += 10) {
       setProgress(i)
       await new Promise(r => setTimeout(r, 80))
     }
 
-    // Insert post row
-    const insertRes = await fetch(`${sbUrl}/rest/v1/posts`, {
+    const sbUrl2 = import.meta.env.VITE_SUPABASE_URL
+    const sbKey2 = import.meta.env.VITE_SUPABASE_ANON_KEY
+    const insertRes = await fetch(`${sbUrl2}/rest/v1/posts`, {
       method: 'POST',
       headers: {
-        'apikey': sbKey,
-        'Authorization': `Bearer ${accessToken || sbKey}`,
+        'apikey': sbKey2,
+        'Authorization': `Bearer ${accessToken || sbKey2}`,
         'Content-Type': 'application/json',
         'Prefer': 'return=minimal',
       },
@@ -68,12 +123,13 @@ export default function Upload({ creatorId, accentColor, accessToken, onPostCrea
         type:            type === 'document' ? 'text' : type,
         file_url:        fileUrl,
         thumbnail_emoji: EMOJI_MAP[type],
+        thumbnail_url:   thumbnailUrl || null,
         is_locked:       isLocked,
       }),
     })
     if (!insertRes.ok) {
-      const err = await insertRes.json().catch(() => ({}))
-      setError(err.message || `Failed to create post (${insertRes.status})`)
+      const insertErr = await insertRes.json().catch(() => ({}))
+      setError(insertErr.message || 'Failed to create post')
       setStep('form')
       return
     }
@@ -84,6 +140,7 @@ export default function Upload({ creatorId, accentColor, accessToken, onPostCrea
 
   function reset() {
     setStep('form'); setTitle(''); setDesc(''); setFile(null)
+    setThumbnail(null); setThumbnailPreview(null)
     setProgress(0); setError(null); setIsLocked(true); setType('video')
   }
 
@@ -147,48 +204,79 @@ export default function Upload({ creatorId, accentColor, accessToken, onPostCrea
       {/* Description */}
       <textarea
         style={{ ...input, minHeight: 80, resize: 'vertical', fontFamily: "'DM Mono', monospace" }}
-        placeholder="Description (optional)"
+        placeholder="Description (required)"
         value={desc}
         onChange={e => setDesc(e.target.value)}
       />
 
-      {/* File picker */}
-      <input
-        key={type}
-        ref={fileInputRef}
-        type="file"
-        accept={type === 'video' ? '.mp4,.mov,.webm' : type === 'audio' ? '.mp3,.wav,.m4a' : '.pdf'}
-        style={{ display: 'none' }}
-        onChange={e => { if (e.target.files[0]) setFile(e.target.files[0]) }}
-      />
-      <div
-        onClick={() => fileInputRef.current?.click()}
-        style={{
-          border: `1px dashed ${file ? accentColor + '80' : '#ffffff20'}`,
-          borderRadius: 10, padding: '28px', textAlign: 'center',
-          cursor: 'pointer', marginBottom: 12,
-          background: file ? accentColor + '08' : 'transparent',
-          transition: 'all 0.15s',
-        }}
-      >
-        {file ? (
-          <div>
-            <div style={{ fontSize: 24, marginBottom: 6 }}>{EMOJI_MAP[type]}</div>
-            <div style={{ fontSize: 13, color: '#e8e2d6' }}>{file.name}</div>
-            <div style={{ fontFamily: "'DM Mono', monospace", fontSize: 11, color: '#555', marginTop: 4 }}>
-              {(file.size / 1024 / 1024).toFixed(1)} MB · click to change
-            </div>
-          </div>
-        ) : (
-          <div>
-            <div style={{ fontSize: 28, marginBottom: 8, color: '#333' }}>↑</div>
-            <div style={{ fontSize: 13, color: '#555' }}>Click to select file</div>
-            <div style={{ fontFamily: "'DM Mono', monospace", fontSize: 10, color: '#333', marginTop: 6, letterSpacing: '0.1em' }}>
-              {type === 'video' ? 'MP4, MOV, WEBM' : type === 'audio' ? 'MP3, WAV, M4A' : 'PDF'}
-            </div>
-          </div>
-        )}
+      {/* Thumbnail image (optional) */}
+      <div style={{ marginBottom: 12 }}>
+        <div style={{ fontFamily: "'DM Mono', monospace", fontSize: 10, color: '#555', letterSpacing: '0.14em', marginBottom: 8 }}>
+          THUMBNAIL IMAGE <span style={{ color: '#333' }}>(OPTIONAL)</span>
+        </div>
+        <label style={{
+          display: 'flex', alignItems: 'center', gap: 14,
+          background: '#111', border: '1px dashed #ffffff20',
+          borderRadius: 10, padding: '14px 16px', cursor: 'pointer',
+        }}>
+          <input
+            type="file"
+            accept="image/*"
+            style={{ display: 'none' }}
+            onChange={handleThumbnailChange}
+          />
+          {thumbnailPreview ? (
+            <>
+              <img src={thumbnailPreview} alt="Thumbnail preview" style={{ width: 56, height: 56, objectFit: 'cover', borderRadius: 8, flexShrink: 0 }} />
+              <div>
+                <div style={{ fontSize: 12, color: '#e8e2d6' }}>{thumbnail?.name}</div>
+                <div style={{ fontFamily: "'DM Mono', monospace", fontSize: 10, color: '#555', marginTop: 2 }}>
+                  Click to change
+                </div>
+              </div>
+            </>
+          ) : (
+            <>
+              <div style={{ width: 56, height: 56, background: '#1a1a1a', borderRadius: 8, display: 'flex', alignItems: 'center', justifyContent: 'center', fontSize: 22, flexShrink: 0 }}>🖼</div>
+              <div>
+                <div style={{ fontSize: 12, color: '#555' }}>Add a thumbnail image</div>
+                <div style={{ fontFamily: "'DM Mono', monospace", fontSize: 10, color: '#333', marginTop: 2 }}>JPG, PNG, WEBP</div>
+              </div>
+            </>
+          )}
+        </label>
       </div>
+
+      {/* File dropzone */}
+      {(
+        <div {...getRootProps()} style={{
+          border: `1px dashed ${isDragActive ? accentColor : '#ffffff20'}`,
+          borderRadius: 10, padding: '28px', textAlign: 'center',
+          cursor: 'pointer', marginBottom: 12, background: isDragActive ? accentColor + '08' : 'transparent',
+          transition: 'all 0.15s'
+        }}>
+          <input {...getInputProps()} />
+          {file ? (
+            <div>
+              <div style={{ fontSize: 24, marginBottom: 6 }}>{EMOJI_MAP[type]}</div>
+              <div style={{ fontSize: 13, color: '#e8e2d6' }}>{file.name}</div>
+              <div style={{ fontFamily: "'DM Mono', monospace", fontSize: 11, color: '#555', marginTop: 4 }}>
+                {(file.size / 1024 / 1024).toFixed(1)} MB
+              </div>
+            </div>
+          ) : (
+            <div>
+              <div style={{ fontSize: 28, marginBottom: 8, color: '#333' }}>↑</div>
+              <div style={{ fontSize: 13, color: '#555' }}>
+                {isDragActive ? 'Drop it here' : 'Drag & drop or click to select'}
+              </div>
+              <div style={{ fontFamily: "'DM Mono', monospace", fontSize: 10, color: '#333', marginTop: 6, letterSpacing: '0.1em' }}>
+                {type === 'video' ? 'MP4, MOV, WEBM' : type === 'audio' ? 'MP3, WAV, M4A' : 'PDF'}
+              </div>
+            </div>
+          )}
+        </div>
+      )}
 
       {/* Access toggle */}
       <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', background: '#111', border: '1px solid #ffffff10', borderRadius: 8, padding: '12px 16px', marginBottom: 16 }}>

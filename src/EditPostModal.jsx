@@ -5,10 +5,19 @@ export default function EditPostModal({ post, accentColor, accessToken, onClose,
   const [title, setTitle] = useState(post.title || '')
   const [description, setDescription] = useState(post.description || '')
   const [isLocked, setIsLocked] = useState(post.is_locked ?? true)
+  const [thumbnail, setThumbnail] = useState(null)
+  const [thumbnailPreview, setThumbnailPreview] = useState(post.thumbnail_url || null)
   const [loading, setLoading] = useState(false)
   const [error, setError] = useState(null)
 
   const ac = accentColor || '#c9a84c'
+
+  function handleThumbnailChange(e) {
+    const f = e.target.files?.[0]
+    if (!f) return
+    setThumbnail(f)
+    setThumbnailPreview(URL.createObjectURL(f))
+  }
 
   const input = {
     width: '100%', background: '#252530', border: '1px solid #ffffff28',
@@ -20,12 +29,36 @@ export default function EditPostModal({ post, accentColor, accessToken, onClose,
 
   async function handleSave() {
     if (!title.trim()) { setError('Title is required.'); return }
+    if (!description.trim()) { setError('Description is required.'); return }
     setLoading(true)
     setError(null)
 
     try {
       const sbUrl = import.meta.env.VITE_SUPABASE_URL
       const sbKey = import.meta.env.VITE_SUPABASE_ANON_KEY
+
+      // Upload new thumbnail if one was selected
+      let thumbnailUrl = post.thumbnail_url || null
+      if (thumbnail) {
+        const thumbExt = thumbnail.name.split('.').pop()
+        const thumbPath = `${post.creator_id}/thumb_${Date.now()}.${thumbExt}`
+        const thumbRes = await fetch(`${sbUrl}/storage/v1/object/thumbnails/${thumbPath}`, {
+          method: 'POST',
+          headers: {
+            'apikey': sbKey,
+            'Authorization': `Bearer ${accessToken || sbKey}`,
+            'x-upsert': 'false',
+            'Cache-Control': '3600',
+          },
+          body: thumbnail,
+        })
+        if (thumbRes.ok) {
+          thumbnailUrl = `${sbUrl}/storage/v1/object/public/thumbnails/${thumbPath}`
+        } else {
+          console.warn('Thumbnail upload failed — keeping existing thumbnail')
+        }
+      }
+
       const res = await fetch(`${sbUrl}/rest/v1/posts?id=eq.${post.id}`, {
         method: 'PATCH',
         headers: {
@@ -38,6 +71,7 @@ export default function EditPostModal({ post, accentColor, accessToken, onClose,
           title: title.trim(),
           description: description.trim(),
           is_locked: isLocked,
+          thumbnail_url: thumbnailUrl,
         }),
       })
       if (!res.ok) {
@@ -87,10 +121,10 @@ export default function EditPostModal({ post, accentColor, accessToken, onClose,
         />
 
         {/* Description */}
-        <div style={{ fontFamily: "'DM Mono', monospace", fontSize: 10, color: '#555', letterSpacing: '0.14em', marginBottom: 8 }}>DESCRIPTION</div>
+        <div style={{ fontFamily: "'DM Mono', monospace", fontSize: 10, color: '#555', letterSpacing: '0.14em', marginBottom: 8 }}>DESCRIPTION *</div>
         <textarea
           style={{ ...input, minHeight: 100, resize: 'vertical' }}
-          placeholder="Description (optional)"
+          placeholder="Description"
           value={description}
           onChange={e => setDescription(e.target.value)}
         />
@@ -124,6 +158,37 @@ export default function EditPostModal({ post, accentColor, accessToken, onClose,
               background: '#fff', transition: 'left 0.2s',
             }} />
           </div>
+        </div>
+
+        {/* Thumbnail image */}
+        <div style={{ marginBottom: 16 }}>
+          <div style={{ fontFamily: "'DM Mono', monospace", fontSize: 10, color: '#555', letterSpacing: '0.14em', marginBottom: 8 }}>
+            THUMBNAIL IMAGE <span style={{ color: '#333' }}>(OPTIONAL)</span>
+          </div>
+          <label style={{
+            display: 'flex', alignItems: 'center', gap: 14,
+            background: '#111', border: '1px dashed #ffffff20',
+            borderRadius: 10, padding: '14px 16px', cursor: 'pointer',
+          }}>
+            <input type="file" accept="image/*" style={{ display: 'none' }} onChange={handleThumbnailChange} />
+            {thumbnailPreview ? (
+              <>
+                <img src={thumbnailPreview} alt="Thumbnail" style={{ width: 56, height: 56, objectFit: 'cover', borderRadius: 8, flexShrink: 0 }} />
+                <div>
+                  <div style={{ fontSize: 12, color: '#e8e2d6' }}>{thumbnail?.name || 'Current thumbnail'}</div>
+                  <div style={{ fontFamily: "'DM Mono', monospace", fontSize: 10, color: '#555', marginTop: 2 }}>Click to change</div>
+                </div>
+              </>
+            ) : (
+              <>
+                <div style={{ width: 56, height: 56, background: '#1a1a1a', borderRadius: 8, display: 'flex', alignItems: 'center', justifyContent: 'center', fontSize: 22, flexShrink: 0 }}>🖼</div>
+                <div>
+                  <div style={{ fontSize: 12, color: '#555' }}>Add a thumbnail image</div>
+                  <div style={{ fontFamily: "'DM Mono', monospace", fontSize: 10, color: '#333', marginTop: 2 }}>JPG, PNG, WEBP</div>
+                </div>
+              </>
+            )}
+          </label>
         </div>
 
         {/* Note: file cannot be replaced */}

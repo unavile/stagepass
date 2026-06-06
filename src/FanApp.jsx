@@ -644,7 +644,11 @@ export default function FanApp({ deepHandle }) {
           return (
             <div key={post.id} style={{ ...card({ padding: '14px 16px', marginBottom: 10 }), opacity: canView ? 1 : 0.55 }}>
               <div style={{ display: 'flex', gap: 12, alignItems: 'center' }}>
-                <div style={{ width: 38, height: 38, background: BG3, borderRadius: 8, display: 'flex', alignItems: 'center', justifyContent: 'center', fontSize: 18, flexShrink: 0 }}>{post.thumbnail_emoji}</div>
+                <div style={{ width: 38, height: 38, background: BG3, borderRadius: 8, overflow: 'hidden', display: 'flex', alignItems: 'center', justifyContent: 'center', fontSize: 18, flexShrink: 0 }}>
+                {post.thumbnail_url
+                  ? <img src={post.thumbnail_url} alt={post.title} style={{ width: '100%', height: '100%', objectFit: 'cover' }} />
+                  : post.thumbnail_emoji}
+              </div>
                 <div style={{ flex: 1, minWidth: 0 }}>
                   <div style={{ fontSize: 13, color: canView ? TEXT1 : TEXT3, marginBottom: 4 }}>{post.title}</div>
                   <div style={{ display: 'flex', gap: 6, flexWrap: 'wrap' }}>

@@ -470,7 +470,11 @@ export default function CreatorApp({ session, profile, onSignOut }) {
                   ...card({ padding: '12px 16px', marginBottom: 8 }),
                   display: 'flex', alignItems: 'center', gap: 14,
                 }}>
-                  <div style={{ width: 36, height: 36, background: BG3, borderRadius: 8, display: 'flex', alignItems: 'center', justifyContent: 'center', fontSize: 18, flexShrink: 0 }}>{post.thumbnail_emoji}</div>
+                  <div style={{ width: 36, height: 36, background: BG3, borderRadius: 8, overflow: 'hidden', display: 'flex', alignItems: 'center', justifyContent: 'center', fontSize: 18, flexShrink: 0 }}>
+                    {post.thumbnail_url
+                      ? <img src={post.thumbnail_url} alt={post.title} style={{ width: '100%', height: '100%', objectFit: 'cover' }} />
+                      : post.thumbnail_emoji}
+                  </div>
                   <div style={{ flex: 1, minWidth: 0 }}>
                     <div style={{ fontSize: 13, color: TEXT1, whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' }}>{post.title}</div>
                     <div style={{ fontFamily: "'DM Mono', monospace", fontSize: 10, color: TEXT3, marginTop: 2 }}>{typeLabels[post.type]} · {new Date(post.published_at).toLocaleDateString()}</div>
@@ -507,7 +511,11 @@ export default function CreatorApp({ session, profile, onSignOut }) {
               ) : posts.map(post => (
                 <div key={post.id} style={{ ...card({ padding: '16px', marginBottom: 10 }) }}>
                   <div style={{ display: 'flex', gap: 14, alignItems: 'flex-start' }}>
-                    <div style={{ width: 44, height: 44, background: BG3, borderRadius: 8, display: 'flex', alignItems: 'center', justifyContent: 'center', fontSize: 20, flexShrink: 0 }}>{post.thumbnail_emoji}</div>
+                    <div style={{ width: 44, height: 44, background: BG3, borderRadius: 8, overflow: 'hidden', display: 'flex', alignItems: 'center', justifyContent: 'center', fontSize: 20, flexShrink: 0 }}>
+                      {post.thumbnail_url
+                        ? <img src={post.thumbnail_url} alt={post.title} style={{ width: '100%', height: '100%', objectFit: 'cover' }} />
+                        : post.thumbnail_emoji}
+                    </div>
                     <div style={{ flex: 1, minWidth: 0 }}>
                       <div style={{ fontSize: 14, color: TEXT1, marginBottom: 4 }}>{post.title}</div>
                       {post.description && <div style={{ fontSize: 12, color: TEXT3, marginBottom: 6, lineHeight: 1.5 }}>{post.description}</div>}
