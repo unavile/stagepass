@@ -476,7 +476,7 @@ export default function AdminPortal() {
           published: p.published_at ? p.published_at.split('T')[0] : '',
           description: (p.description || '').replace(/,/g, ' '),
         })))
-      }
+
       // ── Creator-level access summary ──────────────────────────────────
       } else if (reportType === 'creator_access') {
         let data = await sbFetch('v_creator_access_stats?order=total_post_views.desc')
