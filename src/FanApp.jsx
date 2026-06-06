@@ -724,9 +724,9 @@ export default function FanApp({ deepHandle }) {
               ))}
             </div>
             {(() => {
-              const todayStr = new Date().toISOString().split('T')[0]
+              const cutoff = new Date(new Date() - 24 * 60 * 60 * 1000)
               const filtered = creatorEvents.filter(e =>
-                creatorEventFilter === 'current' ? e.event_date >= todayStr : e.event_date < todayStr
+                creatorEventFilter === 'current' ? eventStartDateTime(e) >= cutoff : eventStartDateTime(e) < cutoff
               )
               if (filtered.length === 0) return (
                 <div style={{ color: TEXT3, fontFamily: "'DM Mono', monospace", fontSize: 11, padding: '12px 0' }}>
@@ -1073,10 +1073,11 @@ export default function FanApp({ deepHandle }) {
               ) : (
                 <div style={{ display: 'flex', flexDirection: 'column', gap: 12 }}>
                   {(() => {
-                    const todayStr = new Date().toISOString().split('T')[0]
+                    const cutoff = new Date(new Date() - 24 * 60 * 60 * 1000)
                     const filteredRsvps = fanEvents.filter(r => {
-                      const d = r.events?.event_date
-                      return d ? (fanEventFilter === 'current' ? d >= todayStr : d < todayStr) : false
+                      if (!r.events?.event_date) return false
+                      const start = eventStartDateTime(r.events)
+                      return start ? (fanEventFilter === 'current' ? start >= cutoff : start < cutoff) : false
                     })
                     if (filteredRsvps.length === 0) return (
                       <div style={{ textAlign: 'center', padding: '32px 0', color: TEXT3, fontFamily: "'DM Mono', monospace", fontSize: 11 }}>

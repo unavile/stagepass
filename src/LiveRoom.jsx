@@ -211,6 +211,14 @@ export default function LiveRoom({ event, profile, isCreator, onLeave, accessTok
         token,
         startVideoOff: !isCreatorRef.current,
         startAudioOff: !isCreatorRef.current,
+        // Request higher quality for the creator's camera stream.
+        // dailyConfig is passed to Daily's internal call object at join time.
+        // sendSettings controls the video quality the creator publishes.
+        ...(isCreatorRef.current ? {
+          dailyConfig: {
+            camVideoProfile: 'HD720p15',
+          }
+        } : {})
       })
 
       frameRef.current = frame
