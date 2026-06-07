@@ -751,13 +751,47 @@ export default function FanApp({ deepHandle }) {
                       )}
                       {post.type === 'audio' && <audio controls src={post.file_url} style={{ width: 180 }} onPlay={() => logPostView(post)} />}
                       {post.type === 'text' && (
-                        <a href={post.file_url} target="_blank" rel="noreferrer" onClick={() => logPostView(post)} style={{
-                          color: ACCENT, fontFamily: "'DM Mono', monospace", fontSize: 11,
-                          display: 'inline-flex', flexDirection: 'column', alignItems: 'center', gap: 4,
-                        }}>
-                          <span style={{ fontSize: 28 }}>📖</span>
-                          <span style={{ fontSize: 9, letterSpacing: '0.08em' }}>OPEN PDF</span>
-                        </a>
+                        post.thumbnail_url ? (
+                          // Thumbnail available: show as wide clickable image with PDF overlay
+                          <a
+                            href={post.file_url}
+                            target="_blank"
+                            rel="noreferrer"
+                            onClick={() => logPostView(post)}
+                            style={{
+                              position: 'relative', display: 'block',
+                              borderRadius: 10, overflow: 'hidden',
+                              width: 160, flexShrink: 0, textDecoration: 'none',
+                            }}
+                          >
+                            <img
+                              src={post.thumbnail_url}
+                              alt={post.title}
+                              style={{ width: '100%', aspectRatio: '16/9', objectFit: 'cover', display: 'block' }}
+                            />
+                            <div style={{
+                              position: 'absolute', inset: 0,
+                              background: 'rgba(0,0,0,0.35)',
+                              display: 'flex', alignItems: 'center', justifyContent: 'center',
+                            }}>
+                              <div style={{
+                                width: 36, height: 36, borderRadius: '50%',
+                                background: ACCENT,
+                                display: 'flex', alignItems: 'center', justifyContent: 'center',
+                                fontSize: 16,
+                              }}>📖</div>
+                            </div>
+                          </a>
+                        ) : (
+                          // No thumbnail: show default PDF icon
+                          <a href={post.file_url} target="_blank" rel="noreferrer" onClick={() => logPostView(post)} style={{
+                            color: ACCENT, fontFamily: "'DM Mono', monospace", fontSize: 11,
+                            display: 'inline-flex', flexDirection: 'column', alignItems: 'center', gap: 4,
+                          }}>
+                            <span style={{ fontSize: 28 }}>📖</span>
+                            <span style={{ fontSize: 9, letterSpacing: '0.08em' }}>OPEN PDF</span>
+                          </a>
+                        )
                       )}
                     </div>
                   )}
