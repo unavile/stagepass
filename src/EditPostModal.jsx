@@ -1,5 +1,56 @@
-import { useState } from 'react'
+import { useState, useCallback } from 'react'
 import { supabase } from './supabaseClient'
+import { useDropzone } from 'react-dropzone'
+
+function ThumbnailDropzone({ thumbnail, thumbnailPreview, onThumbnailChange }) {
+  const onDrop = useCallback(accepted => {
+    if (!accepted.length) return
+    const f = accepted[0]
+    onThumbnailChange(f, URL.createObjectURL(f))
+  }, [onThumbnailChange])
+
+  const { getRootProps, getInputProps, isDragActive } = useDropzone({
+    onDrop,
+    accept: { 'image/*': ['.jpg', '.jpeg', '.png', '.webp', '.gif'] },
+    maxFiles: 1,
+  })
+
+  return (
+    <div
+      {...getRootProps()}
+      style={{
+        display: 'flex', alignItems: 'center', gap: 14,
+        background: isDragActive ? '#c9a84c10' : '#111',
+        border: isDragActive ? '1px dashed #c9a84c' : '1px dashed #ffffff20',
+        borderRadius: 10, padding: '14px 16px', cursor: 'pointer',
+        transition: 'all 0.15s',
+      }}
+    >
+      <input {...getInputProps()} />
+      {thumbnailPreview ? (
+        <>
+          <img src={thumbnailPreview} alt="Thumbnail" style={{ width: 56, height: 56, objectFit: 'cover', borderRadius: 8, flexShrink: 0 }} />
+          <div>
+            <div style={{ fontSize: 12, color: '#e8e2d6' }}>{thumbnail?.name || 'Current thumbnail'}</div>
+            <div style={{ fontFamily: "'DM Mono', monospace", fontSize: 10, color: '#555', marginTop: 2 }}>
+              {isDragActive ? 'Drop to replace' : 'Click or drag to change'}
+            </div>
+          </div>
+        </>
+      ) : (
+        <>
+          <div style={{ width: 56, height: 56, background: '#1a1a1a', borderRadius: 8, display: 'flex', alignItems: 'center', justifyContent: 'center', fontSize: 22, flexShrink: 0 }}>🖼</div>
+          <div>
+            <div style={{ fontSize: 12, color: isDragActive ? '#c9a84c' : '#555' }}>
+              {isDragActive ? 'Drop image here' : 'Drag & drop or click to add thumbnail'}
+            </div>
+            <div style={{ fontFamily: "'DM Mono', monospace", fontSize: 10, color: '#333', marginTop: 2 }}>JPG, PNG, WEBP</div>
+          </div>
+        </>
+      )}
+    </div>
+  )
+}
 
 export default function EditPostModal({ post, accentColor, accessToken, onClose, onSaved }) {
   const [title, setTitle] = useState(post.title || '')
@@ -12,11 +63,9 @@ export default function EditPostModal({ post, accentColor, accessToken, onClose,
 
   const ac = accentColor || '#c9a84c'
 
-  function handleThumbnailChange(e) {
-    const f = e.target.files?.[0]
-    if (!f) return
-    setThumbnail(f)
-    setThumbnailPreview(URL.createObjectURL(f))
+  function handleThumbnailChange(file, previewUrl) {
+    setThumbnail(file)
+    setThumbnailPreview(previewUrl)
   }
 
   const input = {
@@ -165,30 +214,11 @@ export default function EditPostModal({ post, accentColor, accessToken, onClose,
           <div style={{ fontFamily: "'DM Mono', monospace", fontSize: 10, color: '#555', letterSpacing: '0.14em', marginBottom: 8 }}>
             THUMBNAIL IMAGE <span style={{ color: '#333' }}>(OPTIONAL)</span>
           </div>
-          <label style={{
-            display: 'flex', alignItems: 'center', gap: 14,
-            background: '#111', border: '1px dashed #ffffff20',
-            borderRadius: 10, padding: '14px 16px', cursor: 'pointer',
-          }}>
-            <input type="file" accept="image/*" style={{ display: 'none' }} onChange={handleThumbnailChange} />
-            {thumbnailPreview ? (
-              <>
-                <img src={thumbnailPreview} alt="Thumbnail" style={{ width: 56, height: 56, objectFit: 'cover', borderRadius: 8, flexShrink: 0 }} />
-                <div>
-                  <div style={{ fontSize: 12, color: '#e8e2d6' }}>{thumbnail?.name || 'Current thumbnail'}</div>
-                  <div style={{ fontFamily: "'DM Mono', monospace", fontSize: 10, color: '#555', marginTop: 2 }}>Click to change</div>
-                </div>
-              </>
-            ) : (
-              <>
-                <div style={{ width: 56, height: 56, background: '#1a1a1a', borderRadius: 8, display: 'flex', alignItems: 'center', justifyContent: 'center', fontSize: 22, flexShrink: 0 }}>🖼</div>
-                <div>
-                  <div style={{ fontSize: 12, color: '#555' }}>Add a thumbnail image</div>
-                  <div style={{ fontFamily: "'DM Mono', monospace", fontSize: 10, color: '#333', marginTop: 2 }}>JPG, PNG, WEBP</div>
-                </div>
-              </>
-            )}
-          </label>
+          <ThumbnailDropzone
+            thumbnail={thumbnail}
+            thumbnailPreview={thumbnailPreview}
+            onThumbnailChange={handleThumbnailChange}
+          />
         </div>
 
         {/* Note: file cannot be replaced */}
