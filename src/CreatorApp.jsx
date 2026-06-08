@@ -74,6 +74,7 @@ export default function CreatorApp({ session, profile, onSignOut }) {
   const [liveEvent, setLiveEvent] = useState(null)
   const [editPost, setEditPost] = useState(null)
   const [editEvent, setEditEvent] = useState(null)
+  const [confirmDelete, setConfirmDelete] = useState(null) // { type: 'post'|'event', item, label }
   const [eventFilter, setEventFilter] = useState('current')
   const [notifications, setNotifications] = useState([])
   const [notifsLoading, setNotifsLoading] = useState(false)
@@ -230,6 +231,42 @@ export default function CreatorApp({ session, profile, onSignOut }) {
       setEventParticipants(prev => ({ ...prev, [eventId]: [] }))
     }
     setLoadingParticipants(prev => ({ ...prev, [eventId]: false }))
+  }
+
+  // ── Delete post ───────────────────────────────────────────────────────────
+  async function handleDeletePost(post) {
+    const sbUrl = import.meta.env.VITE_SUPABASE_URL
+    const sbKey = import.meta.env.VITE_SUPABASE_ANON_KEY
+    try {
+      const res = await fetch(`${sbUrl}/rest/v1/posts?id=eq.${post.id}`, {
+        method: 'DELETE',
+        headers: { 'apikey': sbKey, 'Authorization': `Bearer ${session.access_token}` },
+      })
+      if (!res.ok) throw new Error(`Delete failed (${res.status})`)
+      setConfirmDelete(null)
+      nativeRefetchPosts()
+    } catch (e) {
+      console.error('handleDeletePost error:', e)
+      alert('Failed to delete post. Please try again.')
+    }
+  }
+
+  // ── Delete event ───────────────────────────────────────────────────────────
+  async function handleDeleteEvent(event) {
+    const sbUrl = import.meta.env.VITE_SUPABASE_URL
+    const sbKey = import.meta.env.VITE_SUPABASE_ANON_KEY
+    try {
+      const res = await fetch(`${sbUrl}/rest/v1/events?id=eq.${event.id}`, {
+        method: 'DELETE',
+        headers: { 'apikey': sbKey, 'Authorization': `Bearer ${session.access_token}` },
+      })
+      if (!res.ok) throw new Error(`Delete failed (${res.status})`)
+      setConfirmDelete(null)
+      nativeRefetchEvents()
+    } catch (e) {
+      console.error('handleDeleteEvent error:', e)
+      alert('Failed to delete event. Please try again.')
+    }
   }
 
   // Load notifications on mount, then poll every 60 seconds for new ones
@@ -532,12 +569,20 @@ export default function CreatorApp({ session, profile, onSignOut }) {
                         <span style={{ fontFamily: "'DM Mono', monospace", fontSize: 10, color: TEXT3, paddingTop: 2 }}>{new Date(post.published_at).toLocaleDateString()}</span>
                       </div>
                     </div>
-                    <button onClick={() => setEditPost(post)} style={{
-                      background: 'transparent', border: `1px solid ${BORDER}`,
-                      borderRadius: 6, padding: '5px 12px', color: TEXT2,
-                      fontFamily: "'DM Mono', monospace", fontSize: 10,
-                      cursor: 'pointer', letterSpacing: '0.08em', flexShrink: 0,
-                    }}>EDIT</button>
+                    <div style={{ display: 'flex', gap: 6, flexShrink: 0 }}>
+                      <button onClick={() => setEditPost(post)} style={{
+                        background: 'transparent', border: `1px solid ${BORDER}`,
+                        borderRadius: 6, padding: '5px 12px', color: TEXT2,
+                        fontFamily: "'DM Mono', monospace", fontSize: 10,
+                        cursor: 'pointer', letterSpacing: '0.08em',
+                      }}>EDIT</button>
+                      <button onClick={() => setConfirmDelete({ type: 'post', item: post, label: post.title })} style={{
+                        background: 'transparent', border: '1px solid #e8454440',
+                        borderRadius: 6, padding: '5px 12px', color: '#e84545',
+                        fontFamily: "'DM Mono', monospace", fontSize: 10,
+                        cursor: 'pointer', letterSpacing: '0.08em',
+                      }}>DELETE</button>
+                    </div>
                   </div>
                 </div>
               ))}
@@ -645,6 +690,12 @@ export default function CreatorApp({ session, profile, onSignOut }) {
                             fontFamily: "'DM Mono', monospace", fontSize: 10,
                             cursor: 'pointer', letterSpacing: '0.08em',
                           }}>EDIT</button>
+                          <button onClick={() => setConfirmDelete({ type: 'event', item: event, label: event.name })} style={{
+                            background: 'transparent', border: '1px solid #e8454440',
+                            borderRadius: 6, padding: '4px 10px', color: '#e84545',
+                            fontFamily: "'DM Mono', monospace", fontSize: 10,
+                            cursor: 'pointer', letterSpacing: '0.08em',
+                          }}>DELETE</button>
                         </div>
                       </div>
                       {event.description && <div style={{ fontSize: 13, color: TEXT2, lineHeight: 1.6, marginBottom: 10 }}>{event.description}</div>}
@@ -1007,6 +1058,52 @@ export default function CreatorApp({ session, profile, onSignOut }) {
       {showUpload && <NewPostModal creator={creator} accessToken={session.access_token} onClose={() => setShowUpload(false)} onPostCreated={refetch} />}
       {editPost && <EditPostModal post={editPost} accentColor={ac} accessToken={session.access_token} onClose={() => setEditPost(null)} onSaved={() => { setEditPost(null); nativeRefetchPosts() }} />}
       {editEvent && <EditEventModal event={editEvent} accentColor={ac} accessToken={session.access_token} onClose={() => setEditEvent(null)} onSaved={() => { setEditEvent(null); nativeRefetchEvents() }} />}
+
+      {/* ── Confirmation delete dialog ─────────────────────────────────── */}
+      {confirmDelete && (
+        <div style={{
+          position: 'fixed', inset: 0, background: '#000000cc',
+          display: 'flex', alignItems: 'center', justifyContent: 'center',
+          zIndex: 400, padding: 24,
+        }}>
+          <div style={{
+            background: '#161618', border: '1px solid #ffffff18',
+            borderRadius: 14, width: '100%', maxWidth: 400, padding: 32,
+          }}>
+            <div style={{ fontFamily: "'DM Serif Display', Georgia, serif", fontSize: 22, color: '#f0ebe0', marginBottom: 12 }}>
+              Delete {confirmDelete.type === 'post' ? 'Post' : 'Event'}?
+            </div>
+            <div style={{ fontSize: 13, color: '#888', lineHeight: 1.6, marginBottom: 8 }}>
+              Are you sure you want to delete:
+            </div>
+            <div style={{ fontFamily: "'DM Mono', monospace", fontSize: 13, color: '#f0ebe0', marginBottom: 8, wordBreak: 'break-word' }}>
+              "{confirmDelete.label}"
+            </div>
+            <div style={{ fontFamily: "'DM Mono', monospace", fontSize: 11, color: '#e84545', marginBottom: 24, lineHeight: 1.6 }}>
+              ⚠ This cannot be undone.{confirmDelete.type === 'event' ? ' All RSVPs and attendance records will also be deleted.' : ''}
+            </div>
+            <div style={{ display: 'flex', gap: 10 }}>
+              <button
+                onClick={() => setConfirmDelete(null)}
+                style={{
+                  flex: 1, background: 'transparent', color: '#888',
+                  border: '1px solid #ffffff15', borderRadius: 8, padding: '12px',
+                  fontFamily: "'DM Mono', monospace", fontSize: 12, cursor: 'pointer',
+                }}
+              >CANCEL</button>
+              <button
+                onClick={() => confirmDelete.type === 'post' ? handleDeletePost(confirmDelete.item) : handleDeleteEvent(confirmDelete.item)}
+                style={{
+                  flex: 1, background: '#e8454518', color: '#e84545',
+                  border: '1px solid #e8454544', borderRadius: 8, padding: '12px',
+                  fontFamily: "'DM Mono', monospace", fontSize: 12, fontWeight: 700,
+                  cursor: 'pointer', letterSpacing: '0.1em',
+                }}
+              >DELETE</button>
+            </div>
+          </div>
+        </div>
+      )}
       {showNewEvent && <NewEventModal creatorId={creator.id} accentColor={ac} onClose={() => setShowNewEvent(false)} onEventCreated={refetchEvents} />}
       {showEditProfile && <EditProfileModal profile={profile} creator={creator} accessToken={session.access_token} onClose={() => setShowEditProfile(false)} onSaved={() => window.location.reload()} />}
       {liveEvent && <LiveRoom event={liveEvent} profile={profile} isCreator={true} onLeave={() => setLiveEvent(null)} accessToken={session.access_token} />}
