@@ -89,6 +89,20 @@ function isEventActive(event) {
   return end ? new Date() <= end : mins >= -24 * 60
 }
 
+// ── Month/Year grouping ──────────────────────────────────────────────────────
+function groupByMonthYear(items, getDate) {
+  const groups = {}
+  const order = []
+  items.forEach(item => {
+    const d = getDate(item)
+    const key = d ? d.toLocaleDateString('en-US', { month: 'long', year: 'numeric' }) : 'Other'
+    if (!groups[key]) { groups[key] = []; order.push(key) }
+    groups[key].push(item)
+  })
+  return order.map(key => ({ key, items: groups[key] }))
+}
+const ITEMS_PER_GROUP = 5
+
 // Human-readable label for when the event starts
 function eventStartsInLabel(event) {
   const mins = minutesUntilStart(event)
@@ -162,6 +176,9 @@ export default function FanApp({ deepHandle }) {
   const [pendingEventId, setPendingEventId] = useState(null)
   const [pendingEventAccessType, setPendingEventAccessType] = useState(null)
   const [fanEventFilter, setFanEventFilter] = useState('current')
+  const [expandedPosts, setExpandedPosts] = useState({})
+  const [expandedCreatorEvents, setExpandedCreatorEvents] = useState({})
+  const [expandedFanEvents, setExpandedFanEvents] = useState({})
   const [creatorEventFilter, setCreatorEventFilter] = useState('current')
 
   // Live room
@@ -672,7 +689,17 @@ export default function FanApp({ deepHandle }) {
         <SectionLabel>Posts</SectionLabel>
         {posts.length === 0 ? (
           <div style={{ color: TEXT3, fontFamily: "'DM Mono', monospace", fontSize: 11, textAlign: 'center', padding: '32px 0' }}>No posts yet.</div>
-        ) : posts.map(post => {
+        ) : (() => {
+          const grps = groupByMonthYear(posts, p => p.published_at ? new Date(p.published_at) : null)
+          return grps.map(({ key, items }) => {
+            const isExp = expandedPosts[key]
+            const visible = isExp ? items : items.slice(0, ITEMS_PER_GROUP)
+            return (
+              <div key={key} style={{ marginBottom: 20 }}>
+                <div style={{ fontFamily: "'DM Mono', monospace", fontSize: 10, color: ACCENT, letterSpacing: '0.18em', fontWeight: 700, marginBottom: 10, paddingBottom: 6, borderBottom: `1px solid ${ACCENT}30` }}>
+                  {key.toUpperCase()} · {items.length} {items.length === 1 ? 'POST' : 'POSTS'}
+                </div>
+                {visible.map(post => {
           const canView = !post.is_locked || subscribed
           return (
             <div key={post.id} style={{ ...card({ padding: '14px 16px', marginBottom: 10 }), opacity: canView ? 1 : 0.55 }}>
@@ -806,6 +833,16 @@ export default function FanApp({ deepHandle }) {
             </div>
           )
         })}
+                })}
+                {items.length > ITEMS_PER_GROUP && (
+                  <button onClick={() => setExpandedPosts(p => ({ ...p, [key]: !p[key] }))} style={{ width: '100%', background: 'transparent', border: `1px solid ${BORDER}`, borderRadius: 8, padding: '8px', color: TEXT3, fontFamily: "'DM Mono', monospace", fontSize: 10, cursor: 'pointer', letterSpacing: '0.1em', marginBottom: 4 }}>
+                    {isExp ? 'SHOW LESS ↑' : `SHOW ${items.length - ITEMS_PER_GROUP} MORE ↓`}
+                  </button>
+                )}
+              </div>
+            )
+          })
+        })()}
 
         {/* Events */}
         {creatorEvents.length > 0 && (
@@ -838,7 +875,16 @@ export default function FanApp({ deepHandle }) {
                   No {creatorEventFilter === 'current' ? 'upcoming' : 'past'} events.
                 </div>
               )
-              return filtered.map(event => (
+              const grps = groupByMonthYear(filtered, e => eventStartDateTime(e))
+              return grps.map(({ key, items }) => {
+                const isExp = expandedCreatorEvents[key]
+                const visible = isExp ? items : items.slice(0, ITEMS_PER_GROUP)
+                return (
+                  <div key={key} style={{ marginBottom: 20 }}>
+                    <div style={{ fontFamily: "'DM Mono', monospace", fontSize: 10, color: ACCENT, letterSpacing: '0.18em', fontWeight: 700, marginBottom: 10, paddingBottom: 6, borderBottom: `1px solid ${ACCENT}30` }}>
+                      {key.toUpperCase()} · {items.length} {items.length === 1 ? 'EVENT' : 'EVENTS'}
+                    </div>
+                    {visible.map(event => (
               <div key={event.id} style={{
                 background: 'rgba(17,17,20,0.75)', backdropFilter: 'blur(16px)',
                 border: `1px solid ${ACCENT}22`, borderRadius: 12, padding: '16px', marginBottom: 10,
@@ -923,7 +969,15 @@ export default function FanApp({ deepHandle }) {
                   )}
                 </div>
               </div>
-              ))
+              ))}
+                    {items.length > ITEMS_PER_GROUP && (
+                      <button onClick={() => setExpandedCreatorEvents(p => ({ ...p, [key]: !p[key] }))} style={{ width: '100%', background: 'transparent', border: `1px solid ${BORDER}`, borderRadius: 8, padding: '8px', color: TEXT3, fontFamily: "'DM Mono', monospace", fontSize: 10, cursor: 'pointer', letterSpacing: '0.1em', marginBottom: 4 }}>
+                        {isExp ? 'SHOW LESS ↑' : `SHOW ${items.length - ITEMS_PER_GROUP} MORE ↓`}
+                      </button>
+                    )}
+                  </div>
+                )
+              })
             })()}
           </div>
         )}
@@ -1191,7 +1245,16 @@ export default function FanApp({ deepHandle }) {
                         No {fanEventFilter === 'current' ? 'upcoming' : 'past'} events.
                       </div>
                     )
-                    return filteredRsvps.map(rsvp => {
+                    const fanGrps = groupByMonthYear(filteredRsvps, r => eventStartDateTime(r.events))
+                    return fanGrps.map(({ key, items }) => {
+                      const isExp = expandedFanEvents[key]
+                      const visible = isExp ? items : items.slice(0, ITEMS_PER_GROUP)
+                      return (
+                        <div key={key} style={{ marginBottom: 20 }}>
+                          <div style={{ fontFamily: "'DM Mono', monospace", fontSize: 10, color: ACCENT, letterSpacing: '0.18em', fontWeight: 700, marginBottom: 10, paddingBottom: 6, borderBottom: `1px solid ${ACCENT}30` }}>
+                            {key.toUpperCase()} · {items.length} {items.length === 1 ? 'EVENT' : 'EVENTS'}
+                          </div>
+                          {visible.map(rsvp => {
                     const event = rsvp.events
                     if (!event) return null
                     const active = isEventActive(event)
@@ -1252,6 +1315,14 @@ export default function FanApp({ deepHandle }) {
                         </div>
                       </div>
                     )
+                    })}
+                          {items.length > ITEMS_PER_GROUP && (
+                            <button onClick={() => setExpandedFanEvents(p => ({ ...p, [key]: !p[key] }))} style={{ width: '100%', background: 'transparent', border: `1px solid ${BORDER}`, borderRadius: 8, padding: '8px', color: TEXT3, fontFamily: "'DM Mono', monospace", fontSize: 10, cursor: 'pointer', letterSpacing: '0.1em', marginBottom: 4 }}>
+                              {isExp ? 'SHOW LESS ↑' : `SHOW ${items.length - ITEMS_PER_GROUP} MORE ↓`}
+                            </button>
+                          )}
+                        </div>
+                      )
                     })
                   })()}
                 </div>
