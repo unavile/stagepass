@@ -832,7 +832,6 @@ export default function FanApp({ deepHandle }) {
               )}
             </div>
           )
-        })}
                 })}
                 {items.length > ITEMS_PER_GROUP && (
                   <button onClick={() => setExpandedPosts(p => ({ ...p, [key]: !p[key] }))} style={{ width: '100%', background: 'transparent', border: `1px solid ${BORDER}`, borderRadius: 8, padding: '8px', color: TEXT3, fontFamily: "'DM Mono', monospace", fontSize: 10, cursor: 'pointer', letterSpacing: '0.1em', marginBottom: 4 }}>
