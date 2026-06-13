@@ -1023,9 +1023,6 @@ export default function FanApp({ deepHandle }) {
         </div>
 
         <div style={{ display: 'flex', gap: 8, alignItems: 'center' }}>
-          {fanSession && fanProfile && (
-            <span style={{ fontFamily: "'DM Mono', monospace", fontSize: 10, color: TEXT3 }}>@{fanProfile.handle}</span>
-          )}
           {fanSession && (
             <button onClick={() => supabase.auth.signOut()} style={{ background: 'transparent', border: `1px solid ${BORDER}`, borderRadius: 7, padding: '5px 10px', color: TEXT3, fontFamily: "'DM Mono', monospace", fontSize: 9, letterSpacing: '0.08em', cursor: 'pointer' }}>
               SIGN OUT
