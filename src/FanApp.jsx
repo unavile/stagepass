@@ -1031,9 +1031,15 @@ export default function FanApp({ deepHandle }) {
               SIGN OUT
             </button>
           )}
-          <a href="/creator" style={{ background: ACCENT + '14', color: ACCENT, border: `1px solid ${ACCENT}35`, borderRadius: 7, padding: '5px 12px', fontFamily: "'DM Mono', monospace", fontSize: 9, letterSpacing: '0.1em', cursor: 'pointer', textDecoration: 'none', whiteSpace: 'nowrap' }}>
-            🎤 CREATOR
-          </a>
+          {!fanSession ? (
+            <span style={{ background: ACCENT + '0c', color: TEXT3, border: `1px solid ${BORDER}`, borderRadius: 7, padding: '5px 12px', fontFamily: "'DM Mono', monospace", fontSize: 9, letterSpacing: '0.1em', whiteSpace: 'nowrap' }}>
+              GUEST MODE
+            </span>
+          ) : fanProfile && (
+            <span style={{ background: ACCENT + '14', color: ACCENT, border: `1px solid ${ACCENT}35`, borderRadius: 7, padding: '5px 12px', fontFamily: "'DM Mono', monospace", fontSize: 9, letterSpacing: '0.1em', whiteSpace: 'nowrap' }}>
+              Hello {fanProfile.display_name?.split(' ')[0] || 'there'}
+            </span>
+          )}
         </div>
       </nav>
 

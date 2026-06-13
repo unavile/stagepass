@@ -45,7 +45,10 @@ async function nativeSignUp(email, password, metadata) {
 }
 
 async function nativeResetPassword(email) {
-  const url = `${import.meta.env.VITE_SUPABASE_URL}/auth/v1/recover`
+  // redirect_to must be added to Supabase Dashboard -> Authentication ->
+  // URL Configuration -> Redirect URLs allowlist, or the link will fail.
+  const redirectTo = `${window.location.origin}/reset-password-fan`
+  const url = `${import.meta.env.VITE_SUPABASE_URL}/auth/v1/recover?redirect_to=${encodeURIComponent(redirectTo)}`
   const res = await fetch(url, {
     method: 'POST',
     headers: {
