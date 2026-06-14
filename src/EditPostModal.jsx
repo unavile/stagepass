@@ -2,6 +2,11 @@ import { useState, useCallback } from 'react'
 import { supabase } from './supabaseClient'
 import { useDropzone } from 'react-dropzone'
 
+function extractYouTubeId(url) {
+  const match = url.match(/(?:youtube\.com\/(?:watch\?v=|embed\/|shorts\/)|youtu\.be\/)([a-zA-Z0-9_-]{11})/)
+  return match ? match[1] : null
+}
+
 function ThumbnailDropzone({ thumbnail, thumbnailPreview, onThumbnailChange }) {
   const onDrop = useCallback(accepted => {
     if (!accepted.length) return
@@ -58,6 +63,8 @@ export default function EditPostModal({ post, accentColor, accessToken, onClose,
   const [isLocked, setIsLocked] = useState(post.is_locked ?? true)
   const [thumbnail, setThumbnail] = useState(null)
   const [thumbnailPreview, setThumbnailPreview] = useState(post.thumbnail_url || null)
+  const [videoSource, setVideoSource] = useState(post.video_source || 'upload') // 'upload' | 'youtube'
+  const [youtubeUrl, setYoutubeUrl] = useState(post.video_source === 'youtube' ? (post.file_url || '') : '')
   const [loading, setLoading] = useState(false)
   const [error, setError] = useState(null)
 
@@ -79,6 +86,12 @@ export default function EditPostModal({ post, accentColor, accessToken, onClose,
   async function handleSave() {
     if (!title.trim()) { setError('Title is required.'); return }
     if (!description.trim()) { setError('Description is required.'); return }
+
+    const isYoutube = post.type === 'video' && videoSource === 'youtube'
+    if (isYoutube && !extractYouTubeId(youtubeUrl.trim())) {
+      setError('Please enter a valid YouTube URL.'); return
+    }
+
     setLoading(true)
     setError(null)
 
@@ -121,6 +134,10 @@ export default function EditPostModal({ post, accentColor, accessToken, onClose,
           description: description.trim(),
           is_locked: isLocked,
           thumbnail_url: thumbnailUrl,
+          ...(post.type === 'video' ? {
+            video_source: isYoutube ? 'youtube' : 'upload',
+            ...(isYoutube ? { file_url: youtubeUrl.trim() } : {}),
+          } : {}),
         }),
       })
       if (!res.ok) {
@@ -209,6 +226,49 @@ export default function EditPostModal({ post, accentColor, accessToken, onClose,
           </div>
         </div>
 
+        {/* Video source toggle — video posts only */}
+        {post.type === 'video' && (
+          <>
+            <div style={{ fontFamily: "'DM Mono', monospace", fontSize: 10, color: '#555', letterSpacing: '0.14em', marginBottom: 8 }}>VIDEO SOURCE</div>
+            <div style={{ display: 'flex', gap: 8, marginBottom: 12 }}>
+              {[
+                { id: 'upload',  label: '↑ Uploaded File' },
+                { id: 'youtube', label: '▶ YouTube Link' },
+              ].map(s => (
+                <button key={s.id} onClick={() => setVideoSource(s.id)} style={{
+                  flex: 1, padding: '9px 4px', borderRadius: 8, cursor: 'pointer',
+                  background: videoSource === s.id ? ac + '18' : 'none',
+                  border: videoSource === s.id ? `1px solid ${ac}66` : '1px solid #ffffff15',
+                  color: videoSource === s.id ? ac : '#555',
+                  fontFamily: "'DM Mono', monospace", fontSize: 11,
+                  letterSpacing: '0.08em', textTransform: 'uppercase'
+                }}>{s.label}</button>
+              ))}
+            </div>
+            {videoSource === 'youtube' && (
+              <div style={{ marginBottom: 16 }}>
+                <div style={{ fontFamily: "'DM Mono', monospace", fontSize: 10, color: '#555', letterSpacing: '0.14em', marginBottom: 8 }}>YOUTUBE URL</div>
+                <input
+                  style={input}
+                  placeholder="https://www.youtube.com/watch?v=..."
+                  value={youtubeUrl}
+                  onChange={e => setYoutubeUrl(e.target.value)}
+                />
+                {youtubeUrl.trim() && !extractYouTubeId(youtubeUrl.trim()) && (
+                  <div style={{ fontFamily: "'DM Mono', monospace", fontSize: 10, color: '#e84545', marginTop: -6, marginBottom: 8 }}>
+                    Doesn't look like a valid YouTube URL
+                  </div>
+                )}
+              </div>
+            )}
+            {videoSource === 'upload' && post.video_source === 'youtube' && (
+              <div style={{ fontFamily: "'DM Mono', monospace", fontSize: 10, color: '#e8a545', marginTop: -6, marginBottom: 16, lineHeight: 1.6 }}>
+                ⚠ Switching from YouTube to Upload requires the file to already exist — this post has no uploaded file. To use an uploaded file, delete this post and create a new one.
+              </div>
+            )}
+          </>
+        )}
+
         {/* Thumbnail image */}
         <div style={{ marginBottom: 16 }}>
           <div style={{ fontFamily: "'DM Mono', monospace", fontSize: 10, color: '#555', letterSpacing: '0.14em', marginBottom: 8 }}>
@@ -222,9 +282,11 @@ export default function EditPostModal({ post, accentColor, accessToken, onClose,
         </div>
 
         {/* Note: file cannot be replaced */}
-        <div style={{ fontFamily: "'DM Mono', monospace", fontSize: 10, color: '#444', marginBottom: 20, lineHeight: 1.6 }}>
-          Note: the uploaded file cannot be changed. To replace the file, delete this post and create a new one.
-        </div>
+        {!(post.type === 'video' && videoSource === 'youtube') && (
+          <div style={{ fontFamily: "'DM Mono', monospace", fontSize: 10, color: '#444', marginBottom: 20, lineHeight: 1.6 }}>
+            Note: the uploaded file cannot be changed. To replace the file, delete this post and create a new one.
+          </div>
+        )}
 
         {error && (
           <div style={{ color: '#e84545', fontFamily: "'DM Mono', monospace", fontSize: 12, marginBottom: 12 }}>{error}</div>

@@ -8,6 +8,11 @@ import FanLoginModal from './FanLoginModal'
 // Parse YYYY-MM-DD as local date — avoids UTC timezone shift
 function parseLocalDate(s) { if (!s) return new Date(); const [y,m,d] = s.split('-').map(Number); return new Date(y, m-1, d) }
 
+function extractYouTubeId(url) {
+  const match = (url || '').match(/(?:youtube\.com\/(?:watch\?v=|embed\/|shorts\/)|youtu\.be\/)([a-zA-Z0-9_-]{11})/)
+  return match ? match[1] : null
+}
+
 // ─── Design tokens ──────────────────────────────────────────────────────────
 const BG      = '#09090b'
 const BG2     = '#111114'
@@ -722,8 +727,8 @@ export default function FanApp({ deepHandle }) {
                   {post.file_url && (
                     <div style={{ flexShrink: 0 }}>
                       {post.type === 'video' && (
-                        post.thumbnail_url ? (
-                          // Thumbnail available: show as a wide clickable image with play overlay
+                        (post.thumbnail_url || (post.video_source === 'youtube' && extractYouTubeId(post.file_url))) ? (
+                          // Thumbnail available (custom or YouTube auto-thumbnail): wide clickable image with play overlay
                           <button
                             onClick={() => { setVideoPost(post); logPostView(post) }}
                             style={{
@@ -734,7 +739,7 @@ export default function FanApp({ deepHandle }) {
                             }}
                           >
                             <img
-                              src={post.thumbnail_url}
+                              src={post.thumbnail_url || `https://img.youtube.com/vi/${extractYouTubeId(post.file_url)}/mqdefault.jpg`}
                               alt={post.title}
                               style={{ width: '100%', aspectRatio: '16/9', objectFit: 'cover', display: 'block' }}
                             />
@@ -1597,14 +1602,27 @@ export default function FanApp({ deepHandle }) {
               fontSize: 16, color: TEXT1, marginBottom: 10,
             }}>{videoPost.title}</div>
             {/* Player */}
-            <video
-              controls
-              autoPlay
-              controlsList="nodownload"
-              onContextMenu={e => e.preventDefault()}
-              src={videoPost.file_url}
-              style={{ width: '100%', borderRadius: 10, maxHeight: '70vh', background: '#000' }}
-            />
+            {videoPost.video_source === 'youtube' ? (
+              <div style={{ position: 'relative', width: '100%', paddingBottom: '56.25%', borderRadius: 10, overflow: 'hidden', background: '#000' }}>
+                <iframe
+                  src={`https://www.youtube.com/embed/${extractYouTubeId(videoPost.file_url)}?autoplay=1`}
+                  title={videoPost.title}
+                  frameBorder="0"
+                  allow="accelerometer; autoplay; clipboard-write; encrypted-media; gyroscope; picture-in-picture"
+                  allowFullScreen
+                  style={{ position: 'absolute', top: 0, left: 0, width: '100%', height: '100%' }}
+                />
+              </div>
+            ) : (
+              <video
+                controls
+                autoPlay
+                controlsList="nodownload"
+                onContextMenu={e => e.preventDefault()}
+                src={videoPost.file_url}
+                style={{ width: '100%', borderRadius: 10, maxHeight: '70vh', background: '#000' }}
+              />
+            )}
             {videoPost.description && (
               <div style={{
                 fontFamily: "'DM Mono', monospace", fontSize: 11,

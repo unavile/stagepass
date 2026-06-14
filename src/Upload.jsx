@@ -51,6 +51,11 @@ function ThumbnailDropzone({ thumbnail, thumbnailPreview, onThumbnailChange }) {
   )
 }
 
+function extractYouTubeId(url) {
+  const match = url.match(/(?:youtube\.com\/(?:watch\?v=|embed\/|shorts\/)|youtu\.be\/)([a-zA-Z0-9_-]{11})/)
+  return match ? match[1] : null
+}
+
 const ACCEPTED = {
   video:    { 'video/*': ['.mp4', '.mov', '.webm'] },
   audio:    { 'audio/*': ['.mp3', '.wav', '.m4a'] },
@@ -69,6 +74,8 @@ export default function Upload({ creatorId, accentColor, accessToken, onPostCrea
   const [file, setFile]         = useState(null)
   const [thumbnail, setThumbnail] = useState(null)     // optional thumbnail image
   const [thumbnailPreview, setThumbnailPreview] = useState(null)
+  const [videoSource, setVideoSource] = useState('upload') // 'upload' | 'youtube' — video posts only
+  const [youtubeUrl, setYoutubeUrl] = useState('')
   const [progress, setProgress] = useState(0)
   const [error, setError]       = useState(null)
 
@@ -90,7 +97,16 @@ export default function Upload({ creatorId, accentColor, accessToken, onPostCrea
   async function handleSubmit() {
     if (!title.trim()) { setError('Please add a title.'); return }
     if (!desc.trim()) { setError('Please add a description.'); return }
-    if (!file) { setError('Please select a file to upload.'); return }
+
+    const isYoutube = type === 'video' && videoSource === 'youtube'
+
+    if (isYoutube) {
+      const ytId = extractYouTubeId(youtubeUrl.trim())
+      if (!ytId) { setError('Please enter a valid YouTube URL.'); return }
+    } else {
+      if (!file) { setError('Please select a file to upload.'); return }
+    }
+
     setError(null)
     setStep('uploading')
 
@@ -120,7 +136,9 @@ export default function Upload({ creatorId, accentColor, accessToken, onPostCrea
       }
     }
 
-    if (file) {
+    if (isYoutube) {
+      fileUrl = youtubeUrl.trim()
+    } else if (file) {
       const bucket = BUCKET_MAP[type]
       const ext    = file.name.split('.').pop()
       const path   = `${creatorId}/${Date.now()}.${ext}`
@@ -172,6 +190,7 @@ export default function Upload({ creatorId, accentColor, accessToken, onPostCrea
         file_url:        fileUrl,
         thumbnail_emoji: EMOJI_MAP[type],
         thumbnail_url:   thumbnailUrl || null,
+        video_source:    isYoutube ? 'youtube' : 'upload',
         is_locked:       isLocked,
       }),
     })
@@ -189,6 +208,7 @@ export default function Upload({ creatorId, accentColor, accessToken, onPostCrea
   function reset() {
     setStep('form'); setTitle(''); setDesc(''); setFile(null)
     setThumbnail(null); setThumbnailPreview(null)
+    setVideoSource('upload'); setYoutubeUrl('')
     setProgress(0); setError(null); setIsLocked(true); setType('video')
   }
 
@@ -257,6 +277,25 @@ export default function Upload({ creatorId, accentColor, accessToken, onPostCrea
         onChange={e => setDesc(e.target.value)}
       />
 
+      {/* Video source toggle — video posts only */}
+      {type === 'video' && (
+        <div style={{ display: 'flex', gap: 8, marginBottom: 12 }}>
+          {[
+            { id: 'upload',  label: '↑ Upload File' },
+            { id: 'youtube', label: '▶ YouTube Link' },
+          ].map(s => (
+            <button key={s.id} onClick={() => setVideoSource(s.id)} style={{
+              flex: 1, padding: '9px 4px', borderRadius: 8, cursor: 'pointer',
+              background: videoSource === s.id ? accentColor + '18' : 'none',
+              border: videoSource === s.id ? `1px solid ${accentColor}66` : '1px solid #ffffff15',
+              color: videoSource === s.id ? accentColor : '#555',
+              fontFamily: "'DM Mono', monospace", fontSize: 11,
+              letterSpacing: '0.08em', textTransform: 'uppercase'
+            }}>{s.label}</button>
+          ))}
+        </div>
+      )}
+
       {/* Thumbnail image (optional) */}
       <div style={{ marginBottom: 12 }}>
         <div style={{ fontFamily: "'DM Mono', monospace", fontSize: 10, color: '#555', letterSpacing: '0.14em', marginBottom: 8 }}>
@@ -269,8 +308,26 @@ export default function Upload({ creatorId, accentColor, accessToken, onPostCrea
         />
       </div>
 
-      {/* File dropzone */}
-      {(
+      {/* YouTube URL field */}
+      {type === 'video' && videoSource === 'youtube' ? (
+        <div style={{ marginBottom: 12 }}>
+          <div style={{ fontFamily: "'DM Mono', monospace", fontSize: 10, color: '#555', letterSpacing: '0.14em', marginBottom: 8 }}>
+            YOUTUBE URL
+          </div>
+          <input
+            style={input}
+            placeholder="https://www.youtube.com/watch?v=..."
+            value={youtubeUrl}
+            onChange={e => setYoutubeUrl(e.target.value)}
+          />
+          {youtubeUrl.trim() && !extractYouTubeId(youtubeUrl.trim()) && (
+            <div style={{ fontFamily: "'DM Mono', monospace", fontSize: 10, color: '#e84545', marginTop: -6, marginBottom: 8 }}>
+              Doesn't look like a valid YouTube URL
+            </div>
+          )}
+        </div>
+      ) : (
+        /* File dropzone */
         <div {...getRootProps()} style={{
           border: `1px dashed ${isDragActive ? accentColor : '#ffffff20'}`,
           borderRadius: 10, padding: '28px', textAlign: 'center',
