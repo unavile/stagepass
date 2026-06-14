@@ -13,6 +13,285 @@ function extractYouTubeId(url) {
   return match ? match[1] : null
 }
 
+// ── Guest identity for reactions ──────────────────────────────────────────────
+function getGuestId() {
+  try {
+    let id = localStorage.getItem('cs-guest-id')
+    if (!id) {
+      id = 'guest_' + Math.random().toString(36).slice(2) + Date.now().toString(36)
+      localStorage.setItem('cs-guest-id', id)
+    }
+    return id
+  } catch { return 'guest_anon' }
+}
+
+const REACTION_EMOJIS = ['❤️', '🔥', '👏', '😂', '😮']
+
+// ── Message Creator modal — compose + view thread with a creator ───────────────
+function MessageCreatorModal({ creator, fanSession, fanProfile, onClose }) {
+  const [messages, setMessages] = useState([])
+  const [draft, setDraft] = useState('')
+  const [loading, setLoading] = useState(true)
+  const [sending, setSending] = useState(false)
+
+  const sbUrl = import.meta.env.VITE_SUPABASE_URL
+  const sbKey = import.meta.env.VITE_SUPABASE_ANON_KEY
+
+  async function loadThread() {
+    setLoading(true)
+    try {
+      const res = await fetch(
+        `${sbUrl}/rest/v1/admin_notifications?creator_id=eq.${creator.id}&fan_id=eq.${fanSession.user.id}&sender_type=in.(fan,creator)&order=created_at.asc`,
+        { headers: { apikey: sbKey, Authorization: `Bearer ${fanSession.access_token}` } }
+      )
+      const data = await res.json()
+      if (Array.isArray(data)) setMessages(data)
+    } catch (e) { console.error('loadThread error:', e) }
+    setLoading(false)
+  }
+
+  useEffect(() => { loadThread() }, [])
+
+  async function sendMessage() {
+    const text = draft.trim()
+    if (!text) return
+    setSending(true)
+    try {
+      const threadId = messages[0]?.thread_id || crypto.randomUUID()
+      const res = await fetch(`${sbUrl}/rest/v1/admin_notifications`, {
+        method: 'POST',
+        headers: {
+          apikey: sbKey,
+          Authorization: `Bearer ${fanSession.access_token}`,
+          'Content-Type': 'application/json',
+          Prefer: 'return=minimal',
+        },
+        body: JSON.stringify({
+          creator_id: creator.id,
+          fan_id: fanSession.user.id,
+          sender_type: 'fan',
+          sender_id: fanSession.user.id,
+          sender_name: fanProfile?.display_name || 'Fan',
+          thread_id: threadId,
+          message: text,
+          read: false,
+        }),
+      })
+      if (!res.ok) throw new Error(`Send failed (${res.status})`)
+      setDraft('')
+      loadThread()
+    } catch (e) {
+      console.error('sendMessage error:', e)
+      alert('Failed to send message. Please try again.')
+    }
+    setSending(false)
+  }
+
+  return (
+    <div onClick={onClose} style={{
+      position: 'fixed', inset: 0, zIndex: 600,
+      background: 'rgba(0,0,0,0.72)', backdropFilter: 'blur(8px)',
+      display: 'flex', alignItems: 'center', justifyContent: 'center', padding: 20,
+    }}>
+      <div onClick={e => e.stopPropagation()} style={{
+        width: '100%', maxWidth: 420, maxHeight: '80vh',
+        background: 'rgba(17,17,20,0.97)', border: '1px solid rgba(255,255,255,0.08)',
+        borderRadius: 16, display: 'flex', flexDirection: 'column', overflow: 'hidden',
+      }}>
+        {/* Header */}
+        <div style={{ padding: '16px 20px', borderBottom: '1px solid rgba(255,255,255,0.08)', display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
+          <div style={{ fontFamily: "'DM Serif Display', Georgia, serif", fontSize: 18, color: '#f4f0e8' }}>
+            Message {creator.profiles?.display_name}
+          </div>
+          <button onClick={onClose} style={{ background: 'none', border: 'none', color: '#8c8883', fontSize: 18, cursor: 'pointer', lineHeight: 1 }}>✕</button>
+        </div>
+
+        {/* Thread */}
+        <div style={{ flex: 1, overflowY: 'auto', padding: '16px 20px', display: 'flex', flexDirection: 'column', gap: 10, minHeight: 200 }}>
+          {loading ? (
+            <div style={{ color: '#8c8883', fontFamily: "'DM Mono', monospace", fontSize: 11, textAlign: 'center', padding: '20px 0' }}>LOADING...</div>
+          ) : messages.length === 0 ? (
+            <div style={{ color: '#8c8883', fontFamily: "'DM Mono', monospace", fontSize: 11, textAlign: 'center', padding: '20px 0', lineHeight: 1.7 }}>
+              Send a message to {creator.profiles?.display_name}.<br/>They'll see it in their Inbox and can reply here.
+            </div>
+          ) : messages.map(m => (
+            <div key={m.id} style={{
+              alignSelf: m.sender_type === 'fan' ? 'flex-end' : 'flex-start',
+              maxWidth: '80%',
+              background: m.sender_type === 'fan' ? '#c9a84c20' : 'rgba(255,255,255,0.05)',
+              border: `1px solid ${m.sender_type === 'fan' ? '#c9a84c40' : 'rgba(255,255,255,0.08)'}`,
+              borderRadius: 12, padding: '10px 14px',
+            }}>
+              <div style={{ fontSize: 13, color: '#e8e2d6', lineHeight: 1.5 }}>{m.message}</div>
+              <div style={{ fontFamily: "'DM Mono', monospace", fontSize: 9, color: '#8c8883', marginTop: 4 }}>
+                {m.sender_type === 'fan' ? 'You' : creator.profiles?.display_name} · {new Date(m.created_at).toLocaleDateString('en-US', { month: 'short', day: 'numeric' })}
+              </div>
+            </div>
+          ))}
+        </div>
+
+        {/* Composer */}
+        <div style={{ padding: '12px 16px', borderTop: '1px solid rgba(255,255,255,0.08)', display: 'flex', gap: 8 }}>
+          <textarea
+            value={draft}
+            onChange={e => setDraft(e.target.value)}
+            placeholder="Write a message..."
+            onKeyDown={e => { if (e.key === 'Enter' && !e.shiftKey) { e.preventDefault(); sendMessage() } }}
+            style={{
+              flex: 1, minHeight: 40, maxHeight: 100, resize: 'vertical',
+              background: 'rgba(9,9,11,0.6)', border: '1px solid rgba(255,255,255,0.08)',
+              borderRadius: 8, padding: '10px 12px', color: '#f4f0e8',
+              fontFamily: "'DM Mono', monospace", fontSize: 12, outline: 'none', boxSizing: 'border-box',
+            }}
+          />
+          <button
+            onClick={sendMessage}
+            disabled={sending || !draft.trim()}
+            style={{
+              background: '#c9a84c', color: '#080808', border: 'none',
+              borderRadius: 8, padding: '0 18px',
+              fontFamily: "'DM Mono', monospace", fontSize: 11, fontWeight: 700,
+              letterSpacing: '0.1em', cursor: sending ? 'not-allowed' : 'pointer',
+              opacity: sending ? 0.6 : 1,
+            }}
+          >SEND</button>
+        </div>
+      </div>
+    </div>
+  )
+}
+
+// ── Reaction bar: shows counts, lets guests/fans tap to react ──────────────────
+function ReactionBar({ post, fanSession, accentColor }) {
+  const [counts, setCounts] = useState({})
+  const [myReactions, setMyReactions] = useState(new Set())
+  const [showPicker, setShowPicker] = useState(false)
+
+  const sbUrl = import.meta.env.VITE_SUPABASE_URL
+  const sbKey = import.meta.env.VITE_SUPABASE_ANON_KEY
+  const identity = fanSession?.user?.id
+    ? { fan_id: fanSession.user.id, guest_id: null }
+    : { fan_id: null, guest_id: getGuestId() }
+
+  async function loadReactions() {
+    try {
+      const res = await fetch(
+        `${sbUrl}/rest/v1/v_post_reaction_counts?post_id=eq.${post.id}`,
+        { headers: { apikey: sbKey, Authorization: `Bearer ${fanSession?.access_token || sbKey}` } }
+      )
+      const data = await res.json()
+      if (Array.isArray(data)) {
+        const c = {}
+        data.forEach(r => { c[r.emoji] = r.count })
+        setCounts(c)
+      }
+
+      // Check which emojis *I* have reacted with
+      const mineUrl = identity.fan_id
+        ? `${sbUrl}/rest/v1/post_reactions?post_id=eq.${post.id}&fan_id=eq.${identity.fan_id}&select=emoji`
+        : `${sbUrl}/rest/v1/post_reactions?post_id=eq.${post.id}&guest_id=eq.${identity.guest_id}&select=emoji`
+      const mineRes = await fetch(mineUrl, { headers: { apikey: sbKey, Authorization: `Bearer ${fanSession?.access_token || sbKey}` } })
+      const mineData = await mineRes.json()
+      if (Array.isArray(mineData)) setMyReactions(new Set(mineData.map(r => r.emoji)))
+    } catch (e) { console.error('loadReactions error:', e) }
+  }
+
+  useEffect(() => { loadReactions() }, [post.id, fanSession?.user?.id])
+
+  async function toggleReaction(emoji) {
+    const hasReacted = myReactions.has(emoji)
+    setShowPicker(false)
+
+    // Optimistic update
+    setMyReactions(prev => {
+      const next = new Set(prev)
+      hasReacted ? next.delete(emoji) : next.add(emoji)
+      return next
+    })
+    setCounts(prev => ({ ...prev, [emoji]: (prev[emoji] || 0) + (hasReacted ? -1 : 1) }))
+
+    try {
+      if (hasReacted) {
+        const filter = identity.fan_id
+          ? `fan_id=eq.${identity.fan_id}`
+          : `guest_id=eq.${identity.guest_id}`
+        await fetch(`${sbUrl}/rest/v1/post_reactions?post_id=eq.${post.id}&emoji=eq.${encodeURIComponent(emoji)}&${filter}`, {
+          method: 'DELETE',
+          headers: { apikey: sbKey, Authorization: `Bearer ${fanSession?.access_token || sbKey}` },
+        })
+      } else {
+        await fetch(`${sbUrl}/rest/v1/post_reactions`, {
+          method: 'POST',
+          headers: {
+            apikey: sbKey,
+            Authorization: `Bearer ${fanSession?.access_token || sbKey}`,
+            'Content-Type': 'application/json',
+            Prefer: 'return=minimal',
+          },
+          body: JSON.stringify({
+            post_id: post.id,
+            fan_id: identity.fan_id,
+            guest_id: identity.guest_id,
+            emoji,
+          }),
+        })
+      }
+    } catch (e) { console.error('toggleReaction error:', e) }
+  }
+
+  const activeEmojis = Object.keys(counts).filter(e => counts[e] > 0)
+
+  return (
+    <div style={{ display: 'flex', alignItems: 'center', gap: 6, marginTop: 10, flexWrap: 'wrap', position: 'relative' }}>
+      {activeEmojis.map(emoji => (
+        <button
+          key={emoji}
+          onClick={() => toggleReaction(emoji)}
+          style={{
+            display: 'flex', alignItems: 'center', gap: 4,
+            background: myReactions.has(emoji) ? accentColor + '20' : 'rgba(255,255,255,0.04)',
+            border: myReactions.has(emoji) ? `1px solid ${accentColor}55` : '1px solid rgba(255,255,255,0.08)',
+            borderRadius: 20, padding: '4px 10px', cursor: 'pointer',
+            fontSize: 12, color: '#e8e2d6', fontFamily: "'DM Mono', monospace",
+          }}
+        >
+          <span>{emoji}</span>
+          <span style={{ fontSize: 10 }}>{counts[emoji]}</span>
+        </button>
+      ))}
+      <button
+        onClick={() => setShowPicker(s => !s)}
+        style={{
+          display: 'flex', alignItems: 'center', justifyContent: 'center',
+          width: 28, height: 28, borderRadius: '50%',
+          background: 'rgba(255,255,255,0.04)', border: '1px solid rgba(255,255,255,0.08)',
+          cursor: 'pointer', fontSize: 14, color: '#8c8883',
+        }}
+      >+</button>
+      {showPicker && (
+        <div style={{
+          position: 'absolute', bottom: '110%', left: 0, zIndex: 10,
+          display: 'flex', gap: 4, background: 'rgba(17,17,20,0.96)',
+          border: '1px solid rgba(255,255,255,0.1)', borderRadius: 12,
+          padding: '6px 8px', boxShadow: '0 8px 24px rgba(0,0,0,0.5)',
+        }}>
+          {REACTION_EMOJIS.map(emoji => (
+            <button
+              key={emoji}
+              onClick={() => toggleReaction(emoji)}
+              style={{
+                background: myReactions.has(emoji) ? accentColor + '30' : 'none',
+                border: 'none', borderRadius: 8, padding: '4px 6px',
+                cursor: 'pointer', fontSize: 18,
+              }}
+            >{emoji}</button>
+          ))}
+        </div>
+      )}
+    </div>
+  )
+}
+
 // ─── Design tokens ──────────────────────────────────────────────────────────
 const BG      = '#09090b'
 const BG2     = '#111114'
@@ -191,6 +470,7 @@ export default function FanApp({ deepHandle }) {
   const [guestJoinEvent, setGuestJoinEvent] = useState(null)
   const [showDonateModal, setShowDonateModal] = useState(false)
   const [videoPost, setVideoPost] = useState(null) // post object for video popup
+  const [showMessageModal, setShowMessageModal] = useState(false)
 
   async function logPostView(post) {
     try {
@@ -688,6 +968,18 @@ export default function FanApp({ deepHandle }) {
               💛 SUPPORT / DONATE
             </button>
           )}
+          {/* Message Creator — subscribers only */}
+          {fanSession && subscribed && (
+            <button onClick={() => setShowMessageModal(true)} style={{
+              width: '100%', background: 'transparent',
+              border: `1px solid ${BORDER}`, borderRadius: 8, padding: '11px',
+              fontFamily: "'DM Mono', monospace", fontSize: 11, fontWeight: 700,
+              letterSpacing: '0.12em', cursor: 'pointer', color: TEXT2,
+              marginTop: 8,
+            }}>
+              ✉ MESSAGE CREATOR
+            </button>
+          )}
         </div>
 
         {/* Posts */}
@@ -835,6 +1127,7 @@ export default function FanApp({ deepHandle }) {
                   )}
                 </div>
               )}
+              {canView && <ReactionBar post={post} fanSession={fanSession} accentColor={ACCENT} />}
             </div>
           )
                 })}
@@ -1573,6 +1866,10 @@ export default function FanApp({ deepHandle }) {
       )}
 
       {/* ── Video popup player ── */}
+      {showMessageModal && selected && fanSession && (
+        <MessageCreatorModal creator={selected} fanSession={fanSession} fanProfile={fanProfile} onClose={() => setShowMessageModal(false)} />
+      )}
+
       {videoPost && (
         <div
           onClick={() => setVideoPost(null)}

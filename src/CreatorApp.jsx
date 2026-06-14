@@ -77,6 +77,9 @@ export default function CreatorApp({ session, profile, onSignOut }) {
   const [confirmDelete, setConfirmDelete] = useState(null) // { type: 'post'|'event', item, label }
   const [eventFilter, setEventFilter] = useState('current')
   const [notifications, setNotifications] = useState([])
+  const [replyDrafts, setReplyDrafts] = useState({}) // { [notifId]: draftText }
+  const [replyingTo, setReplyingTo] = useState(null) // notif id currently showing reply box
+  const [sendingReply, setSendingReply] = useState(false)
   const [notifsLoading, setNotifsLoading] = useState(false)
   const [openNotif, setOpenNotif] = useState(null) // id of expanded notification
   const [eventParticipants, setEventParticipants] = useState({})       // { eventId: [...rows] }
@@ -267,6 +270,44 @@ export default function CreatorApp({ session, profile, onSignOut }) {
       console.error('handleDeleteEvent error:', e)
       alert('Failed to delete event. Please try again.')
     }
+  }
+
+  // ── Send a reply to a fan's DM ──────────────────────────────────────────────
+  async function sendReply(notif) {
+    const text = (replyDrafts[notif.id] || '').trim()
+    if (!text) return
+    setSendingReply(true)
+    const sbUrl = import.meta.env.VITE_SUPABASE_URL
+    const sbKey = import.meta.env.VITE_SUPABASE_ANON_KEY
+    try {
+      const res = await fetch(`${sbUrl}/rest/v1/admin_notifications`, {
+        method: 'POST',
+        headers: {
+          'apikey': sbKey,
+          'Authorization': `Bearer ${session.access_token}`,
+          'Content-Type': 'application/json',
+          'Prefer': 'return=minimal',
+        },
+        body: JSON.stringify({
+          creator_id: session.user.id,
+          fan_id: notif.fan_id,
+          sender_type: 'creator',
+          sender_id: session.user.id,
+          sender_name: creator.name || 'Creator',
+          thread_id: notif.thread_id || notif.id,
+          message: text,
+          read: true,
+        }),
+      })
+      if (!res.ok) throw new Error(`Reply failed (${res.status})`)
+      setReplyDrafts(prev => ({ ...prev, [notif.id]: '' }))
+      setReplyingTo(null)
+      fetchNotifications()
+    } catch (e) {
+      console.error('sendReply error:', e)
+      alert('Failed to send reply. Please try again.')
+    }
+    setSendingReply(false)
   }
 
   // Load notifications on mount, then poll every 60 seconds for new ones
@@ -963,14 +1004,21 @@ export default function CreatorApp({ session, profile, onSignOut }) {
                           border: `1px solid ${n.read ? BORDER2 : ac + '50'}`,
                           display: 'flex', alignItems: 'center', justifyContent: 'center',
                           fontSize: 14,
-                        }}>✦</div>
+                        }}>{n.sender_type === 'fan' ? '👤' : '✦'}</div>
                         <div style={{ flex: 1, minWidth: 0 }}>
                           <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', gap: 8, marginBottom: 4 }}>
                             <div style={{
                               fontSize: 11, fontFamily: "'DM Mono', monospace",
                               letterSpacing: '0.1em', color: n.read ? TEXT3 : ac,
                             }}>
-                              COVETED STAGE
+                              {n.sender_type === 'fan' ? (n.sender_name || 'Fan').toUpperCase() : 'COVETED STAGE'}
+                              {n.sender_type === 'fan' && (
+                                <span style={{
+                                  marginLeft: 8, background: 'transparent', border: `1px solid ${ac}55`,
+                                  borderRadius: 8, fontSize: 8, color: ac, fontWeight: 700,
+                                  padding: '1px 6px', letterSpacing: '0.05em',
+                                }}>DM</span>
+                              )}
                               {!n.read && (
                                 <span style={{
                                   marginLeft: 8, background: ac, borderRadius: 8,
@@ -994,9 +1042,64 @@ export default function CreatorApp({ session, profile, onSignOut }) {
                             } : {})
                           }}>{n.message}</div>
                           {openNotif === n.id && (
-                            <div style={{ marginTop: 10, fontSize: 10, color: TEXT3, fontFamily: "'DM Mono', monospace", letterSpacing: '0.08em' }}>
-                              CLICK TO COLLAPSE
-                            </div>
+                            <>
+                              <div style={{ marginTop: 10, fontSize: 10, color: TEXT3, fontFamily: "'DM Mono', monospace", letterSpacing: '0.08em' }}>
+                                CLICK TO COLLAPSE
+                              </div>
+                              {n.sender_type === 'fan' && (
+                                <div style={{ marginTop: 14 }} onClick={e => e.stopPropagation()}>
+                                  {replyingTo === n.id ? (
+                                    <div>
+                                      <textarea
+                                        value={replyDrafts[n.id] || ''}
+                                        onChange={e => setReplyDrafts(prev => ({ ...prev, [n.id]: e.target.value }))}
+                                        placeholder="Write a reply..."
+                                        style={{
+                                          width: '100%', minHeight: 70, resize: 'vertical',
+                                          background: '#0e0e10', border: `1px solid ${BORDER2}`,
+                                          borderRadius: 8, padding: '10px 12px', color: TEXT1,
+                                          fontFamily: "'DM Mono', monospace", fontSize: 12,
+                                          outline: 'none', boxSizing: 'border-box', marginBottom: 8,
+                                        }}
+                                      />
+                                      <div style={{ display: 'flex', gap: 8 }}>
+                                        <button
+                                          onClick={() => sendReply(n)}
+                                          disabled={sendingReply || !(replyDrafts[n.id] || '').trim()}
+                                          style={{
+                                            background: ac, color: '#080808', border: 'none',
+                                            borderRadius: 7, padding: '8px 16px',
+                                            fontFamily: "'DM Mono', monospace", fontSize: 10,
+                                            fontWeight: 700, letterSpacing: '0.1em',
+                                            cursor: sendingReply ? 'not-allowed' : 'pointer',
+                                            opacity: sendingReply ? 0.6 : 1,
+                                          }}
+                                        >{sendingReply ? 'SENDING...' : 'SEND REPLY'}</button>
+                                        <button
+                                          onClick={() => setReplyingTo(null)}
+                                          style={{
+                                            background: 'transparent', border: `1px solid ${BORDER2}`,
+                                            borderRadius: 7, padding: '8px 16px', color: TEXT3,
+                                            fontFamily: "'DM Mono', monospace", fontSize: 10,
+                                            cursor: 'pointer', letterSpacing: '0.1em',
+                                          }}
+                                        >CANCEL</button>
+                                      </div>
+                                    </div>
+                                  ) : (
+                                    <button
+                                      onClick={() => setReplyingTo(n.id)}
+                                      style={{
+                                        background: 'transparent', border: `1px solid ${ac}55`,
+                                        borderRadius: 7, padding: '7px 14px', color: ac,
+                                        fontFamily: "'DM Mono', monospace", fontSize: 10,
+                                        cursor: 'pointer', letterSpacing: '0.1em',
+                                      }}
+                                    >↩ REPLY</button>
+                                  )}
+                                </div>
+                              )}
+                            </>
                           )}
                         </div>
                       </div>
