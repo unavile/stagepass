@@ -52,12 +52,20 @@ exports.handler = async (event) => {
     }
 
     const linkData = await generateRes.json()
-    const actionLink = linkData.action_link || linkData.properties?.action_link
-    console.log('Action link generated:', actionLink ? 'yes' : 'no')
+    const rawActionLink = linkData.action_link || linkData.properties?.action_link
+    console.log('Action link generated:', rawActionLink ? 'yes' : 'no')
 
-    if (!actionLink) {
+    if (!rawActionLink) {
       return { statusCode: 500, headers, body: JSON.stringify({ error: 'No action_link returned from Supabase' }) }
     }
+
+    // Supabase's generate_link returns the action_link WITHOUT the redirect_to
+    // appended to the URL itself — it must be added manually so the verify
+    // endpoint knows where to send the creator after validating the token.
+    const redirectTo = 'https://covetedstage.com/reset-password'
+    const actionLink = rawActionLink.includes('?')
+      ? `${rawActionLink}&redirect_to=${encodeURIComponent(redirectTo)}`
+      : `${rawActionLink}?redirect_to=${encodeURIComponent(redirectTo)}`
 
     // ── Step 3: Send email via Resend ─────────────────────────────────────
     const emailRes = await fetch('https://api.resend.com/emails', {
