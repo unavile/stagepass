@@ -67,7 +67,7 @@ function PostTypeIcon({ type, size = 38 }) {
   if (type === 'audio') {
     return (
       <svg width={size} height={size} viewBox="0 0 100 100" xmlns="http://www.w3.org/2000/svg">
-        <rect width="100" height="100" rx={r} fill="#2f7cf2"/>
+        <rect width="100" height="100" rx={r} fill="#c9a84c"/>
         <path d="M38 38h-9a3 3 0 0 0-3 3v18a3 3 0 0 0 3 3h9l14 12V26L38 38z" fill="#fff"/>
         <path d="M63 38c4 3 6 7 6 12s-2 9-6 12" stroke="#fff" strokeWidth="5" strokeLinecap="round" fill="none"/>
         <path d="M70 31c7 5 11 12 11 19s-4 14-11 19" stroke="#fff" strokeWidth="5" strokeLinecap="round" fill="none"/>
@@ -77,21 +77,21 @@ function PostTypeIcon({ type, size = 38 }) {
   if (type === 'text') {
     return (
       <svg width={size} height={size} viewBox="0 0 100 100" xmlns="http://www.w3.org/2000/svg">
-        <rect width="100" height="100" rx={r} fill="#2f7cf2"/>
+        <rect width="100" height="100" rx={r} fill="#c9a84c"/>
         <path d="M28 18h32l12 12v52a3 3 0 0 1-3 3H28a3 3 0 0 1-3-3V21a3 3 0 0 1 3-3z" fill="#fff"/>
-        <path d="M60 18v12h12z" fill="#bcd2fb"/>
-        <rect x="33" y="46" width="34" height="5" rx="2" fill="#2f7cf2"/>
-        <rect x="33" y="57" width="34" height="5" rx="2" fill="#2f7cf2"/>
-        <rect x="33" y="68" width="22" height="5" rx="2" fill="#2f7cf2"/>
+        <path d="M60 18v12h12z" fill="#f0e4c0"/>
+        <rect x="33" y="46" width="34" height="5" rx="2" fill="#c9a84c"/>
+        <rect x="33" y="57" width="34" height="5" rx="2" fill="#c9a84c"/>
+        <rect x="33" y="68" width="22" height="5" rx="2" fill="#c9a84c"/>
       </svg>
     )
   }
   return (
     <svg width={size} height={size} viewBox="0 0 100 100" xmlns="http://www.w3.org/2000/svg">
-      <rect width="100" height="100" rx={r} fill="#2f7cf2"/>
+      <rect width="100" height="100" rx={r} fill="#c9a84c"/>
       <rect x="18" y="24" width="64" height="42" rx="6" fill="#fff"/>
       <rect x="38" y="72" width="24" height="5" rx="2.5" fill="#fff"/>
-      <path d="M43 36l16 9-16 9V36z" fill="#2f7cf2"/>
+      <path d="M43 36l16 9-16 9V36z" fill="#c9a84c"/>
     </svg>
   )
 }
