@@ -13,6 +13,42 @@ function extractYouTubeId(url) {
   return match ? match[1] : null
 }
 
+// ── Post-type icons (rounded blue tile, white glyph) ────────────────────────
+function PostTypeIcon({ type, size = 38 }) {
+  const r = size * 0.26
+  if (type === 'audio') {
+    return (
+      <svg width={size} height={size} viewBox="0 0 100 100" xmlns="http://www.w3.org/2000/svg">
+        <rect width="100" height="100" rx={r} fill="#2f7cf2"/>
+        <path d="M38 38h-9a3 3 0 0 0-3 3v18a3 3 0 0 0 3 3h9l14 12V26L38 38z" fill="#fff"/>
+        <path d="M63 38c4 3 6 7 6 12s-2 9-6 12" stroke="#fff" strokeWidth="5" strokeLinecap="round" fill="none"/>
+        <path d="M70 31c7 5 11 12 11 19s-4 14-11 19" stroke="#fff" strokeWidth="5" strokeLinecap="round" fill="none"/>
+      </svg>
+    )
+  }
+  if (type === 'text') {
+    return (
+      <svg width={size} height={size} viewBox="0 0 100 100" xmlns="http://www.w3.org/2000/svg">
+        <rect width="100" height="100" rx={r} fill="#2f7cf2"/>
+        <path d="M28 18h32l12 12v52a3 3 0 0 1-3 3H28a3 3 0 0 1-3-3V21a3 3 0 0 1 3-3z" fill="#fff"/>
+        <path d="M60 18v12h12z" fill="#bcd2fb"/>
+        <rect x="33" y="46" width="34" height="5" rx="2" fill="#2f7cf2"/>
+        <rect x="33" y="57" width="34" height="5" rx="2" fill="#2f7cf2"/>
+        <rect x="33" y="68" width="22" height="5" rx="2" fill="#2f7cf2"/>
+      </svg>
+    )
+  }
+  // default: video
+  return (
+    <svg width={size} height={size} viewBox="0 0 100 100" xmlns="http://www.w3.org/2000/svg">
+      <rect width="100" height="100" rx={r} fill="#2f7cf2"/>
+      <rect x="18" y="24" width="64" height="42" rx="6" fill="#fff"/>
+      <rect x="38" y="72" width="24" height="5" rx="2.5" fill="#fff"/>
+      <path d="M43 36l16 9-16 9V36z" fill="#2f7cf2"/>
+    </svg>
+  )
+}
+
 // ── Guest identity for reactions ──────────────────────────────────────────────
 function getGuestId() {
   try {
@@ -1001,8 +1037,8 @@ export default function FanApp({ deepHandle }) {
           return (
             <div key={post.id} style={{ ...card({ padding: '14px 16px', marginBottom: 10 }), opacity: canView ? 1 : 0.55 }}>
               <div style={{ display: 'flex', gap: 12, alignItems: 'center' }}>
-                <div style={{ width: 38, height: 38, background: BG3, borderRadius: 8, display: 'flex', alignItems: 'center', justifyContent: 'center', fontSize: 18, flexShrink: 0 }}>
-                  {post.thumbnail_emoji}
+                <div style={{ width: 38, height: 38, borderRadius: 8, overflow: 'hidden', flexShrink: 0 }}>
+                  <PostTypeIcon type={post.type} size={38} />
                 </div>
                 <div style={{ flex: 1, minWidth: 0 }}>
                   <div style={{ fontSize: 13, color: canView ? TEXT1 : TEXT3, marginBottom: 4 }}>{post.title}</div>

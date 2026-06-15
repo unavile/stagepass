@@ -56,6 +56,46 @@ function parseLocalDate(s) {
   return new Date(y, m - 1, d)
 }
 
+function extractYouTubeId(url) {
+  const match = (url || '').match(/(?:youtube\.com\/(?:watch\?v=|embed\/|shorts\/)|youtu\.be\/)([a-zA-Z0-9_-]{11})/)
+  return match ? match[1] : null
+}
+
+// ── Post-type icons (rounded blue tile, white glyph) ────────────────────────
+function PostTypeIcon({ type, size = 38 }) {
+  const r = size * 0.26
+  if (type === 'audio') {
+    return (
+      <svg width={size} height={size} viewBox="0 0 100 100" xmlns="http://www.w3.org/2000/svg">
+        <rect width="100" height="100" rx={r} fill="#2f7cf2"/>
+        <path d="M38 38h-9a3 3 0 0 0-3 3v18a3 3 0 0 0 3 3h9l14 12V26L38 38z" fill="#fff"/>
+        <path d="M63 38c4 3 6 7 6 12s-2 9-6 12" stroke="#fff" strokeWidth="5" strokeLinecap="round" fill="none"/>
+        <path d="M70 31c7 5 11 12 11 19s-4 14-11 19" stroke="#fff" strokeWidth="5" strokeLinecap="round" fill="none"/>
+      </svg>
+    )
+  }
+  if (type === 'text') {
+    return (
+      <svg width={size} height={size} viewBox="0 0 100 100" xmlns="http://www.w3.org/2000/svg">
+        <rect width="100" height="100" rx={r} fill="#2f7cf2"/>
+        <path d="M28 18h32l12 12v52a3 3 0 0 1-3 3H28a3 3 0 0 1-3-3V21a3 3 0 0 1 3-3z" fill="#fff"/>
+        <path d="M60 18v12h12z" fill="#bcd2fb"/>
+        <rect x="33" y="46" width="34" height="5" rx="2" fill="#2f7cf2"/>
+        <rect x="33" y="57" width="34" height="5" rx="2" fill="#2f7cf2"/>
+        <rect x="33" y="68" width="22" height="5" rx="2" fill="#2f7cf2"/>
+      </svg>
+    )
+  }
+  return (
+    <svg width={size} height={size} viewBox="0 0 100 100" xmlns="http://www.w3.org/2000/svg">
+      <rect width="100" height="100" rx={r} fill="#2f7cf2"/>
+      <rect x="18" y="24" width="64" height="42" rx="6" fill="#fff"/>
+      <rect x="38" y="72" width="24" height="5" rx="2.5" fill="#fff"/>
+      <path d="M43 36l16 9-16 9V36z" fill="#2f7cf2"/>
+    </svg>
+  )
+}
+
 export default function CreatorApp({ session, profile, onSignOut }) {
   const [tab, setTab] = useState('overview')
   const [showUpload, setShowUpload] = useState(false)
@@ -75,6 +115,7 @@ export default function CreatorApp({ session, profile, onSignOut }) {
   const [editPost, setEditPost] = useState(null)
   const [editEvent, setEditEvent] = useState(null)
   const [confirmDelete, setConfirmDelete] = useState(null) // { type: 'post'|'event', item, label }
+  const [previewPost, setPreviewPost] = useState(null) // post object for video/audio preview popup
   const [eventFilter, setEventFilter] = useState('current')
   const [notifications, setNotifications] = useState([])
   const [replyDrafts, setReplyDrafts] = useState({}) // { [notifId]: draftText }
@@ -555,10 +596,10 @@ export default function CreatorApp({ session, profile, onSignOut }) {
                   ...card({ padding: '12px 16px', marginBottom: 8 }),
                   display: 'flex', alignItems: 'center', gap: 14,
                 }}>
-                  <div style={{ width: 36, height: 36, background: BG3, borderRadius: 8, overflow: 'hidden', display: 'flex', alignItems: 'center', justifyContent: 'center', fontSize: 18, flexShrink: 0 }}>
+                  <div style={{ width: 36, height: 36, borderRadius: 8, overflow: 'hidden', flexShrink: 0 }}>
                     {post.thumbnail_url
                       ? <img src={post.thumbnail_url} alt={post.title} style={{ width: '100%', height: '100%', objectFit: 'cover' }} />
-                      : post.thumbnail_emoji}
+                      : <PostTypeIcon type={post.type} size={36} />}
                   </div>
                   <div style={{ flex: 1, minWidth: 0 }}>
                     <div style={{ fontSize: 13, color: TEXT1, whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' }}>{post.title}</div>
@@ -596,11 +637,34 @@ export default function CreatorApp({ session, profile, onSignOut }) {
               ) : posts.map(post => (
                 <div key={post.id} style={{ ...card({ padding: '16px', marginBottom: 10 }) }}>
                   <div style={{ display: 'flex', gap: 14, alignItems: 'flex-start' }}>
-                    <div style={{ width: 44, height: 44, background: BG3, borderRadius: 8, overflow: 'hidden', display: 'flex', alignItems: 'center', justifyContent: 'center', fontSize: 20, flexShrink: 0 }}>
+                    <button
+                      onClick={() => {
+                        if (post.type === 'text') window.open(post.file_url, '_blank')
+                        else setPreviewPost(post)
+                      }}
+                      style={{
+                        width: 44, height: 44, borderRadius: 8, overflow: 'hidden', flexShrink: 0,
+                        border: 'none', padding: 0, cursor: 'pointer', position: 'relative',
+                        background: 'none',
+                      }}
+                    >
                       {post.thumbnail_url
-                        ? <img src={post.thumbnail_url} alt={post.title} style={{ width: '100%', height: '100%', objectFit: 'cover' }} />
-                        : post.thumbnail_emoji}
-                    </div>
+                        ? <img src={post.thumbnail_url} alt={post.title} style={{ width: '100%', height: '100%', objectFit: 'cover', display: 'block' }} />
+                        : <PostTypeIcon type={post.type} size={44} />}
+                      {post.type !== 'text' && (
+                        <div style={{
+                          position: 'absolute', inset: 0,
+                          background: 'rgba(0,0,0,0.25)',
+                          display: 'flex', alignItems: 'center', justifyContent: 'center',
+                        }}>
+                          <div style={{
+                            width: 20, height: 20, borderRadius: '50%',
+                            background: ac, display: 'flex', alignItems: 'center', justifyContent: 'center',
+                            fontSize: 9,
+                          }}>▶</div>
+                        </div>
+                      )}
+                    </button>
                     <div style={{ flex: 1, minWidth: 0 }}>
                       <div style={{ fontSize: 14, color: TEXT1, marginBottom: 4 }}>{post.title}</div>
                       {post.description && <div style={{ fontSize: 12, color: TEXT3, marginBottom: 6, lineHeight: 1.5 }}>{post.description}</div>}
@@ -1161,6 +1225,73 @@ export default function CreatorApp({ session, profile, onSignOut }) {
       {showUpload && <NewPostModal creator={creator} accessToken={session.access_token} onClose={() => setShowUpload(false)} onPostCreated={refetch} />}
       {editPost && <EditPostModal post={editPost} accentColor={ac} accessToken={session.access_token} onClose={() => setEditPost(null)} onSaved={() => { setEditPost(null); nativeRefetchPosts() }} />}
       {editEvent && <EditEventModal event={editEvent} accentColor={ac} accessToken={session.access_token} onClose={() => setEditEvent(null)} onSaved={() => { setEditEvent(null); nativeRefetchEvents() }} />}
+
+      {/* ── Content preview modal (video/audio) ──────────────────────────── */}
+      {previewPost && (
+        <div
+          onClick={() => setPreviewPost(null)}
+          style={{
+            position: 'fixed', inset: 0, zIndex: 600,
+            background: 'rgba(0,0,0,0.92)', backdropFilter: 'blur(8px)',
+            display: 'flex', alignItems: 'center', justifyContent: 'center',
+            padding: 20,
+          }}
+        >
+          <div
+            onClick={e => e.stopPropagation()}
+            style={{ width: '100%', maxWidth: 780, position: 'relative' }}
+          >
+            <button
+              onClick={() => setPreviewPost(null)}
+              style={{
+                position: 'absolute', top: -40, right: 0,
+                background: 'none', border: 'none', color: TEXT2,
+                fontSize: 22, cursor: 'pointer', lineHeight: 1,
+              }}
+            >✕</button>
+            <div style={{
+              fontFamily: "'DM Serif Display', Georgia, serif",
+              fontSize: 16, color: TEXT1, marginBottom: 10,
+            }}>{previewPost.title}</div>
+
+            {previewPost.type === 'video' ? (
+              previewPost.video_source === 'youtube' ? (
+                <div style={{ position: 'relative', width: '100%', paddingBottom: '56.25%', borderRadius: 10, overflow: 'hidden', background: '#000' }}>
+                  <iframe
+                    src={`https://www.youtube.com/embed/${extractYouTubeId(previewPost.file_url)}?autoplay=1`}
+                    title={previewPost.title}
+                    frameBorder="0"
+                    allow="accelerometer; autoplay; clipboard-write; encrypted-media; gyroscope; picture-in-picture"
+                    allowFullScreen
+                    style={{ position: 'absolute', top: 0, left: 0, width: '100%', height: '100%' }}
+                  />
+                </div>
+              ) : (
+                <video
+                  controls
+                  autoPlay
+                  controlsList="nodownload"
+                  onContextMenu={e => e.preventDefault()}
+                  src={previewPost.file_url}
+                  style={{ width: '100%', borderRadius: 10, maxHeight: '70vh', background: '#000' }}
+                />
+              )
+            ) : previewPost.type === 'audio' ? (
+              <div style={{ ...card({ padding: '24px' }), textAlign: 'center' }}>
+                <div style={{ fontSize: 32, marginBottom: 12 }}>🎵</div>
+                <audio controls autoPlay src={previewPost.file_url} style={{ width: '100%' }} />
+              </div>
+            ) : null}
+
+            {previewPost.description && (
+              <div style={{
+                fontFamily: "'DM Mono', monospace", fontSize: 11,
+                color: TEXT3, marginTop: 10, lineHeight: 1.7,
+              }}>{previewPost.description}</div>
+            )}
+          </div>
+        </div>
+      )}
 
       {/* ── Confirmation delete dialog ─────────────────────────────────── */}
       {confirmDelete && (
