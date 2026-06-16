@@ -13,6 +13,7 @@ export default function NewEventModal({ creatorId, accentColor, onClose, onEvent
   const [startTime, setStartTime] = useState('18:00')
   const [duration, setDuration] = useState('60')
   const [eventMode, setEventMode] = useState('broadcast') // 'broadcast' | 'class'
+  const [alwaysOn, setAlwaysOn] = useState(false) // Class Mode only: no fixed date/time
   const [loading, setLoading] = useState(false)
   const [error, setError] = useState(null)
 
@@ -28,7 +29,7 @@ export default function NewEventModal({ creatorId, accentColor, onClose, onEvent
 
   async function handleSubmit() {
     if (!name.trim()) { setError('Please add an event name.'); return }
-    if (!eventDate) { setError('Please set a date.'); return }
+    if (!alwaysOn && !eventDate) { setError('Please set a date.'); return }
     if (accessType === 'ticketed' && (!ticketPrice || isNaN(parseFloat(ticketPrice)) || parseFloat(ticketPrice) <= 0)) {
       setError('Please enter a valid ticket price.'); return
     }
@@ -71,7 +72,7 @@ export default function NewEventModal({ creatorId, accentColor, onClose, onEvent
           name: name.trim(),
           description: description.trim(),
           venue: venue.trim() || null,
-          event_date: eventDate,
+          event_date: alwaysOn ? '2099-12-31' : eventDate,
           event_type: eventType,
           stream_url: null,
           capacity: capacity ? parseInt(capacity) : null,
@@ -80,8 +81,9 @@ export default function NewEventModal({ creatorId, accentColor, onClose, onEvent
           ticket_price: accessType === 'ticketed' ? parseFloat(ticketPrice) : null,
           daily_room_name: dailyRoomName,
           duration_minutes: parseInt(duration) || 60,
-          start_time: startTime,
+          start_time: alwaysOn ? null : startTime,
           event_mode: eventType === 'virtual' ? eventMode : 'broadcast',
+          always_on: alwaysOn,
         }),
       })
       if (!insertRes.ok) {
@@ -205,6 +207,41 @@ export default function NewEventModal({ creatorId, accentColor, onClose, onEvent
           </div>
         )}
 
+        {/* Always On toggle — only for Class mode virtual events */}
+        {eventType === 'virtual' && eventMode === 'class' && (
+          <div
+            onClick={() => setAlwaysOn(a => !a)}
+            style={{
+              display: 'flex', alignItems: 'center', justifyContent: 'space-between',
+              background: alwaysOn ? ac + '12' : '#111',
+              border: alwaysOn ? `1px solid ${ac}55` : '1px solid #ffffff10',
+              borderRadius: 9, padding: '12px 14px', cursor: 'pointer',
+              marginBottom: 16, transition: 'all 0.15s',
+            }}
+          >
+            <div>
+              <div style={{ fontSize: 13, color: alwaysOn ? '#f0ebe0' : '#888', fontWeight: alwaysOn ? 500 : 400 }}>
+                🔁 Always On
+              </div>
+              <div style={{ fontFamily: "'DM Mono', monospace", fontSize: 9, color: '#444', marginTop: 3, lineHeight: 1.5 }}>
+                No fixed date or time — fans can join any time
+              </div>
+            </div>
+            <div style={{
+              width: 36, height: 20, borderRadius: 999, flexShrink: 0,
+              background: alwaysOn ? ac : '#2a2a2a',
+              position: 'relative', transition: 'background 0.2s',
+            }}>
+              <div style={{
+                position: 'absolute', top: 2,
+                left: alwaysOn ? 18 : 2,
+                width: 16, height: 16, borderRadius: '50%',
+                background: '#fff', transition: 'left 0.2s',
+              }} />
+            </div>
+          </div>
+        )}
+
         {/* Name */}
         <input style={input} placeholder="Event name" value={name} onChange={e => setName(e.target.value)} />
 
@@ -216,12 +253,16 @@ export default function NewEventModal({ creatorId, accentColor, onClose, onEvent
           <input style={input} placeholder="Venue name and address" value={venue} onChange={e => setVenue(e.target.value)} />
         )}
 
-        {/* Date */}
-        <div style={{ fontFamily: "'DM Mono', monospace", fontSize: 10, color: '#555', letterSpacing: '0.14em', marginBottom: 8 }}>SELECT DATE</div>
-        <input style={input} type="date" value={eventDate} onChange={e => setEventDate(e.target.value)} />
+        {/* Date — hidden for always-on events */}
+        {!alwaysOn && (
+          <>
+            <div style={{ fontFamily: "'DM Mono', monospace", fontSize: 10, color: '#555', letterSpacing: '0.14em', marginBottom: 8 }}>SELECT DATE</div>
+            <input style={input} type="date" value={eventDate} onChange={e => setEventDate(e.target.value)} />
+          </>
+        )}
 
-        {/* Time + duration — virtual only */}
-        {eventType === 'virtual' && (
+        {/* Time + duration — virtual only, hidden for always-on */}
+        {eventType === 'virtual' && !alwaysOn && (
           <div style={{ display: 'flex', gap: 10, marginBottom: 12 }}>
             <div style={{ flex: 1 }}>
               <div style={{ fontFamily: "'DM Mono', monospace", fontSize: 10, color: '#555', letterSpacing: '0.12em', marginBottom: 6 }}>START TIME</div>

@@ -147,8 +147,8 @@ export default function CreatorApp({ session, profile, onSignOut }) {
   }
 
   // Events move to PAST only after end time + 2hr buffer
-  const currentEvents = (events || []).filter(e => { const end = eventEndDateTime(e); return end ? now <= end : false })
-  const pastEvents    = (events || []).filter(e => { const end = eventEndDateTime(e); return end ? now > end  : true  })
+  const currentEvents = (events || []).filter(e => { if (e.always_on) return true; const end = eventEndDateTime(e); return end ? now <= end : false })
+  const pastEvents    = (events || []).filter(e => { if (e.always_on) return false; const end = eventEndDateTime(e); return end ? now > end : true })
   const filteredEvents = eventFilter === 'current' ? currentEvents : pastEvents
 
   useEffect(() => {
@@ -787,7 +787,7 @@ export default function CreatorApp({ session, profile, onSignOut }) {
                         </div>
                         <div style={{ display: 'flex', gap: 8, alignItems: 'center', flexShrink: 0 }}>
                           <span style={{ background: ac + '18', color: ac, border: `1px solid ${ac}40`, borderRadius: 5, fontSize: 9, fontWeight: 700, padding: '3px 9px', letterSpacing: '0.14em', textTransform: 'uppercase', fontFamily: "'DM Mono', monospace" }}>
-                            {event.event_type === 'virtual' ? (event.event_mode === 'class' ? '🎓 CLASS' : '📡 BROADCAST') : '📍 IN PERSON'}
+                            {event.event_type === 'virtual' ? (event.always_on ? '🔁 ALWAYS ON' : event.event_mode === 'class' ? '🎓 CLASS' : '📡 BROADCAST') : '📍 IN PERSON'}
                           </span>
                           <button onClick={() => setEditEvent(event)} style={{
                             background: 'transparent', border: `1px solid ${BORDER}`,
@@ -830,7 +830,7 @@ export default function CreatorApp({ session, profile, onSignOut }) {
                         </div>
                       )}
                       {/* ── Live session participants (past events only) ── */}
-                      {event.daily_room_name && (() => { const end = eventEndDateTime(event); return end ? now > end : true })() && (
+                      {event.daily_room_name && !event.always_on && (() => { const end = eventEndDateTime(event); return end ? now > end : true })() && (
                         <div style={{ marginTop: 14, paddingTop: 14, borderTop: `1px solid ${BORDER2}` }}>
                           <button
                             onClick={() => fetchParticipants(event.id)}
@@ -945,7 +945,7 @@ export default function CreatorApp({ session, profile, onSignOut }) {
                         </div>
                       )}
 
-                      {event.daily_room_name && (() => { const end = eventEndDateTime(event); return end ? now <= end : false })() && (
+                      {event.daily_room_name && (event.always_on || (() => { const end = eventEndDateTime(event); return end ? now <= end : false })()) && (
                         <button onClick={() => setLiveEvent(event)} style={{
                           marginTop: 14, width: '100%',
                           background: ac, color: '#080808',

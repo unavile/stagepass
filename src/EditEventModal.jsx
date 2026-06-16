@@ -12,6 +12,7 @@ export default function EditEventModal({ event, accentColor, accessToken, onClos
   const [accessType, setAccessType] = useState(event.access_type || (event.is_free ? 'free' : 'subscribers'))
   const [ticketPrice, setTicketPrice] = useState(event.ticket_price || '')
   const [eventMode, setEventMode] = useState(event.event_mode || 'broadcast')
+  const [alwaysOn, setAlwaysOn] = useState(event.always_on || false)
   const [loading, setLoading] = useState(false)
   const [error, setError] = useState(null)
 
@@ -63,7 +64,8 @@ export default function EditEventModal({ event, accentColor, accessToken, onClos
           access_type: accessType,
           is_free: accessType === 'free',
           ticket_price: accessType === 'ticketed' ? parseFloat(ticketPrice) : null,
-          ...(isVirtual ? { event_mode: eventMode } : {}),
+          ...(isVirtual ? { event_mode: eventMode, always_on: alwaysOn } : {}),
+          ...(alwaysOn ? { event_date: '2099-12-31', start_time: null } : {}),
         }),
       })
       if (!res.ok) {
@@ -140,6 +142,42 @@ export default function EditEventModal({ event, accentColor, accessToken, onClos
               ))}
             </div>
           </div>
+
+          {/* Always On toggle — Class mode only */}
+          {eventMode === 'class' && (
+            <div
+              onClick={() => setAlwaysOn(a => !a)}
+              style={{
+                display: 'flex', alignItems: 'center', justifyContent: 'space-between',
+                background: alwaysOn ? ac + '12' : '#111',
+                border: alwaysOn ? `1px solid ${ac}55` : '1px solid #ffffff10',
+                borderRadius: 9, padding: '12px 14px', cursor: 'pointer',
+                marginTop: 8, transition: 'all 0.15s',
+              }}
+            >
+              <div>
+                <div style={{ fontSize: 13, color: alwaysOn ? '#f0ebe0' : '#888', fontWeight: alwaysOn ? 500 : 400 }}>
+                  🔁 Always On
+                </div>
+                <div style={{ fontFamily: "'DM Mono', monospace", fontSize: 9, color: '#444', marginTop: 3, lineHeight: 1.5 }}>
+                  No fixed date or time — fans can join any time
+                </div>
+              </div>
+              <div style={{
+                width: 36, height: 20, borderRadius: 999, flexShrink: 0,
+                background: alwaysOn ? ac : '#2a2a2a',
+                position: 'relative', transition: 'background 0.2s',
+              }}>
+                <div style={{
+                  position: 'absolute', top: 2,
+                  left: alwaysOn ? 18 : 2,
+                  width: 16, height: 16, borderRadius: '50%',
+                  background: '#fff', transition: 'left 0.2s',
+                }} />
+              </div>
+            </div>
+          )}
+        </div>
         )}
 
         {/* Name */}
@@ -158,12 +196,16 @@ export default function EditEventModal({ event, accentColor, accessToken, onClos
           </>
         )}
 
-        {/* Date */}
-        <div style={{ fontFamily: "'DM Mono', monospace", fontSize: 10, color: '#555', letterSpacing: '0.14em', marginBottom: 8 }}>SELECT DATE</div>
-        <input style={input} type="date" value={eventDate} onChange={e => setEventDate(e.target.value)} />
+        {/* Date — hidden for always-on events */}
+        {!alwaysOn && (
+          <>
+            <div style={{ fontFamily: "'DM Mono', monospace", fontSize: 10, color: '#555', letterSpacing: '0.14em', marginBottom: 8 }}>SELECT DATE</div>
+            <input style={input} type="date" value={eventDate} onChange={e => setEventDate(e.target.value)} />
+          </>
+        )}
 
-        {/* Time + duration — virtual only */}
-        {isVirtual && (
+        {/* Time + duration — virtual only, hidden for always-on */}
+        {isVirtual && !alwaysOn && (
           <div style={{ display: 'flex', gap: 10, marginBottom: 12 }}>
             <div style={{ flex: 1 }}>
               <div style={{ fontFamily: "'DM Mono', monospace", fontSize: 10, color: '#555', letterSpacing: '0.12em', marginBottom: 6 }}>START TIME</div>

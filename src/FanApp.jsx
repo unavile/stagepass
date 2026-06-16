@@ -400,8 +400,10 @@ function minutesUntilStart(event) {
 }
 
 // Event is "active" (fan can join) if end time hasn't passed
-// or starts within the next 30 minutes
+// or starts within the next 30 minutes.
+// Always-on events are permanently active.
 function isEventActive(event) {
+  if (event.always_on) return true
   const mins = minutesUntilStart(event)
   if (mins === null) return false
   if (mins > 30) return false  // too early
@@ -413,13 +415,24 @@ function isEventActive(event) {
 function groupByMonthYear(items, getDate) {
   const groups = {}
   const order = []
+  // Always-on events get their own permanent group at the top
+  const ALWAYS_ON_KEY = '🔁 Always Available'
   items.forEach(item => {
-    const d = getDate(item)
-    const key = d ? d.toLocaleDateString('en-US', { month: 'long', year: 'numeric' }) : 'Other'
+    const isAlwaysOn = item.always_on || item.events?.always_on
+    const key = isAlwaysOn
+      ? ALWAYS_ON_KEY
+      : (() => {
+          const d = getDate(item)
+          return d ? d.toLocaleDateString('en-US', { month: 'long', year: 'numeric' }) : 'Other'
+        })()
     if (!groups[key]) { groups[key] = []; order.push(key) }
     groups[key].push(item)
   })
-  return order.map(key => ({ key, items: groups[key] }))
+  // Ensure Always Available appears first
+  const sorted = order.includes(ALWAYS_ON_KEY)
+    ? [ALWAYS_ON_KEY, ...order.filter(k => k !== ALWAYS_ON_KEY)]
+    : order
+  return sorted.map(key => ({ key, items: groups[key] }))
 }
 const ITEMS_PER_GROUP = 5
 
@@ -1200,6 +1213,7 @@ export default function FanApp({ deepHandle }) {
             {(() => {
               const now = new Date()
               const filtered = creatorEvents.filter(e => {
+                if (e.always_on) return creatorEventFilter === 'current' // always in current
                 const end = eventEndDateTime(e)
                 return creatorEventFilter === 'current' ? (end ? now <= end : false) : (end ? now > end : true)
               })
@@ -1230,7 +1244,7 @@ export default function FanApp({ deepHandle }) {
                     </div>
                   </div>
                   <span style={{ background: ACCENT + '18', color: ACCENT, border: `1px solid ${ACCENT}40`, borderRadius: 5, fontSize: 9, fontWeight: 700, padding: '3px 8px', letterSpacing: '0.12em', fontFamily: "'DM Mono', monospace", flexShrink: 0 }}>
-                    {event.event_type === 'virtual' ? (event.event_mode === 'class' ? '🎓 CLASS' : '📡 BROADCAST') : '📍 IN PERSON'}
+                    {event.event_type === 'virtual' ? (event.always_on ? '🔁 ALWAYS ON' : event.event_mode === 'class' ? '🎓 CLASS' : '📡 BROADCAST') : '📍 IN PERSON'}
                   </span>
                 </div>
                 {event.description && <div style={{ fontSize: 12, color: TEXT2, lineHeight: 1.55, marginBottom: 10 }}>{event.description}</div>}
@@ -1571,6 +1585,7 @@ export default function FanApp({ deepHandle }) {
                     const now = new Date()
                     const filteredRsvps = fanEvents.filter(r => {
                       if (!r.events?.event_date) return false
+                      if (r.events?.always_on) return fanEventFilter === 'current'
                       const end = eventEndDateTime(r.events)
                       return end
                         ? (fanEventFilter === 'current' ? now <= end : now > end)
@@ -1606,7 +1621,7 @@ export default function FanApp({ deepHandle }) {
                           <div style={{ display: 'flex', flexDirection: 'column', gap: 5, alignItems: 'flex-end', flexShrink: 0 }}>
                             {active && <span style={{ background: '#e8454518', color: '#e84545', border: '1px solid #e8454540', borderRadius: 5, fontSize: 9, fontWeight: 700, padding: '3px 8px', letterSpacing: '0.12em', fontFamily: "'DM Mono', monospace" }}>● LIVE NOW</span>}
                             <span style={{ background: ACCENT + '18', color: ACCENT, border: `1px solid ${ACCENT}40`, borderRadius: 5, fontSize: 9, fontWeight: 700, padding: '3px 8px', letterSpacing: '0.12em', fontFamily: "'DM Mono', monospace" }}>
-                              {event.event_type === 'virtual' ? (event.event_mode === 'class' ? '🎓 CLASS' : '📡 BROADCAST') : '📍 IN PERSON'}
+                              {event.event_type === 'virtual' ? (event.always_on ? '🔁 ALWAYS ON' : event.event_mode === 'class' ? '🎓 CLASS' : '📡 BROADCAST') : '📍 IN PERSON'}
                             </span>
                             <span style={{ background: '#6dbf8a18', color: '#6dbf8a', border: '1px solid #6dbf8a40', borderRadius: 5, fontSize: 9, fontWeight: 700, padding: '3px 8px', letterSpacing: '0.12em', fontFamily: "'DM Mono', monospace" }}>✓ RSVP'D</span>
                           </div>
@@ -1619,7 +1634,7 @@ export default function FanApp({ deepHandle }) {
                         <div style={{ display: 'flex', gap: 8, flexWrap: 'wrap', alignItems: 'center' }}>
                           {event.daily_room_name && (() => {
                             const mins = minutesUntilStart(rsvp.events)
-                            const tooEarly = mins !== null && mins > 30
+                            const tooEarly = !rsvp.events?.always_on && mins !== null && mins > 30
                             if (tooEarly) {
                               // Show countdown — don't allow entry yet
                               return (
@@ -1947,31 +1962,14 @@ export default function FanApp({ deepHandle }) {
                 />
               </div>
             ) : (
-              <div style={{ position: 'relative', borderRadius: 10, overflow: 'hidden', background: '#000' }}>
-                <video
-                  controls
-                  autoPlay
-                  controlsList="nodownload"
-                  onContextMenu={e => e.preventDefault()}
-                  src={videoPost.file_url}
-                  style={{ width: '100%', maxHeight: '70vh', display: 'block' }}
-                />
-                {/* Watermark overlay — deters screen recording by showing viewer identity */}
-                <div style={{
-                  position: 'absolute', inset: 0, pointerEvents: 'none',
-                  display: 'flex', alignItems: 'flex-end', justifyContent: 'flex-end',
-                  padding: '0 12px 8px 0',
-                }}>
-                  <div style={{
-                    fontFamily: "'DM Mono', monospace",
-                    fontSize: 10, color: 'rgba(255,255,255,0.18)',
-                    letterSpacing: '0.06em', userSelect: 'none',
-                    textShadow: '0 1px 3px rgba(0,0,0,0.5)',
-                  }}>
-                    {selected.profiles?.display_name || 'Coveted Stage'}
-                  </div>
-                </div>
-              </div>
+              <video
+                controls
+                autoPlay
+                controlsList="nodownload"
+                onContextMenu={e => e.preventDefault()}
+                src={videoPost.file_url}
+                style={{ width: '100%', borderRadius: 10, maxHeight: '70vh', background: '#000' }}
+              />
             )}
             {videoPost.description && (
               <div style={{
