@@ -11,6 +11,7 @@ export default function EditEventModal({ event, accentColor, accessToken, onClos
   const [capacity, setCapacity] = useState(event.capacity || '')
   const [accessType, setAccessType] = useState(event.access_type || (event.is_free ? 'free' : 'subscribers'))
   const [ticketPrice, setTicketPrice] = useState(event.ticket_price || '')
+  const [eventMode, setEventMode] = useState(event.event_mode || 'broadcast')
   const [loading, setLoading] = useState(false)
   const [error, setError] = useState(null)
 
@@ -62,6 +63,7 @@ export default function EditEventModal({ event, accentColor, accessToken, onClos
           access_type: accessType,
           is_free: accessType === 'free',
           ticket_price: accessType === 'ticketed' ? parseFloat(ticketPrice) : null,
+          ...(isVirtual ? { event_mode: eventMode } : {}),
         }),
       })
       if (!res.ok) {
@@ -98,6 +100,47 @@ export default function EditEventModal({ event, accentColor, accessToken, onClos
           {isVirtual ? '💻 VIRTUAL EVENT' : '📍 IN-PERSON EVENT'}
           {event.daily_room_name && <span style={{ marginLeft: 8, color: ac }}>· Live room active</span>}
         </div>
+
+        {/* Streaming mode — virtual only */}
+        {isVirtual && (
+          <div style={{ marginBottom: 16 }}>
+            <div style={{ fontFamily: "'DM Mono', monospace", fontSize: 10, color: '#555', letterSpacing: '0.14em', marginBottom: 8 }}>
+              STREAMING MODE
+            </div>
+            <div style={{ display: 'flex', gap: 8 }}>
+              {[
+                { id: 'broadcast', icon: '📡', label: 'Broadcast', sub: 'Fans watch only — your camera is pinned' },
+                { id: 'class',     icon: '🎓', label: 'Class',     sub: 'Interactive — fans can share camera/mic' },
+              ].map(m => (
+                <div
+                  key={m.id}
+                  onClick={() => setEventMode(m.id)}
+                  style={{
+                    flex: 1, display: 'flex', flexDirection: 'column', gap: 4,
+                    background: eventMode === m.id ? ac + '12' : '#111',
+                    border: eventMode === m.id ? `1px solid ${ac}55` : '1px solid #ffffff10',
+                    borderRadius: 9, padding: '12px 14px', cursor: 'pointer',
+                    transition: 'all 0.15s',
+                  }}
+                >
+                  <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
+                    <div style={{
+                      width: 16, height: 16, borderRadius: '50%', flexShrink: 0,
+                      background: eventMode === m.id ? ac : '#2a2a2a',
+                      border: `2px solid ${eventMode === m.id ? ac : '#444'}`,
+                      display: 'flex', alignItems: 'center', justifyContent: 'center',
+                    }}>
+                      {eventMode === m.id && <div style={{ width: 6, height: 6, borderRadius: '50%', background: '#080808' }} />}
+                    </div>
+                    <span style={{ fontSize: 14 }}>{m.icon}</span>
+                    <span style={{ fontSize: 12, color: eventMode === m.id ? '#f0ebe0' : '#888', fontWeight: eventMode === m.id ? 500 : 400 }}>{m.label}</span>
+                  </div>
+                  <div style={{ fontFamily: "'DM Mono', monospace", fontSize: 9, color: '#444', paddingLeft: 24, lineHeight: 1.5 }}>{m.sub}</div>
+                </div>
+              ))}
+            </div>
+          </div>
+        )}
 
         {/* Name */}
         <div style={{ fontFamily: "'DM Mono', monospace", fontSize: 10, color: '#555', letterSpacing: '0.14em', marginBottom: 8 }}>EVENT NAME</div>

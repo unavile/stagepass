@@ -14,6 +14,7 @@ export default function LiveRoom({ event, profile, isCreator, onLeave, accessTok
   const eventRef = useRef(event)
   const profileRef = useRef(profile)
   const isCreatorRef = useRef(isCreator)
+  const isClassMode = event?.event_mode === 'class'
   const sessionRowIdRef = useRef(null)
   const isMountActiveRef = useRef(false)
 
@@ -153,9 +154,12 @@ export default function LiveRoom({ event, profile, isCreator, onLeave, accessTok
         showLeaveButton: false,
         showFullscreenButton: true,
         showUserNameChangeUI: false,
-        showLocalVideo: isCreatorRef.current,
-        activeSpeakerMode: true,
-        showParticipantsBar: isCreatorRef.current,
+        // Class mode: show local video and participants bar for everyone;
+        // use grid layout (activeSpeakerMode: false) so all participants visible.
+        // Broadcast mode: only creator sees local video / participants bar.
+        showLocalVideo: isClassMode || isCreatorRef.current,
+        activeSpeakerMode: !isClassMode,
+        showParticipantsBar: isClassMode || isCreatorRef.current,
         theme: {
           colors: {
             accent: '#c9a84c',
@@ -209,18 +213,16 @@ export default function LiveRoom({ event, profile, isCreator, onLeave, accessTok
       await frame.join({
         url: `https://${import.meta.env.VITE_DAILY_DOMAIN}/${eventRef.current.daily_room_name}`,
         token,
-        startVideoOff: !isCreatorRef.current,
-        startAudioOff: !isCreatorRef.current,
+        // In class mode fans start with video/audio available (they choose to turn on).
+        // In broadcast mode fans are always muted and video-off.
+        startVideoOff: isClassMode ? false : !isCreatorRef.current,
+        startAudioOff: isClassMode ? false : !isCreatorRef.current,
         // Request higher quality for the creator's camera stream.
         // dailyConfig is passed to Daily's internal call object at join time.
         // sendSettings controls the video quality the creator publishes.
-        ...(isCreatorRef.current ? {
+        ...((isCreatorRef.current || isClassMode) ? {
           dailyConfig: {
-            // HD720p30: 720p at 30fps — best supported profile in Daily Prebuilt.
-            // 15fps (previous setting) is noticeably choppy for performance/dance content.
-            // 30fps gives smooth motion while remaining within Daily Prebuilt's constraints.
-            // Note: HD1080p requires a Daily plan that supports it and is not
-            // configurable via Prebuilt's dailyConfig — 720p30 is the practical ceiling.
+            // HD720p30 for creators; class participants also get quality hint
             camVideoProfile: 'HD720p30',
           }
         } : {})

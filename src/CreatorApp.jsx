@@ -787,7 +787,7 @@ export default function CreatorApp({ session, profile, onSignOut }) {
                         </div>
                         <div style={{ display: 'flex', gap: 8, alignItems: 'center', flexShrink: 0 }}>
                           <span style={{ background: ac + '18', color: ac, border: `1px solid ${ac}40`, borderRadius: 5, fontSize: 9, fontWeight: 700, padding: '3px 9px', letterSpacing: '0.14em', textTransform: 'uppercase', fontFamily: "'DM Mono', monospace" }}>
-                            {event.event_type === 'virtual' ? '💻 VIRTUAL' : '📍 IN PERSON'}
+                            {event.event_type === 'virtual' ? (event.event_mode === 'class' ? '🎓 CLASS' : '📡 BROADCAST') : '📍 IN PERSON'}
                           </span>
                           <button onClick={() => setEditEvent(event)} style={{
                             background: 'transparent', border: `1px solid ${BORDER}`,
@@ -1267,14 +1267,27 @@ export default function CreatorApp({ session, profile, onSignOut }) {
                   />
                 </div>
               ) : (
+                <div style={{ position: 'relative', borderRadius: 10, overflow: 'hidden', background: '#000' }}>
                 <video
                   controls
                   autoPlay
                   controlsList="nodownload"
                   onContextMenu={e => e.preventDefault()}
                   src={previewPost.file_url}
-                  style={{ width: '100%', borderRadius: 10, maxHeight: '70vh', background: '#000' }}
+                  style={{ width: '100%', maxHeight: '70vh', display: 'block' }}
                 />
+                <div style={{
+                  position: 'absolute', inset: 0, pointerEvents: 'none',
+                  display: 'flex', alignItems: 'flex-end', justifyContent: 'flex-end',
+                  padding: '0 12px 8px 0',
+                }}>
+                  <div style={{
+                    fontFamily: "'DM Mono', monospace", fontSize: 10,
+                    color: 'rgba(255,255,255,0.18)', letterSpacing: '0.06em',
+                    userSelect: 'none', textShadow: '0 1px 3px rgba(0,0,0,0.5)',
+                  }}>coveted stage</div>
+                </div>
+              </div>
               )
             ) : previewPost.type === 'audio' ? (
               <div style={{ ...card({ padding: '24px' }), textAlign: 'center' }}>

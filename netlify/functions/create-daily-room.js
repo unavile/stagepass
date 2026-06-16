@@ -38,7 +38,7 @@ exports.handler = async (event) => {
   }
 
   try {
-    const { eventId, eventName, startTime, durationMinutes } = JSON.parse(event.body)
+    const { eventId, eventName, startTime, durationMinutes, eventMode } = JSON.parse(event.body)
 
     console.log('Creating Daily room for event:', eventName)
     console.log('DAILY_API_KEY exists:', !!process.env.DAILY_API_KEY)
@@ -52,7 +52,9 @@ exports.handler = async (event) => {
         enable_chat: true,
         enable_screenshare: true,
         exp: expiry,
-        owner_only_broadcast: true,
+        // Broadcast mode: fans are view-only (current default).
+        // Class mode: interactive — all participants can use camera/mic.
+        owner_only_broadcast: eventMode !== 'class',
         // Do NOT set start_video_off or start_audio_off at room level —
         // these override the creator's token and prevent video being published.
         // Per-participant AV state is controlled via meeting tokens instead.

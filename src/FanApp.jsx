@@ -1230,7 +1230,7 @@ export default function FanApp({ deepHandle }) {
                     </div>
                   </div>
                   <span style={{ background: ACCENT + '18', color: ACCENT, border: `1px solid ${ACCENT}40`, borderRadius: 5, fontSize: 9, fontWeight: 700, padding: '3px 8px', letterSpacing: '0.12em', fontFamily: "'DM Mono', monospace", flexShrink: 0 }}>
-                    {event.event_type === 'virtual' ? '💻 VIRTUAL' : '📍 IN PERSON'}
+                    {event.event_type === 'virtual' ? (event.event_mode === 'class' ? '🎓 CLASS' : '📡 BROADCAST') : '📍 IN PERSON'}
                   </span>
                 </div>
                 {event.description && <div style={{ fontSize: 12, color: TEXT2, lineHeight: 1.55, marginBottom: 10 }}>{event.description}</div>}
@@ -1606,7 +1606,7 @@ export default function FanApp({ deepHandle }) {
                           <div style={{ display: 'flex', flexDirection: 'column', gap: 5, alignItems: 'flex-end', flexShrink: 0 }}>
                             {active && <span style={{ background: '#e8454518', color: '#e84545', border: '1px solid #e8454540', borderRadius: 5, fontSize: 9, fontWeight: 700, padding: '3px 8px', letterSpacing: '0.12em', fontFamily: "'DM Mono', monospace" }}>● LIVE NOW</span>}
                             <span style={{ background: ACCENT + '18', color: ACCENT, border: `1px solid ${ACCENT}40`, borderRadius: 5, fontSize: 9, fontWeight: 700, padding: '3px 8px', letterSpacing: '0.12em', fontFamily: "'DM Mono', monospace" }}>
-                              {event.event_type === 'virtual' ? '💻 VIRTUAL' : '📍 IN PERSON'}
+                              {event.event_type === 'virtual' ? (event.event_mode === 'class' ? '🎓 CLASS' : '📡 BROADCAST') : '📍 IN PERSON'}
                             </span>
                             <span style={{ background: '#6dbf8a18', color: '#6dbf8a', border: '1px solid #6dbf8a40', borderRadius: 5, fontSize: 9, fontWeight: 700, padding: '3px 8px', letterSpacing: '0.12em', fontFamily: "'DM Mono', monospace" }}>✓ RSVP'D</span>
                           </div>
@@ -1947,14 +1947,31 @@ export default function FanApp({ deepHandle }) {
                 />
               </div>
             ) : (
-              <video
-                controls
-                autoPlay
-                controlsList="nodownload"
-                onContextMenu={e => e.preventDefault()}
-                src={videoPost.file_url}
-                style={{ width: '100%', borderRadius: 10, maxHeight: '70vh', background: '#000' }}
-              />
+              <div style={{ position: 'relative', borderRadius: 10, overflow: 'hidden', background: '#000' }}>
+                <video
+                  controls
+                  autoPlay
+                  controlsList="nodownload"
+                  onContextMenu={e => e.preventDefault()}
+                  src={videoPost.file_url}
+                  style={{ width: '100%', maxHeight: '70vh', display: 'block' }}
+                />
+                {/* Watermark overlay — deters screen recording by showing viewer identity */}
+                <div style={{
+                  position: 'absolute', inset: 0, pointerEvents: 'none',
+                  display: 'flex', alignItems: 'flex-end', justifyContent: 'flex-end',
+                  padding: '0 12px 8px 0',
+                }}>
+                  <div style={{
+                    fontFamily: "'DM Mono', monospace",
+                    fontSize: 10, color: 'rgba(255,255,255,0.18)',
+                    letterSpacing: '0.06em', userSelect: 'none',
+                    textShadow: '0 1px 3px rgba(0,0,0,0.5)',
+                  }}>
+                    {fanProfile?.display_name || guestName || 'coveted stage'}
+                  </div>
+                </div>
+              </div>
             )}
             {videoPost.description && (
               <div style={{

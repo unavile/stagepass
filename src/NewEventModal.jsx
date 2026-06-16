@@ -12,6 +12,7 @@ export default function NewEventModal({ creatorId, accentColor, onClose, onEvent
   const [ticketPrice, setTicketPrice] = useState('')
   const [startTime, setStartTime] = useState('18:00')
   const [duration, setDuration] = useState('60')
+  const [eventMode, setEventMode] = useState('broadcast') // 'broadcast' | 'class'
   const [loading, setLoading] = useState(false)
   const [error, setError] = useState(null)
 
@@ -47,6 +48,7 @@ export default function NewEventModal({ creatorId, accentColor, onClose, onEvent
             eventName: name.trim(),
             startTime: startDateTime,
             durationMinutes: parseInt(duration) || 60,
+            eventMode,
           })
         })
         const data = await res.json()
@@ -79,6 +81,7 @@ export default function NewEventModal({ creatorId, accentColor, onClose, onEvent
           daily_room_name: dailyRoomName,
           duration_minutes: parseInt(duration) || 60,
           start_time: startTime,
+          event_mode: eventType === 'virtual' ? eventMode : 'broadcast',
         }),
       })
       if (!insertRes.ok) {
@@ -157,6 +160,47 @@ export default function NewEventModal({ creatorId, accentColor, onClose, onEvent
             <span style={{ fontSize: 16, flexShrink: 0 }}>🎙</span>
             <div style={{ fontSize: 12, color: '#888', lineHeight: 1.6 }}>
               A private live room will be automatically created via Daily.co when you submit.
+            </div>
+          </div>
+        )}
+
+        {/* Virtual event mode selector */}
+        {eventType === 'virtual' && (
+          <div style={{ marginBottom: 16 }}>
+            <div style={{ fontFamily: "'DM Mono', monospace", fontSize: 10, color: '#555', letterSpacing: '0.14em', marginBottom: 8 }}>
+              STREAMING MODE
+            </div>
+            <div style={{ display: 'flex', gap: 8 }}>
+              {[
+                { id: 'broadcast', icon: '📡', label: 'Broadcast', sub: 'Fans watch only — your camera is pinned' },
+                { id: 'class',     icon: '🎓', label: 'Class',     sub: 'Interactive — fans can share camera/mic' },
+              ].map(m => (
+                <div
+                  key={m.id}
+                  onClick={() => setEventMode(m.id)}
+                  style={{
+                    flex: 1, display: 'flex', flexDirection: 'column', gap: 4,
+                    background: eventMode === m.id ? ac + '12' : '#111',
+                    border: eventMode === m.id ? `1px solid ${ac}55` : '1px solid #ffffff10',
+                    borderRadius: 9, padding: '12px 14px', cursor: 'pointer',
+                    transition: 'all 0.15s',
+                  }}
+                >
+                  <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
+                    <div style={{
+                      width: 16, height: 16, borderRadius: '50%', flexShrink: 0,
+                      background: eventMode === m.id ? ac : '#2a2a2a',
+                      border: `2px solid ${eventMode === m.id ? ac : '#444'}`,
+                      display: 'flex', alignItems: 'center', justifyContent: 'center',
+                    }}>
+                      {eventMode === m.id && <div style={{ width: 6, height: 6, borderRadius: '50%', background: '#080808' }} />}
+                    </div>
+                    <span style={{ fontSize: 14 }}>{m.icon}</span>
+                    <span style={{ fontSize: 12, color: eventMode === m.id ? '#f0ebe0' : '#888', fontWeight: eventMode === m.id ? 500 : 400 }}>{m.label}</span>
+                  </div>
+                  <div style={{ fontFamily: "'DM Mono', monospace", fontSize: 9, color: '#444', paddingLeft: 24, lineHeight: 1.5 }}>{m.sub}</div>
+                </div>
+              ))}
             </div>
           </div>
         )}
