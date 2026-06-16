@@ -216,7 +216,12 @@ export default function LiveRoom({ event, profile, isCreator, onLeave, accessTok
         // sendSettings controls the video quality the creator publishes.
         ...(isCreatorRef.current ? {
           dailyConfig: {
-            camVideoProfile: 'HD720p15',
+            // HD720p30: 720p at 30fps — best supported profile in Daily Prebuilt.
+            // 15fps (previous setting) is noticeably choppy for performance/dance content.
+            // 30fps gives smooth motion while remaining within Daily Prebuilt's constraints.
+            // Note: HD1080p requires a Daily plan that supports it and is not
+            // configurable via Prebuilt's dailyConfig — 720p30 is the practical ceiling.
+            camVideoProfile: 'HD720p30',
           }
         } : {})
       })
