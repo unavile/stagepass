@@ -142,42 +142,41 @@ export default function EditEventModal({ event, accentColor, accessToken, onClos
               ))}
             </div>
           </div>
+        )}
 
-          {/* Always On toggle — Class mode only */}
-          {eventMode === 'class' && (
-            <div
-              onClick={() => setAlwaysOn(a => !a)}
-              style={{
-                display: 'flex', alignItems: 'center', justifyContent: 'space-between',
-                background: alwaysOn ? ac + '12' : '#111',
-                border: alwaysOn ? `1px solid ${ac}55` : '1px solid #ffffff10',
-                borderRadius: 9, padding: '12px 14px', cursor: 'pointer',
-                marginTop: 8, transition: 'all 0.15s',
-              }}
-            >
-              <div>
-                <div style={{ fontSize: 13, color: alwaysOn ? '#f0ebe0' : '#888', fontWeight: alwaysOn ? 500 : 400 }}>
-                  🔁 Always On
-                </div>
-                <div style={{ fontFamily: "'DM Mono', monospace", fontSize: 9, color: '#444', marginTop: 3, lineHeight: 1.5 }}>
-                  No fixed date or time — fans can join any time
-                </div>
+        {/* Always On toggle — Class mode only */}
+        {isVirtual && eventMode === 'class' && (
+          <div
+            onClick={() => setAlwaysOn(a => !a)}
+            style={{
+              display: 'flex', alignItems: 'center', justifyContent: 'space-between',
+              background: alwaysOn ? ac + '12' : '#111',
+              border: alwaysOn ? `1px solid ${ac}55` : '1px solid #ffffff10',
+              borderRadius: 9, padding: '12px 14px', cursor: 'pointer',
+              marginBottom: 16, transition: 'all 0.15s',
+            }}
+          >
+            <div>
+              <div style={{ fontSize: 13, color: alwaysOn ? '#f0ebe0' : '#888', fontWeight: alwaysOn ? 500 : 400 }}>
+                🔁 Always On
               </div>
-              <div style={{
-                width: 36, height: 20, borderRadius: 999, flexShrink: 0,
-                background: alwaysOn ? ac : '#2a2a2a',
-                position: 'relative', transition: 'background 0.2s',
-              }}>
-                <div style={{
-                  position: 'absolute', top: 2,
-                  left: alwaysOn ? 18 : 2,
-                  width: 16, height: 16, borderRadius: '50%',
-                  background: '#fff', transition: 'left 0.2s',
-                }} />
+              <div style={{ fontFamily: "'DM Mono', monospace", fontSize: 9, color: '#444', marginTop: 3, lineHeight: 1.5 }}>
+                No fixed date or time — fans can join any time
               </div>
             </div>
-          )}
-        </div>
+            <div style={{
+              width: 36, height: 20, borderRadius: 999, flexShrink: 0,
+              background: alwaysOn ? ac : '#2a2a2a',
+              position: 'relative', transition: 'background 0.2s',
+            }}>
+              <div style={{
+                position: 'absolute', top: 2,
+                left: alwaysOn ? 18 : 2,
+                width: 16, height: 16, borderRadius: '50%',
+                background: '#fff', transition: 'left 0.2s',
+              }} />
+            </div>
+          </div>
         )}
 
         {/* Name */}
