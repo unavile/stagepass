@@ -1968,7 +1968,7 @@ export default function FanApp({ deepHandle }) {
                     letterSpacing: '0.06em', userSelect: 'none',
                     textShadow: '0 1px 3px rgba(0,0,0,0.5)',
                   }}>
-                    {fanProfile?.display_name || guestName || 'coveted stage'}
+                    {selected.profiles?.display_name || 'Coveted Stage'}
                   </div>
                 </div>
               </div>
