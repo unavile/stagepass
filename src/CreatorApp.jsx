@@ -1285,7 +1285,7 @@ export default function CreatorApp({ session, profile, onSignOut }) {
                     fontFamily: "'DM Mono', monospace", fontSize: 10,
                     color: 'rgba(255,255,255,0.18)', letterSpacing: '0.06em',
                     userSelect: 'none', textShadow: '0 1px 3px rgba(0,0,0,0.5)',
-                  }}>profile.display_name || 'Coveted Stage'</div>
+                  }}>{profile.display_name || 'Coveted Stage'}</div>
                 </div>
               </div>
               )
