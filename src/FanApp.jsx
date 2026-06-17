@@ -516,6 +516,7 @@ export default function FanApp({ deepHandle }) {
 
   // Live room
   const [liveEvent, setLiveEvent] = useState(null)
+  const [classRegistrations, setClassRegistrations] = useState({}) // { [event_id]: { tier } }
   const [guestJoinEvent, setGuestJoinEvent] = useState(null)
   const [showDonateModal, setShowDonateModal] = useState(false)
   const [videoPost, setVideoPost] = useState(null) // post object for video popup
@@ -680,6 +681,25 @@ export default function FanApp({ deepHandle }) {
       .catch(() => setSubscribedIds(new Set()))
   }, [fanSession])
 
+  // Fetch class registrations for this fan
+  useEffect(() => {
+    if (!fanSession) { setClassRegistrations({}); return }
+    const sbUrl = import.meta.env.VITE_SUPABASE_URL
+    const sbKey = import.meta.env.VITE_SUPABASE_ANON_KEY
+    fetch(`${sbUrl}/rest/v1/class_registrations?fan_id=eq.${fanSession.user.id}&status=eq.active&select=event_id,tier`, {
+      headers: { 'apikey': sbKey, 'Authorization': `Bearer ${fanSession.access_token}` }
+    })
+      .then(r => r.json())
+      .then(data => {
+        if (Array.isArray(data)) {
+          const map = {}
+          data.forEach(r => { map[r.event_id] = { tier: r.tier } })
+          setClassRegistrations(map)
+        }
+      })
+      .catch(() => {})
+  }, [fanSession])
+
   // ── Reset loading states when user navigates back from external pages ──────
   // Stripe redirects back via browser history — React state is preserved
   // so donateLoading / subscribeLoading stay true unless we reset them here
@@ -767,6 +787,36 @@ export default function FanApp({ deepHandle }) {
       console.error('Checkout error:', err)
     }
     setSubscribeLoading(false)
+  }
+
+  async function handleRegisterClass(event, tier) {
+    if (!fanSession) {
+      setLoginModalMessage('Sign in to register for this class.')
+      setPendingAction('rsvp')
+      setShowLoginModal(true)
+      return
+    }
+    const tierPrice = tier === 4 ? event.tier_4_price : event.tier_8_price
+    if (!tierPrice) return
+    try {
+      const res = await fetch('/.netlify/functions/create-class-checkout', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          eventId: event.id,
+          eventName: event.name,
+          tier,
+          tierPrice,
+          fanId: fanSession.user.id,
+          fanEmail: fanSession.user.email,
+        })
+      })
+      const { url, error } = await res.json()
+      if (error) throw new Error(error)
+      window.location.href = url
+    } catch (err) {
+      console.error('Class checkout error:', err)
+    }
   }
 
   async function handleDonate() {
@@ -1253,7 +1303,52 @@ export default function FanApp({ deepHandle }) {
                   <div style={{ fontFamily: "'DM Mono', monospace", fontSize: 10, color: event.access_type === 'free' ? '#6dbf8a' : event.access_type === 'ticketed' ? ACCENT : TEXT2, marginRight: 4 }}>
                     {event.access_type === 'free' ? '🌐 Free for All' : event.access_type === 'ticketed' ? `🎟 $${event.ticket_price} / ticket` : '🔑 Subscribers Only'}
                   </div>
-                  {/* Subscriber: can always RSVP free */}
+                  {/* Always-on class events: registration tiers replace standard RSVP */}
+                  {event.always_on ? (
+                    <>
+                      {classRegistrations[event.id] ? (
+                        // Already registered — show tier badge and JOIN LIVE
+                        <div style={{ display: 'flex', flexDirection: 'column', gap: 6 }}>
+                          <div style={{ fontFamily: "'DM Mono', monospace", fontSize: 9, color: ACCENT, letterSpacing: '0.1em' }}>
+                            ✓ REGISTERED · {classRegistrations[event.id].tier} CLASSES/MO
+                          </div>
+                          {event.daily_room_name && fanSession && (
+                            <button onClick={() => setLiveEvent(event)} style={{
+                              background: ACCENT, color: '#080808', border: 'none',
+                              borderRadius: 7, padding: '7px 14px',
+                              fontFamily: "'DM Mono', monospace", fontSize: 10,
+                              fontWeight: 700, cursor: 'pointer', letterSpacing: '0.08em',
+                              boxShadow: `0 4px 14px ${ACCENT}50`,
+                            }}>🎙 JOIN CLASS</button>
+                          )}
+                        </div>
+                      ) : (
+                        // Not registered — show tier options
+                        <div style={{ display: 'flex', flexDirection: 'column', gap: 6 }}>
+                          <div style={{ fontFamily: "'DM Mono', monospace", fontSize: 9, color: TEXT3, letterSpacing: '0.1em', marginBottom: 2 }}>SELECT A TIER TO JOIN</div>
+                          <div style={{ display: 'flex', gap: 6 }}>
+                            {event.tier_4_price && (
+                              <button onClick={() => handleRegisterClass(event, 4)} style={{
+                                background: ACCENT + '14', color: ACCENT, border: `1px solid ${ACCENT}40`,
+                                borderRadius: 7, padding: '7px 12px', fontFamily: "'DM Mono', monospace",
+                                fontSize: 10, cursor: 'pointer', letterSpacing: '0.06em',
+                              }}>4/mo · ${event.tier_4_price}</button>
+                            )}
+                            {event.tier_8_price && (
+                              <button onClick={() => handleRegisterClass(event, 8)} style={{
+                                background: ACCENT, color: '#080808', border: 'none',
+                                borderRadius: 7, padding: '7px 12px', fontFamily: "'DM Mono', monospace",
+                                fontSize: 10, fontWeight: 700, cursor: 'pointer', letterSpacing: '0.06em',
+                                boxShadow: `0 4px 14px ${ACCENT}40`,
+                              }}>8/mo · ${event.tier_8_price}</button>
+                            )}
+                          </div>
+                        </div>
+                      )}
+                    </>
+                  ) : (
+                  <>
+                  {/* Standard event: Subscriber: can always RSVP free */}
                   {subscribed && (
                     <button onClick={() => handleRsvp(event.id, event.access_type)} style={{
                       background: eventRsvps[event.id] ? 'rgba(255,255,255,0.06)' : ACCENT,
@@ -1304,8 +1399,10 @@ export default function FanApp({ deepHandle }) {
                       boxShadow: `0 4px 14px ${ACCENT}50`,
                     }}>🎙 JOIN LIVE</button>
                   )}
+                  </>
+                  )}
                   {/* Guest JOIN LIVE — free events, no login required */}
-                  {event.daily_room_name && event.access_type === 'free' && isEventActive(event) && !fanSession && (
+                  {event.daily_room_name && !event.always_on && event.access_type === 'free' && isEventActive(event) && !fanSession && (
                     <button onClick={() => { setGuestJoinEvent(event); setGuestName('') }} style={{
                       background: ACCENT, color: '#080808', border: 'none',
                       borderRadius: 7, padding: '7px 14px',

@@ -118,6 +118,47 @@ exports.handler = async (event) => {
       return { statusCode: 200, body: JSON.stringify({ received: true }) }
     }
 
+    // ── Class registration ────────────────────────────────────────────────
+    if (session.metadata?.type === 'class_registration') {
+      const { event_id, fan_id, tier } = session.metadata
+      console.log('Class registration — event:', event_id, 'fan:', fan_id, 'tier:', tier)
+
+      try {
+        // Check for existing row (reactivate if cancelled)
+        const existingRes = await fetch(
+          `${SB_URL}/rest/v1/class_registrations?event_id=eq.${event_id}&fan_id=eq.${fan_id}`,
+          { headers: sbHeaders() }
+        )
+        const existing = await existingRes.json()
+
+        if (Array.isArray(existing) && existing.length > 0) {
+          await sbUpdate('class_registrations', {
+            status: 'active',
+            tier: parseInt(tier),
+            stripe_subscription_id: session.subscription,
+            stripe_customer_id: session.customer,
+            cancelled_at: null,
+          }, 'event_id,fan_id', `${event_id}&fan_id=eq.${fan_id}`)
+        } else {
+          await sbUpsert('class_registrations', {
+            event_id,
+            fan_id,
+            tier: parseInt(tier),
+            fan_email: session.customer_details?.email,
+            stripe_subscription_id: session.subscription,
+            stripe_customer_id: session.customer,
+            status: 'active',
+          }, 'event_id,fan_id')
+        }
+        console.log('Class registration recorded')
+      } catch (err) {
+        console.error('Class registration error:', err.message)
+        return { statusCode: 500, body: err.message }
+      }
+
+      return { statusCode: 200, body: JSON.stringify({ received: true }) }
+    }
+
     // ── Ticket purchase ────────────────────────────────────────────────────
     if (session.metadata?.type === 'ticket_purchase') {
       const { event_id, fan_id } = session.metadata
@@ -174,8 +215,15 @@ exports.handler = async (event) => {
     console.log('Cancelling subscription:', subscription.id)
 
     try {
+      // Cancel creator subscription
       await sbUpdate('subscriptions', { status: 'cancelled' }, 'stripe_subscription_id', subscription.id)
-      console.log('Subscription cancelled')
+      // Also cancel class registration if this was a class sub
+      await fetch(`${SB_URL}/rest/v1/class_registrations?stripe_subscription_id=eq.${subscription.id}`, {
+        method: 'PATCH',
+        headers: sbHeaders(),
+        body: JSON.stringify({ status: 'cancelled', cancelled_at: new Date().toISOString() }),
+      })
+      console.log('Subscription/registration cancelled')
     } catch (err) {
       console.error('Cancel subscription error:', err.message)
       return { statusCode: 500, body: err.message }
