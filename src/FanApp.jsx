@@ -796,6 +796,38 @@ export default function FanApp({ deepHandle }) {
       setShowLoginModal(true)
       return
     }
+
+    // Free class: register directly, no Stripe checkout
+    if (event.class_is_free) {
+      try {
+        const sbUrl = import.meta.env.VITE_SUPABASE_URL
+        const sbKey = import.meta.env.VITE_SUPABASE_ANON_KEY
+        const res = await fetch(`${sbUrl}/rest/v1/class_registrations`, {
+          method: 'POST',
+          headers: {
+            'apikey': sbKey,
+            'Authorization': `Bearer ${fanSession.access_token}`,
+            'Content-Type': 'application/json',
+            'Prefer': 'return=minimal,resolution=merge-duplicates',
+          },
+          body: JSON.stringify({
+            event_id: event.id,
+            fan_id: fanSession.user.id,
+            fan_email: fanSession.user.email,
+            tier: tier || 0,
+            status: 'active',
+          }),
+        })
+        if (!res.ok) throw new Error(`Registration failed (${res.status})`)
+        setClassRegistrations(prev => ({ ...prev, [event.id]: { tier: tier || 0 } }))
+      } catch (err) {
+        console.error('Free class registration error:', err)
+        alert('Failed to register. Please try again.')
+      }
+      return
+    }
+
+    // Paid class: go through Stripe checkout
     const tierPrice = tier === 4 ? event.tier_4_price : event.tier_8_price
     if (!tierPrice) return
     try {
@@ -1307,10 +1339,12 @@ export default function FanApp({ deepHandle }) {
                   {event.always_on ? (
                     <>
                       {classRegistrations[event.id] ? (
-                        // Already registered — show tier badge and JOIN LIVE
+                        // Already registered — show badge and JOIN LIVE
                         <div style={{ display: 'flex', flexDirection: 'column', gap: 6 }}>
                           <div style={{ fontFamily: "'DM Mono', monospace", fontSize: 9, color: ACCENT, letterSpacing: '0.1em' }}>
-                            ✓ REGISTERED · {classRegistrations[event.id].tier} CLASSES/MO
+                            {event.class_is_free
+                              ? '✓ REGISTERED · FREE'
+                              : `✓ REGISTERED · ${classRegistrations[event.id].tier} CLASSES/MO`}
                           </div>
                           {event.daily_room_name && fanSession && (
                             <button onClick={() => setLiveEvent(event)} style={{
@@ -1322,8 +1356,16 @@ export default function FanApp({ deepHandle }) {
                             }}>🎙 JOIN CLASS</button>
                           )}
                         </div>
+                      ) : event.class_is_free ? (
+                        // Free class — single register button, no tier selection
+                        <button onClick={() => handleRegisterClass(event, null)} style={{
+                          background: ACCENT, color: '#080808', border: 'none',
+                          borderRadius: 7, padding: '7px 14px', fontFamily: "'DM Mono', monospace",
+                          fontSize: 10, fontWeight: 700, cursor: 'pointer', letterSpacing: '0.08em',
+                          boxShadow: `0 4px 14px ${ACCENT}40`,
+                        }}>🌐 REGISTER FREE</button>
                       ) : (
-                        // Not registered — show tier options
+                        // Not registered, paid — show tier options
                         <div style={{ display: 'flex', flexDirection: 'column', gap: 6 }}>
                           <div style={{ fontFamily: "'DM Mono', monospace", fontSize: 9, color: TEXT3, letterSpacing: '0.1em', marginBottom: 2 }}>SELECT A TIER TO JOIN</div>
                           <div style={{ display: 'flex', gap: 6 }}>

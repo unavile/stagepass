@@ -13,6 +13,7 @@ export default function EditEventModal({ event, accentColor, accessToken, onClos
   const [ticketPrice, setTicketPrice] = useState(event.ticket_price || '')
   const [eventMode, setEventMode] = useState(event.event_mode || 'broadcast')
   const [alwaysOn, setAlwaysOn] = useState(event.always_on || false)
+  const [classIsFree, setClassIsFree] = useState(event.class_is_free || false)
   const [tier4Price, setTier4Price] = useState(event.tier_4_price || '')
   const [tier8Price, setTier8Price] = useState(event.tier_8_price || '')
   const [loading, setLoading] = useState(false)
@@ -69,8 +70,9 @@ export default function EditEventModal({ event, accentColor, accessToken, onClos
           ...(isVirtual ? { event_mode: eventMode, always_on: alwaysOn } : {}),
           ...(alwaysOn ? { event_date: '2099-12-31', start_time: null } : {}),
           ...(alwaysOn ? {
-            tier_4_price: tier4Price ? parseFloat(tier4Price) : null,
-            tier_8_price: tier8Price ? parseFloat(tier8Price) : null,
+            class_is_free: classIsFree,
+            tier_4_price: classIsFree ? null : (tier4Price ? parseFloat(tier4Price) : null),
+            tier_8_price: classIsFree ? null : (tier8Price ? parseFloat(tier8Price) : null),
           } : {}),
         }),
       })
@@ -227,36 +229,76 @@ export default function EditEventModal({ event, accentColor, accessToken, onClos
         <div style={{ fontFamily: "'DM Mono', monospace", fontSize: 10, color: '#555', letterSpacing: '0.14em', marginBottom: 8 }}>CAPACITY</div>
         <input style={input} placeholder="Leave blank for unlimited" value={capacity} onChange={e => setCapacity(e.target.value)} type="number" />
 
-        {/* For always-on class events: show tier pricing instead of access type */}
+        {/* For always-on class events: show free/paid toggle + tier pricing */}
         {alwaysOn ? (
           <div style={{ marginBottom: 16 }}>
             <div style={{ fontFamily: "'DM Mono', monospace", fontSize: 10, color: '#555', letterSpacing: '0.14em', marginBottom: 10 }}>
-              REGISTRATION TIERS
+              CLASS ACCESS
             </div>
-            <div style={{ fontFamily: "'DM Mono', monospace", fontSize: 9, color: '#444', marginBottom: 12, lineHeight: 1.6 }}>
-              Students register for a monthly class package. Set the price per tier.
+            <div style={{ display: 'flex', gap: 8, marginBottom: 16 }}>
+              {[
+                { id: false, icon: '💳', label: 'Paid', sub: 'Students pay a monthly tier price' },
+                { id: true,  icon: '🌐', label: 'Free', sub: 'Anyone can register at no cost' },
+              ].map(o => (
+                <div
+                  key={String(o.id)}
+                  onClick={() => setClassIsFree(o.id)}
+                  style={{
+                    flex: 1, display: 'flex', flexDirection: 'column', gap: 4,
+                    background: classIsFree === o.id ? ac + '12' : '#111',
+                    border: classIsFree === o.id ? `1px solid ${ac}55` : '1px solid #ffffff10',
+                    borderRadius: 9, padding: '12px 14px', cursor: 'pointer',
+                    transition: 'all 0.15s',
+                  }}
+                >
+                  <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
+                    <div style={{
+                      width: 16, height: 16, borderRadius: '50%', flexShrink: 0,
+                      background: classIsFree === o.id ? ac : '#2a2a2a',
+                      border: `2px solid ${classIsFree === o.id ? ac : '#444'}`,
+                      display: 'flex', alignItems: 'center', justifyContent: 'center',
+                    }}>
+                      {classIsFree === o.id && <div style={{ width: 6, height: 6, borderRadius: '50%', background: '#080808' }} />}
+                    </div>
+                    <span style={{ fontSize: 14 }}>{o.icon}</span>
+                    <span style={{ fontSize: 12, color: classIsFree === o.id ? '#f0ebe0' : '#888', fontWeight: classIsFree === o.id ? 500 : 400 }}>{o.label}</span>
+                  </div>
+                  <div style={{ fontFamily: "'DM Mono', monospace", fontSize: 9, color: '#444', paddingLeft: 24, lineHeight: 1.5 }}>{o.sub}</div>
+                </div>
+              ))}
             </div>
-            {[
-              { tier: 4, label: '4 Classes / Month', price: tier4Price, setPrice: setTier4Price },
-              { tier: 8, label: '8 Classes / Month', price: tier8Price, setPrice: setTier8Price },
-            ].map(t => (
-              <div key={t.tier} style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', background: '#111', border: '1px solid #ffffff10', borderRadius: 9, padding: '12px 14px', marginBottom: 8 }}>
-                <div>
-                  <div style={{ fontSize: 13, color: '#f0ebe0' }}>{t.label}</div>
-                  <div style={{ fontFamily: "'DM Mono', monospace", fontSize: 9, color: '#444', marginTop: 2 }}>Monthly recurring subscription</div>
+
+            {!classIsFree && (
+              <>
+                <div style={{ fontFamily: "'DM Mono', monospace", fontSize: 10, color: '#555', letterSpacing: '0.14em', marginBottom: 10 }}>
+                  REGISTRATION TIERS
                 </div>
-                <div style={{ display: 'flex', alignItems: 'center', gap: 6 }}>
-                  <span style={{ color: '#555', fontSize: 14, fontFamily: "'DM Mono', monospace" }}>$</span>
-                  <input
-                    style={{ ...input, width: 80, marginBottom: 0 }}
-                    type="number" min="1" step="0.01" placeholder="0.00"
-                    value={t.price}
-                    onChange={e => t.setPrice(e.target.value)}
-                  />
-                  <span style={{ color: '#555', fontSize: 11, fontFamily: "'DM Mono', monospace" }}>/mo</span>
+                <div style={{ fontFamily: "'DM Mono', monospace", fontSize: 9, color: '#444', marginBottom: 12, lineHeight: 1.6 }}>
+                  Students register for a monthly class package. Set the price per tier.
                 </div>
-              </div>
-            ))}
+                {[
+                  { tier: 4, label: '4 Classes / Month', price: tier4Price, setPrice: setTier4Price },
+                  { tier: 8, label: '8 Classes / Month', price: tier8Price, setPrice: setTier8Price },
+                ].map(t => (
+                  <div key={t.tier} style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', background: '#111', border: '1px solid #ffffff10', borderRadius: 9, padding: '12px 14px', marginBottom: 8 }}>
+                    <div>
+                      <div style={{ fontSize: 13, color: '#f0ebe0' }}>{t.label}</div>
+                      <div style={{ fontFamily: "'DM Mono', monospace", fontSize: 9, color: '#444', marginTop: 2 }}>Monthly recurring subscription</div>
+                    </div>
+                    <div style={{ display: 'flex', alignItems: 'center', gap: 6 }}>
+                      <span style={{ color: '#555', fontSize: 14, fontFamily: "'DM Mono', monospace" }}>$</span>
+                      <input
+                        style={{ ...input, width: 80, marginBottom: 0 }}
+                        type="number" min="1" step="0.01" placeholder="0.00"
+                        value={t.price}
+                        onChange={e => t.setPrice(e.target.value)}
+                      />
+                      <span style={{ color: '#555', fontSize: 11, fontFamily: "'DM Mono', monospace" }}>/mo</span>
+                    </div>
+                  </div>
+                ))}
+              </>
+            )}
           </div>
         ) : (
         <>
