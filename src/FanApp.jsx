@@ -724,10 +724,15 @@ export default function FanApp({ deepHandle }) {
     const sbUrl = import.meta.env.VITE_SUPABASE_URL
     const sbKey = import.meta.env.VITE_SUPABASE_ANON_KEY
 
-    // Fetch posts (public)
+    // Fetch posts — use fan's access_token if logged in so Supabase RLS
+    // recognises the fan as an authenticated user and returns locked posts
+    // they're entitled to see. Using the anon key here was causing locked
+    // posts to be invisible to subscribers (Supabase treated the request
+    // as anonymous and RLS blocked the rows).
+    const postAuthToken = fanSession?.access_token || sbKey
     const postsRes = await fetch(
       `${sbUrl}/rest/v1/posts?creator_id=eq.${c.id}&order=published_at.desc`,
-      { headers: { 'apikey': sbKey, 'Authorization': `Bearer ${sbKey}` } }
+      { headers: { 'apikey': sbKey, 'Authorization': `Bearer ${postAuthToken}` } }
     )
     const postsData = await postsRes.json()
     setPosts(Array.isArray(postsData) ? postsData : [])
