@@ -1,5 +1,6 @@
 import { useState, useCallback } from 'react'
 import { useDropzone } from 'react-dropzone'
+import { supabase } from './supabaseClient'
 
 function ThumbnailDropzone({ thumbnail, thumbnailPreview, onThumbnailChange }) {
   const onDrop = useCallback(accepted => {
@@ -107,6 +108,14 @@ export default function Upload({ creatorId, accentColor, accessToken, onPostCrea
       if (!file) { setError('Please select a file to upload.'); return }
     }
 
+    // Refresh session token before submitting — avoids JWT expired errors
+    // when the creator spends a long time on the form (e.g. copying a YouTube URL)
+    let freshToken = accessToken
+    try {
+      const { data: { session } } = await supabase.auth.getSession()
+      if (session?.access_token) freshToken = session.access_token
+    } catch (_) {}
+
     setError(null)
     setStep('uploading')
 
@@ -123,7 +132,7 @@ export default function Upload({ creatorId, accentColor, accessToken, onPostCrea
         method: 'POST',
         headers: {
           'apikey': sbKey,
-          'Authorization': `Bearer ${accessToken || sbKey}`,
+          'Authorization': `Bearer ${freshToken || sbKey}`,
           'x-upsert': 'false',
           'Cache-Control': '3600',
         },
@@ -149,7 +158,7 @@ export default function Upload({ creatorId, accentColor, accessToken, onPostCrea
         method: 'POST',
         headers: {
           'apikey': sbKey,
-          'Authorization': `Bearer ${accessToken || sbKey}`,
+          'Authorization': `Bearer ${freshToken || sbKey}`,
           'x-upsert': 'false',
           'Cache-Control': '3600',
         },
