@@ -126,6 +126,9 @@ export default function CreatorApp({ session, profile, onSignOut }) {
   const [eventParticipants, setEventParticipants] = useState({})       // { eventId: [...rows] }
   const [loadingParticipants, setLoadingParticipants] = useState({})   // { eventId: bool }
   const [expandedParticipants, setExpandedParticipants] = useState({}) // { eventId: bool }
+  const [ticketBuyers, setTicketBuyers] = useState({})         // { eventId: [...rows] }
+  const [loadingTicketBuyers, setLoadingTicketBuyers] = useState({}) // { eventId: bool }
+  const [expandedTicketBuyers, setExpandedTicketBuyers] = useState({}) // { eventId: bool }
   // Use local date (not UTC) so US timezones don't get pushed to tomorrow
   const now = new Date()
   const todayStr = `${now.getFullYear()}-${String(now.getMonth()+1).padStart(2,'0')}-${String(now.getDate()).padStart(2,'0')}`
@@ -275,6 +278,31 @@ export default function CreatorApp({ session, profile, onSignOut }) {
       setEventParticipants(prev => ({ ...prev, [eventId]: [] }))
     }
     setLoadingParticipants(prev => ({ ...prev, [eventId]: false }))
+  }
+
+  // ── Fetch ticket buyers for a ticketed event ─────────────────────────────
+  async function fetchTicketBuyersForEvent(eventId) {
+    if (ticketBuyers[eventId] !== undefined) {
+      // Already loaded — just toggle visibility
+      setExpandedTicketBuyers(prev => ({ ...prev, [eventId]: !prev[eventId] }))
+      return
+    }
+    setExpandedTicketBuyers(prev => ({ ...prev, [eventId]: true }))
+    setLoadingTicketBuyers(prev => ({ ...prev, [eventId]: true }))
+    const sbUrl = import.meta.env.VITE_SUPABASE_URL
+    const sbKey = import.meta.env.VITE_SUPABASE_ANON_KEY
+    try {
+      const res = await fetch(
+        `${sbUrl}/rest/v1/ticket_purchases?event_id=eq.${eventId}&status=eq.paid&select=*&order=created_at.asc`,
+        { headers: { 'apikey': sbKey, 'Authorization': `Bearer ${session.access_token}` } }
+      )
+      const data = await res.json()
+      setTicketBuyers(prev => ({ ...prev, [eventId]: Array.isArray(data) ? data : [] }))
+    } catch (e) {
+      console.error('fetchTicketBuyers error:', e)
+      setTicketBuyers(prev => ({ ...prev, [eventId]: [] }))
+    }
+    setLoadingTicketBuyers(prev => ({ ...prev, [eventId]: false }))
   }
 
   // ── Delete post ───────────────────────────────────────────────────────────
@@ -827,6 +855,96 @@ export default function CreatorApp({ session, profile, onSignOut }) {
                               </div>
                             ))}
                           </div>
+                        </div>
+                      )}
+                      {/* ── Ticket buyers (ticketed events only) ── */}
+                      {event.access_type === 'ticketed' && (
+                        <div style={{ marginTop: 14, paddingTop: 14, borderTop: `1px solid ${BORDER2}` }}>
+                          <button
+                            onClick={() => fetchTicketBuyersForEvent(event.id)}
+                            style={{
+                              display: 'flex', alignItems: 'center', gap: 8,
+                              background: 'none', border: `1px solid ${BORDER}`,
+                              borderRadius: 7, padding: '6px 14px', cursor: 'pointer',
+                              fontFamily: "'DM Mono', monospace", fontSize: 10,
+                              color: TEXT2, letterSpacing: '0.1em',
+                            }}
+                          >
+                            <span>🎟</span>
+                            {expandedTicketBuyers[event.id] ? 'HIDE TICKET BUYERS' : 'VIEW TICKET BUYERS'}
+                            {ticketBuyers[event.id] !== undefined && (
+                              <span style={{
+                                background: ac + '22', color: ac,
+                                border: `1px solid ${ac}40`,
+                                borderRadius: 10, fontSize: 9, fontWeight: 700,
+                                padding: '1px 7px', fontFamily: "'DM Mono', monospace",
+                              }}>{ticketBuyers[event.id].length}</span>
+                            )}
+                          </button>
+
+                          {expandedTicketBuyers[event.id] && (
+                            <div style={{ marginTop: 12 }}>
+                              {loadingTicketBuyers[event.id] ? (
+                                <div style={{ fontFamily: "'DM Mono', monospace", fontSize: 10, color: TEXT3, letterSpacing: '0.1em' }}>
+                                  LOADING...
+                                </div>
+                              ) : !ticketBuyers[event.id]?.length ? (
+                                <div style={{ fontFamily: "'DM Mono', monospace", fontSize: 10, color: TEXT3 }}>
+                                  No ticket purchases yet.
+                                </div>
+                              ) : (
+                                <div style={{ display: 'flex', flexDirection: 'column', gap: 6 }}>
+                                  {/* Column headers */}
+                                  <div style={{
+                                    display: 'grid',
+                                    gridTemplateColumns: isMobile ? '1fr 1fr' : '1.5fr 1.5fr 1fr 80px',
+                                    gap: 8, padding: '4px 10px',
+                                    fontFamily: "'DM Mono', monospace", fontSize: 8,
+                                    color: TEXT3, letterSpacing: '0.16em',
+                                  }}>
+                                    <span>NAME</span>
+                                    <span>EMAIL</span>
+                                    {!isMobile && <span>PHONE</span>}
+                                    <span>AMOUNT</span>
+                                  </div>
+                                  {ticketBuyers[event.id].map(buyer => (
+                                    <div key={buyer.id} style={{
+                                      display: 'grid',
+                                      gridTemplateColumns: isMobile ? '1fr 1fr' : '1.5fr 1.5fr 1fr 80px',
+                                      gap: 8, padding: '8px 10px',
+                                      background: 'rgba(24,24,28,0.8)',
+                                      borderRadius: 7, border: `1px solid ${BORDER2}`,
+                                      fontSize: 12, color: TEXT1,
+                                      alignItems: 'center',
+                                    }}>
+                                      <div style={{ display: 'flex', alignItems: 'center', gap: 7 }}>
+                                        <div style={{ width: 22, height: 22, borderRadius: '50%', background: BG, border: `1px solid ${ac}35`, display: 'flex', alignItems: 'center', justifyContent: 'center', fontSize: 10, color: ac, fontFamily: "'DM Serif Display', Georgia, serif", flexShrink: 0 }}>
+                                          {(buyer.buyer_name || '?').split(' ').map(n => n[0]).join('').slice(0, 2).toUpperCase()}
+                                        </div>
+                                        <span style={{ overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>
+                                          {buyer.buyer_name || (buyer.fan_id ? 'Registered Fan' : 'Guest')}
+                                          {!buyer.fan_id && (
+                                            <span style={{ marginLeft: 5, background: '#c9a84c18', color: '#c9a84c', border: '1px solid #c9a84c30', borderRadius: 3, fontSize: 8, padding: '1px 5px', fontFamily: "'DM Mono', monospace", letterSpacing: '0.1em', verticalAlign: 'middle' }}>GUEST</span>
+                                          )}
+                                        </span>
+                                      </div>
+                                      <div style={{ color: TEXT2, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap', fontSize: 11 }}>
+                                        {buyer.buyer_email || '—'}
+                                      </div>
+                                      {!isMobile && (
+                                        <div style={{ color: TEXT2, fontSize: 11 }}>
+                                          {buyer.buyer_phone || '—'}
+                                        </div>
+                                      )}
+                                      <div style={{ color: ac, fontFamily: "'DM Mono', monospace", fontSize: 11 }}>
+                                        ${buyer.amount?.toFixed(2) || '—'}
+                                      </div>
+                                    </div>
+                                  ))}
+                                </div>
+                              )}
+                            </div>
+                          )}
                         </div>
                       )}
                       {/* ── Live session participants (past events only) ── */}

@@ -12,16 +12,17 @@ exports.handler = async (event) => {
   if (event.httpMethod !== 'POST') return { statusCode: 405, headers, body: 'Method not allowed' }
 
   try {
+    // fanId and fanEmail are optional — guests can purchase without logging in
     const { eventId, eventName, ticketPrice, fanId, fanEmail } = JSON.parse(event.body)
 
-    if (!eventId || !ticketPrice || !fanId) {
+    if (!eventId || !ticketPrice) {
       return { statusCode: 400, headers, body: JSON.stringify({ error: 'Missing required fields' }) }
     }
 
-    const session = await stripe.checkout.sessions.create({
+    const sessionParams = {
       payment_method_types: ['card'],
       mode: 'payment',
-      customer_email: fanEmail,
+      phone_number_collection: { enabled: true },
       line_items: [{
         price_data: {
           currency: 'usd',
@@ -35,12 +36,19 @@ exports.handler = async (event) => {
       }],
       metadata: {
         event_id: eventId,
-        fan_id: fanId,
+        fan_id: fanId || '',   // empty string for guests (metadata values must be strings)
         type: 'ticket_purchase',
       },
       success_url: `${process.env.URL || 'https://covetedstage.com'}/success?ticket=1&event=${eventId}`,
       cancel_url: `${process.env.URL || 'https://covetedstage.com'}`,
-    })
+    }
+
+    // Pre-fill email only when we have it (logged-in fans)
+    if (fanEmail) {
+      sessionParams.customer_email = fanEmail
+    }
+
+    const session = await stripe.checkout.sessions.create(sessionParams)
 
     return {
       statusCode: 200,

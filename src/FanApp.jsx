@@ -961,11 +961,7 @@ export default function FanApp({ deepHandle }) {
   }
 
   async function handleBuyTicket(event) {
-    if (!fanSession) {
-      setLoginModalMessage('Sign in to purchase a ticket.')
-      setShowLoginModal(true)
-      return
-    }
+    // No login required — guests and fans can both purchase tickets
     try {
       const res = await fetch('/.netlify/functions/create-ticket-checkout', {
         method: 'POST',
@@ -974,8 +970,8 @@ export default function FanApp({ deepHandle }) {
           eventId: event.id,
           eventName: event.name,
           ticketPrice: event.ticket_price,
-          fanId: fanSession.user.id,
-          fanEmail: fanSession.user.email,
+          // Pass fanId/email only when logged in; guests leave these undefined
+          ...(fanSession ? { fanId: fanSession.user.id, fanEmail: fanSession.user.email } : {}),
         })
       })
       const { url, error } = await res.json()

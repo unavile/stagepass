@@ -162,21 +162,97 @@ exports.handler = async (event) => {
     // ── Ticket purchase ────────────────────────────────────────────────────
     if (session.metadata?.type === 'ticket_purchase') {
       const { event_id, fan_id } = session.metadata
-      console.log('Ticket purchase — event:', event_id, 'fan:', fan_id)
+      // fan_id is empty string for guests — treat as null
+      const fanIdOrNull = fan_id && fan_id.trim() !== '' ? fan_id : null
+
+      // Capture buyer details from Stripe customer_details
+      const buyerName  = session.customer_details?.name  || null
+      const buyerEmail = session.customer_details?.email || null
+      const buyerPhone = session.customer_details?.phone || null
+
+      console.log('Ticket purchase — event:', event_id, 'fan:', fanIdOrNull || 'guest', 'buyer:', buyerEmail)
 
       try {
+        // Use stripe_session_id as the unique conflict key so guest purchases
+        // (which have no fan_id) can be upserted safely.
         await sbUpsert('ticket_purchases', {
           event_id,
-          fan_id,
+          fan_id:           fanIdOrNull,
           stripe_session_id: session.id,
-          amount: session.amount_total / 100,
-          status: 'paid',
-        }, 'event_id,fan_id')
-        await sbUpsert('rsvps', { event_id, fan_id }, 'event_id,fan_id')
-        console.log('Ticket purchase + RSVP recorded')
+          amount:           session.amount_total / 100,
+          status:           'paid',
+          buyer_name:       buyerName,
+          buyer_email:      buyerEmail,
+          buyer_phone:      buyerPhone,
+        }, 'stripe_session_id')
+
+        // Only create an RSVP row for logged-in fans (guests have no fan account)
+        if (fanIdOrNull) {
+          await sbUpsert('rsvps', { event_id, fan_id: fanIdOrNull }, 'event_id,fan_id')
+        }
+
+        console.log('Ticket purchase recorded')
       } catch (err) {
         console.error('Ticket purchase error:', err.message)
         return { statusCode: 500, body: err.message }
+      }
+
+      // Send ticket confirmation email to buyer
+      if (buyerEmail && process.env.RESEND_API_KEY) {
+        try {
+          // Fetch event name from Supabase for the email
+          let eventName = 'the event'
+          try {
+            const evRes = await fetch(
+              `${SB_URL}/rest/v1/events?id=eq.${event_id}&select=name`,
+              { headers: sbHeaders() }
+            )
+            const evData = await evRes.json()
+            if (Array.isArray(evData) && evData[0]?.name) eventName = evData[0].name
+          } catch (evErr) {
+            console.error('Event name fetch error:', evErr.message)
+          }
+
+          await fetch('https://api.resend.com/emails', {
+            method: 'POST',
+            headers: {
+              'Authorization': `Bearer ${process.env.RESEND_API_KEY}`,
+              'Content-Type': 'application/json',
+            },
+            body: JSON.stringify({
+              from: 'Coveted Stage <hello@covetedstage.com>',
+              to: buyerEmail,
+              subject: `Your ticket for ${eventName} is confirmed! 🎟`,
+              html: `
+                <div style="font-family: Georgia, serif; max-width: 520px; margin: 0 auto; padding: 40px 24px; background: #09090b; color: #f4f0e8;">
+                  <div style="font-size: 28px; color: #c9a84c; margin-bottom: 8px;">Coveted Stage</div>
+                  <hr style="border: none; border-top: 1px solid #333; margin: 20px 0;" />
+                  <h2 style="font-size: 22px; color: #f4f0e8; margin-bottom: 12px;">You're going! 🎉</h2>
+                  <p style="color: #9a9690; line-height: 1.7;">
+                    Hi ${buyerName || 'there'},<br/><br/>
+                    Your ticket for <strong style="color: #f4f0e8;">${eventName}</strong> has been confirmed.
+                    Your payment of <strong style="color: #c9a84c;">$${(session.amount_total / 100).toFixed(2)}</strong> was received successfully.
+                  </p>
+                  <div style="margin: 28px 0; padding: 20px 24px; background: rgba(201,168,76,0.08); border: 1px solid rgba(201,168,76,0.25); border-radius: 10px;">
+                    <div style="font-family: monospace; font-size: 10px; letter-spacing: 0.18em; color: #c9a84c; margin-bottom: 8px;">BOOKING REFERENCE</div>
+                    <div style="font-family: monospace; font-size: 13px; color: #f4f0e8; word-break: break-all;">${session.id}</div>
+                  </div>
+                  <p style="color: #9a9690; line-height: 1.7;">
+                    Visit <a href="https://covetedstage.com" style="color: #c9a84c;">covetedstage.com</a> closer to the event date to join the live room.
+                  </p>
+                  <hr style="border: none; border-top: 1px solid #333; margin: 28px 0;" />
+                  <div style="font-size: 11px; color: #555; font-family: monospace; letter-spacing: 0.1em;">
+                    COVETED STAGE · THE STAGE IS YOURS
+                  </div>
+                </div>
+              `,
+            }),
+          })
+          console.log('Ticket confirmation email sent to:', buyerEmail)
+        } catch (emailErr) {
+          console.error('Ticket email error:', emailErr.message)
+          // Don't fail the webhook if email fails
+        }
       }
 
       return { statusCode: 200, body: JSON.stringify({ received: true }) }

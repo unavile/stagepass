@@ -215,6 +215,11 @@ export default function AdminPortal() {
   const [reportFilter, setReportFilter] = useState('all')
   const [reportData, setReportData] = useState([])
   const [reportLoading, setReportLoading] = useState(false)
+  // Ticket buyers report state
+  const [tbCreatorSearch, setTbCreatorSearch] = useState('')
+  const [tbEventList, setTbEventList] = useState([])      // events for selected creator
+  const [tbEventId, setTbEventId] = useState('')          // selected event id
+  const [tbEventsLoading, setTbEventsLoading] = useState(false)
   const [importRows, setImportRows] = useState([])
   const [importErrors, setImportErrors] = useState([])
   const [importLoading, setImportLoading] = useState(false)
@@ -528,9 +533,47 @@ export default function AdminPortal() {
           registered_attendances:  e.registered_attendances || 0,
           guest_attendances:       e.guest_attendances || 0,
         })))
+
+      // ── Ticket buyers by creator + event ────────────────────────────────
+      } else if (reportType === 'ticket_buyers') {
+        if (!tbEventId) {
+          alert('Please select an event first.')
+          setReportLoading(false)
+          return
+        }
+        let data = await sbFetch(`ticket_purchases?event_id=eq.${tbEventId}&status=eq.paid&select=*&order=created_at.asc`)
+        data = Array.isArray(data) ? data : []
+        setReportData(data.map(tp => ({
+          buyer_name:   tp.buyer_name  || (tp.fan_id ? 'Registered Fan' : 'Guest'),
+          buyer_type:   tp.fan_id ? 'Registered Fan' : 'Guest',
+          buyer_email:  tp.buyer_email  || '—',
+          buyer_phone:  tp.buyer_phone  || '—',
+          amount:       tp.amount != null ? `$${Number(tp.amount).toFixed(2)}` : '—',
+          purchased_at: tp.created_at ? tp.created_at.split('T')[0] : '—',
+          stripe_session: tp.stripe_session_id || '',
+        })))
       }
     } catch(e) { console.error('Report error:', e) }
     setReportLoading(false)
+  }
+
+  // Load ticketed events for the selected creator (ticket_buyers report)
+  async function loadTbEvents(creatorSearch) {
+    if (!creatorSearch.trim()) { setTbEventList([]); setTbEventId(''); return }
+    setTbEventsLoading(true)
+    try {
+      // Find creator by display name (case-insensitive)
+      const creatorsData = await sbFetch('creators?select=id,profiles(display_name,handle)&order=created_at.desc')
+      const allCreators = Array.isArray(creatorsData) ? creatorsData : []
+      const match = allCreators.find(c =>
+        c.profiles?.display_name?.toLowerCase().trim() === creatorSearch.toLowerCase().trim()
+      )
+      if (!match) { setTbEventList([]); setTbEventId(''); setTbEventsLoading(false); return }
+      const events = await sbFetch(`events?creator_id=eq.${match.id}&access_type=eq.ticketed&order=event_date.desc&select=id,name,event_date`)
+      setTbEventList(Array.isArray(events) ? events : [])
+      setTbEventId('')
+    } catch(e) { console.error('loadTbEvents error:', e) }
+    setTbEventsLoading(false)
   }
 
   function exportReportCSV() {
@@ -1144,8 +1187,9 @@ export default function AdminPortal() {
               { id: 'creator_access', label: '◉ Creator Access' },
               { id: 'post_access',    label: '▶ Post Access'    },
               { id: 'event_access',   label: '⬡ Event Access'   },
+              { id: 'ticket_buyers',  label: '🎟 Ticket Buyers'  },
             ].map(t => (
-              <button key={t.id} onClick={() => { setReportType(t.id); setReportFilter('all'); setReportData([]) }} style={{
+              <button key={t.id} onClick={() => { setReportType(t.id); setReportFilter('all'); setReportData([]); setTbCreatorSearch(''); setTbEventList([]); setTbEventId('') }} style={{
                 background: reportType === t.id ? ACCENT + '18' : BG2,
                 color: reportType === t.id ? ACCENT : TEXT3,
                 border: reportType === t.id ? `1px solid ${ACCENT}55` : `1px solid ${BORDER}`,
@@ -1175,6 +1219,64 @@ export default function AdminPortal() {
               }}>{f.toUpperCase()}</button>
             ))}
           </div>
+
+          {/* Ticket buyers: creator + event selectors */}
+          {reportType === 'ticket_buyers' && (
+            <div style={{ display: 'flex', gap: 12, flexWrap: 'wrap', marginBottom: 20, alignItems: 'flex-end' }}>
+              <div>
+                <div style={{ fontFamily: "'DM Mono', monospace", fontSize: 9, color: TEXT3, letterSpacing: '0.16em', marginBottom: 6 }}>CREATOR DISPLAY NAME</div>
+                <div style={{ display: 'flex', gap: 8 }}>
+                  <input
+                    value={tbCreatorSearch}
+                    onChange={e => setTbCreatorSearch(e.target.value)}
+                    placeholder="e.g. Jane Smith"
+                    style={{
+                      background: BG2, border: `1px solid ${BORDER}`, borderRadius: 8,
+                      padding: '8px 14px', color: TEXT1, fontFamily: "'DM Mono', monospace",
+                      fontSize: 12, outline: 'none', width: 220,
+                    }}
+                  />
+                  <button
+                    onClick={() => loadTbEvents(tbCreatorSearch)}
+                    disabled={tbEventsLoading}
+                    style={{
+                      background: ACCENT + '18', color: ACCENT, border: `1px solid ${ACCENT}40`,
+                      borderRadius: 8, padding: '8px 16px',
+                      fontFamily: "'DM Mono', monospace", fontSize: 11, cursor: 'pointer',
+                      letterSpacing: '0.08em', opacity: tbEventsLoading ? 0.6 : 1,
+                    }}
+                  >{tbEventsLoading ? 'LOADING...' : 'FIND EVENTS'}</button>
+                </div>
+              </div>
+              {tbEventList.length > 0 && (
+                <div>
+                  <div style={{ fontFamily: "'DM Mono', monospace", fontSize: 9, color: TEXT3, letterSpacing: '0.16em', marginBottom: 6 }}>SELECT EVENT</div>
+                  <select
+                    value={tbEventId}
+                    onChange={e => setTbEventId(e.target.value)}
+                    style={{
+                      background: BG2, border: `1px solid ${BORDER}`, borderRadius: 8,
+                      padding: '8px 14px', color: tbEventId ? TEXT1 : TEXT3,
+                      fontFamily: "'DM Mono', monospace", fontSize: 12,
+                      outline: 'none', cursor: 'pointer', minWidth: 260,
+                    }}
+                  >
+                    <option value="">— Select an event —</option>
+                    {tbEventList.map(ev => (
+                      <option key={ev.id} value={ev.id}>
+                        {ev.name}{ev.event_date ? ` · ${ev.event_date}` : ''}
+                      </option>
+                    ))}
+                  </select>
+                </div>
+              )}
+              {tbEventList.length === 0 && !tbEventsLoading && tbCreatorSearch && (
+                <div style={{ fontFamily: "'DM Mono', monospace", fontSize: 10, color: TEXT3, alignSelf: 'flex-end', paddingBottom: 10 }}>
+                  No ticketed events found for that creator name.
+                </div>
+              )}
+            </div>
+          )}
 
           {/* Run + Export */}
           <div style={{ display: 'flex', gap: 10, marginBottom: 24, flexWrap: 'wrap' }}>
