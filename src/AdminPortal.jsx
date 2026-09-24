@@ -548,7 +548,8 @@ export default function AdminPortal() {
           buyer_type:   tp.fan_id ? 'Registered Fan' : 'Guest',
           buyer_email:  tp.buyer_email  || '—',
           buyer_phone:  tp.buyer_phone  || '—',
-          amount:       tp.amount != null ? `$${Number(tp.amount).toFixed(2)}` : '—',
+          qty:          tp.quantity || 1,
+          total_paid:   tp.amount != null ? `$${Number(tp.amount).toFixed(2)}` : '—',
           purchased_at: tp.created_at ? tp.created_at.split('T')[0] : '—',
           stripe_session: tp.stripe_session_id || '',
         })))

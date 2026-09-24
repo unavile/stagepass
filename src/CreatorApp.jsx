@@ -897,7 +897,7 @@ export default function CreatorApp({ session, profile, onSignOut }) {
                                   {/* Column headers */}
                                   <div style={{
                                     display: 'grid',
-                                    gridTemplateColumns: isMobile ? '1fr 1fr' : '1.5fr 1.5fr 1fr 80px',
+                                    gridTemplateColumns: isMobile ? '1fr 1fr' : '1.5fr 1.5fr 1fr 50px 90px',
                                     gap: 8, padding: '4px 10px',
                                     fontFamily: "'DM Mono', monospace", fontSize: 8,
                                     color: TEXT3, letterSpacing: '0.16em',
@@ -905,12 +905,13 @@ export default function CreatorApp({ session, profile, onSignOut }) {
                                     <span>NAME</span>
                                     <span>EMAIL</span>
                                     {!isMobile && <span>PHONE</span>}
-                                    <span>AMOUNT</span>
+                                    <span>QTY</span>
+                                    <span>TOTAL</span>
                                   </div>
                                   {ticketBuyers[event.id].map(buyer => (
                                     <div key={buyer.id} style={{
                                       display: 'grid',
-                                      gridTemplateColumns: isMobile ? '1fr 1fr' : '1.5fr 1.5fr 1fr 80px',
+                                      gridTemplateColumns: isMobile ? '1fr 1fr' : '1.5fr 1.5fr 1fr 50px 90px',
                                       gap: 8, padding: '8px 10px',
                                       background: 'rgba(24,24,28,0.8)',
                                       borderRadius: 7, border: `1px solid ${BORDER2}`,
@@ -936,6 +937,9 @@ export default function CreatorApp({ session, profile, onSignOut }) {
                                           {buyer.buyer_phone || '—'}
                                         </div>
                                       )}
+                                      <div style={{ color: TEXT2, fontFamily: "'DM Mono', monospace", fontSize: 11, textAlign: 'center' }}>
+                                        {buyer.quantity || 1}
+                                      </div>
                                       <div style={{ color: ac, fontFamily: "'DM Mono', monospace", fontSize: 11 }}>
                                         ${buyer.amount?.toFixed(2) || '—'}
                                       </div>

@@ -161,29 +161,31 @@ exports.handler = async (event) => {
 
     // ── Ticket purchase ────────────────────────────────────────────────────
     if (session.metadata?.type === 'ticket_purchase') {
-      const { event_id, fan_id } = session.metadata
+      const { event_id, fan_id, quantity } = session.metadata
       // fan_id is empty string for guests — treat as null
       const fanIdOrNull = fan_id && fan_id.trim() !== '' ? fan_id : null
+      const qty = parseInt(quantity) || 1
 
       // Capture buyer details from Stripe customer_details
       const buyerName  = session.customer_details?.name  || null
       const buyerEmail = session.customer_details?.email || null
       const buyerPhone = session.customer_details?.phone || null
 
-      console.log('Ticket purchase — event:', event_id, 'fan:', fanIdOrNull || 'guest', 'buyer:', buyerEmail)
+      console.log('Ticket purchase — event:', event_id, 'fan:', fanIdOrNull || 'guest', 'qty:', qty, 'buyer:', buyerEmail)
 
       try {
         // Use stripe_session_id as the unique conflict key so guest purchases
         // (which have no fan_id) can be upserted safely.
         await sbUpsert('ticket_purchases', {
           event_id,
-          fan_id:           fanIdOrNull,
+          fan_id:            fanIdOrNull,
           stripe_session_id: session.id,
-          amount:           session.amount_total / 100,
-          status:           'paid',
-          buyer_name:       buyerName,
-          buyer_email:      buyerEmail,
-          buyer_phone:      buyerPhone,
+          amount:            session.amount_total / 100,  // total paid (price × qty)
+          quantity:          qty,
+          status:            'paid',
+          buyer_name:        buyerName,
+          buyer_email:       buyerEmail,
+          buyer_phone:       buyerPhone,
         }, 'stripe_session_id')
 
         // Only create an RSVP row for logged-in fans (guests have no fan account)
@@ -222,7 +224,7 @@ exports.handler = async (event) => {
             body: JSON.stringify({
               from: 'Coveted Stage <hello@covetedstage.com>',
               to: buyerEmail,
-              subject: `Your ticket for ${eventName} is confirmed! 🎟`,
+              subject: `Your ${qty > 1 ? qty + ' tickets' : 'ticket'} for ${eventName} ${qty > 1 ? 'are' : 'is'} confirmed! 🎟`,
               html: `
                 <div style="font-family: Georgia, serif; max-width: 520px; margin: 0 auto; padding: 40px 24px; background: #09090b; color: #f4f0e8;">
                   <div style="font-size: 28px; color: #c9a84c; margin-bottom: 8px;">Coveted Stage</div>
@@ -230,8 +232,9 @@ exports.handler = async (event) => {
                   <h2 style="font-size: 22px; color: #f4f0e8; margin-bottom: 12px;">You're going! 🎉</h2>
                   <p style="color: #9a9690; line-height: 1.7;">
                     Hi ${buyerName || 'there'},<br/><br/>
-                    Your ticket for <strong style="color: #f4f0e8;">${eventName}</strong> has been confirmed.
-                    Your payment of <strong style="color: #c9a84c;">$${(session.amount_total / 100).toFixed(2)}</strong> was received successfully.
+                    Your ${qty > 1 ? `<strong style="color: #c9a84c;">${qty} tickets</strong>` : 'ticket'} for
+                    <strong style="color: #f4f0e8;">${eventName}</strong> ${qty > 1 ? 'have' : 'has'} been confirmed.
+                    Your payment of <strong style="color: #c9a84c;">$${(session.amount_total / 100).toFixed(2)}</strong>${qty > 1 ? ` (${qty} × $${(session.amount_total / 100 / qty).toFixed(2)})` : ''} was received successfully.
                   </p>
                   <div style="margin: 28px 0; padding: 20px 24px; background: rgba(201,168,76,0.08); border: 1px solid rgba(201,168,76,0.25); border-radius: 10px;">
                     <div style="font-family: monospace; font-size: 10px; letter-spacing: 0.18em; color: #c9a84c; margin-bottom: 8px;">BOOKING REFERENCE</div>

@@ -517,6 +517,7 @@ export default function FanApp({ deepHandle }) {
   // Live room
   const [liveEvent, setLiveEvent] = useState(null)
   const [classRegistrations, setClassRegistrations] = useState({}) // { [event_id]: { tier } }
+  const [ticketQty, setTicketQty] = useState({}) // { [event_id]: number }
   const [guestJoinEvent, setGuestJoinEvent] = useState(null)
   const [showDonateModal, setShowDonateModal] = useState(false)
   const [videoPost, setVideoPost] = useState(null) // post object for video popup
@@ -962,6 +963,7 @@ export default function FanApp({ deepHandle }) {
 
   async function handleBuyTicket(event) {
     // No login required — guests and fans can both purchase tickets
+    const qty = ticketQty[event.id] || 1
     try {
       const res = await fetch('/.netlify/functions/create-ticket-checkout', {
         method: 'POST',
@@ -970,6 +972,7 @@ export default function FanApp({ deepHandle }) {
           eventId: event.id,
           eventName: event.name,
           ticketPrice: event.ticket_price,
+          quantity: qty,
           // Pass fanId/email only when logged in; guests leave these undefined
           ...(fanSession ? { fanId: fanSession.user.id, fanEmail: fanSession.user.email } : {}),
         })
@@ -1424,14 +1427,32 @@ export default function FanApp({ deepHandle }) {
                       fontSize: 10, cursor: 'pointer', letterSpacing: '0.08em',
                     }}>SUBSCRIBE TO ATTEND · ${selected?.monthly_price}/mo</button>
                   )}
-                  {!subscribed && event.access_type === 'ticketed' && (
-                    <button onClick={() => handleBuyTicket(event)} style={{
-                      background: ACCENT, color: '#080808', border: 'none',
-                      borderRadius: 7, padding: '7px 14px', fontFamily: "'DM Mono', monospace",
-                      fontSize: 10, fontWeight: 700, cursor: 'pointer', letterSpacing: '0.08em',
-                      boxShadow: `0 4px 14px ${ACCENT}40`,
-                    }}>BUY TICKET · ${event.ticket_price}</button>
-                  )}
+                  {!subscribed && event.access_type === 'ticketed' && (() => {
+                    const qty = ticketQty[event.id] || 1
+                    const total = (parseFloat(event.ticket_price) * qty).toFixed(2)
+                    return (
+                      <div style={{ display: 'flex', alignItems: 'center', gap: 6 }}>
+                        {/* Quantity stepper */}
+                        <div style={{ display: 'flex', alignItems: 'center', border: `1px solid ${ACCENT}55`, borderRadius: 7, overflow: 'hidden' }}>
+                          <button
+                            onClick={() => setTicketQty(prev => ({ ...prev, [event.id]: Math.max(1, (prev[event.id] || 1) - 1) }))}
+                            style={{ background: 'none', border: 'none', color: ACCENT, padding: '6px 10px', cursor: 'pointer', fontFamily: "'DM Mono', monospace", fontSize: 14, lineHeight: 1 }}
+                          >−</button>
+                          <span style={{ minWidth: 18, textAlign: 'center', fontFamily: "'DM Mono', monospace", fontSize: 11, color: TEXT1 }}>{qty}</span>
+                          <button
+                            onClick={() => setTicketQty(prev => ({ ...prev, [event.id]: Math.min(10, (prev[event.id] || 1) + 1) }))}
+                            style={{ background: 'none', border: 'none', color: ACCENT, padding: '6px 10px', cursor: 'pointer', fontFamily: "'DM Mono', monospace", fontSize: 14, lineHeight: 1 }}
+                          >+</button>
+                        </div>
+                        <button onClick={() => handleBuyTicket(event)} style={{
+                          background: ACCENT, color: '#080808', border: 'none',
+                          borderRadius: 7, padding: '7px 14px', fontFamily: "'DM Mono', monospace",
+                          fontSize: 10, fontWeight: 700, cursor: 'pointer', letterSpacing: '0.08em',
+                          boxShadow: `0 4px 14px ${ACCENT}40`,
+                        }}>BUY {qty > 1 ? `${qty} TICKETS` : 'TICKET'} · ${total}</button>
+                      </div>
+                    )
+                  })()}
                   {/* Join Live button — logged in fans with RSVP */}
                   {event.daily_room_name && eventRsvps[event.id] && isEventActive(event) && fanSession && (
                     <button onClick={() => setLiveEvent(event)} style={{

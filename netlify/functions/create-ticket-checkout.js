@@ -13,11 +13,13 @@ exports.handler = async (event) => {
 
   try {
     // fanId and fanEmail are optional — guests can purchase without logging in
-    const { eventId, eventName, ticketPrice, fanId, fanEmail } = JSON.parse(event.body)
+    const { eventId, eventName, ticketPrice, quantity, fanId, fanEmail } = JSON.parse(event.body)
 
     if (!eventId || !ticketPrice) {
       return { statusCode: 400, headers, body: JSON.stringify({ error: 'Missing required fields' }) }
     }
+
+    const qty = Math.min(10, Math.max(1, parseInt(quantity) || 1))
 
     const sessionParams = {
       payment_method_types: ['card'],
@@ -32,11 +34,12 @@ exports.handler = async (event) => {
           },
           unit_amount: Math.round(parseFloat(ticketPrice) * 100),
         },
-        quantity: 1,
+        quantity: qty,
       }],
       metadata: {
         event_id: eventId,
         fan_id: fanId || '',   // empty string for guests (metadata values must be strings)
+        quantity: String(qty), // store for webhook
         type: 'ticket_purchase',
       },
       success_url: `${process.env.URL || 'https://covetedstage.com'}/success?ticket=1&event=${eventId}`,
