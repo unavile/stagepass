@@ -9,6 +9,7 @@ import EditProfileModal from './EditProfileModal'
 import LiveRoom from './LiveRoom'
 import EditPostModal from './EditPostModal'
 import EditEventModal from './EditEventModal'
+import LandingPageModal from './LandingPageModal'
 
 // ─── Design tokens ─────────────────────────────────────────────────────────
 const BG      = '#09090b'
@@ -114,6 +115,7 @@ export default function CreatorApp({ session, profile, onSignOut }) {
   const [liveEvent, setLiveEvent] = useState(null)
   const [editPost, setEditPost] = useState(null)
   const [editEvent, setEditEvent] = useState(null)
+  const [landingPageEvent, setLandingPageEvent] = useState(null) // event to configure landing page for
   const [confirmDelete, setConfirmDelete] = useState(null) // { type: 'post'|'event', item, label }
   const [previewPost, setPreviewPost] = useState(null) // post object for video/audio preview popup
   const [eventFilter, setEventFilter] = useState('current')
@@ -817,6 +819,16 @@ export default function CreatorApp({ session, profile, onSignOut }) {
                           <span style={{ background: ac + '18', color: ac, border: `1px solid ${ac}40`, borderRadius: 5, fontSize: 9, fontWeight: 700, padding: '3px 9px', letterSpacing: '0.14em', textTransform: 'uppercase', fontFamily: "'DM Mono', monospace" }}>
                             {event.event_type === 'virtual' ? (event.always_on ? '🔁 ALWAYS ON' : event.event_mode === 'class' ? '🎓 CLASS' : '📡 BROADCAST') : '📍 IN PERSON'}
                           </span>
+                          {event.access_type === 'ticketed' && (
+                            <button onClick={() => setLandingPageEvent(event)} style={{
+                              background: event.landing_page_enabled ? ac + '18' : 'transparent',
+                              border: `1px solid ${event.landing_page_enabled ? ac + '60' : BORDER}`,
+                              borderRadius: 6, padding: '4px 10px',
+                              color: event.landing_page_enabled ? ac : TEXT2,
+                              fontFamily: "'DM Mono', monospace", fontSize: 10,
+                              cursor: 'pointer', letterSpacing: '0.08em',
+                            }}>🌐 {event.landing_page_enabled ? 'LANDING' : 'LANDING'}</button>
+                          )}
                           <button onClick={() => setEditEvent(event)} style={{
                             background: 'transparent', border: `1px solid ${BORDER}`,
                             borderRadius: 6, padding: '4px 10px', color: TEXT2,
@@ -1347,6 +1359,7 @@ export default function CreatorApp({ session, profile, onSignOut }) {
       {showUpload && <NewPostModal creator={creator} accessToken={session.access_token} onClose={() => setShowUpload(false)} onPostCreated={refetch} />}
       {editPost && <EditPostModal post={editPost} accentColor={ac} accessToken={session.access_token} onClose={() => setEditPost(null)} onSaved={() => { setEditPost(null); nativeRefetchPosts() }} />}
       {editEvent && <EditEventModal event={editEvent} accentColor={ac} accessToken={session.access_token} onClose={() => setEditEvent(null)} onSaved={() => { setEditEvent(null); nativeRefetchEvents() }} />}
+      {landingPageEvent && <LandingPageModal event={landingPageEvent} session={session} onClose={() => setLandingPageEvent(null)} onSaved={() => { setLandingPageEvent(null); nativeRefetchEvents() }} />}
 
       {/* ── Content preview modal (video/audio) ──────────────────────────── */}
       {previewPost && (
