@@ -161,7 +161,7 @@ exports.handler = async (event) => {
 
     // ── Ticket purchase ────────────────────────────────────────────────────
     if (session.metadata?.type === 'ticket_purchase') {
-      const { event_id, fan_id, quantity } = session.metadata
+      const { event_id, fan_id, quantity, ticket_category } = session.metadata
       // fan_id is empty string for guests — treat as null
       const fanIdOrNull = fan_id && fan_id.trim() !== '' ? fan_id : null
       const qty = parseInt(quantity) || 1
@@ -186,6 +186,7 @@ exports.handler = async (event) => {
           buyer_name:        buyerName,
           buyer_email:       buyerEmail,
           buyer_phone:       buyerPhone,
+          ticket_category:   ticket_category || null,
         }, 'stripe_session_id')
 
         // Only create an RSVP row for logged-in fans (guests have no fan account)

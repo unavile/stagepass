@@ -13,13 +13,27 @@ exports.handler = async (event) => {
 
   try {
     // fanId and fanEmail are optional — guests can purchase without logging in
-    const { eventId, eventName, ticketPrice, quantity, fanId, fanEmail } = JSON.parse(event.body)
+    // categoryName and categoryPrice are used when ticket categories are configured
+    const {
+      eventId,
+      eventName,
+      ticketPrice,
+      quantity,
+      fanId,
+      fanEmail,
+      categoryName,   // e.g. "General Admission" — optional
+      categoryPrice,  // per-ticket price for this category — optional, falls back to ticketPrice
+      successUrl,     // optional override (e.g. event landing page URL)
+      cancelUrl,      // optional override
+    } = JSON.parse(event.body)
 
-    if (!eventId || !ticketPrice) {
+    if (!eventId || (!ticketPrice && !categoryPrice)) {
       return { statusCode: 400, headers, body: JSON.stringify({ error: 'Missing required fields' }) }
     }
 
     const qty = Math.min(10, Math.max(1, parseInt(quantity) || 1))
+    const unitPrice = categoryPrice || ticketPrice
+    const lineItemName = categoryName ? `${eventName} — ${categoryName}` : `Ticket: ${eventName}`
 
     const sessionParams = {
       payment_method_types: ['card'],
@@ -29,21 +43,22 @@ exports.handler = async (event) => {
         price_data: {
           currency: 'usd',
           product_data: {
-            name: `Ticket: ${eventName}`,
-            description: `One-time ticket purchase for ${eventName} on Coveted Stage`,
+            name: lineItemName,
+            description: `Ticket purchase for ${eventName} on Coveted Stage`,
           },
-          unit_amount: Math.round(parseFloat(ticketPrice) * 100),
+          unit_amount: Math.round(parseFloat(unitPrice) * 100),
         },
         quantity: qty,
       }],
       metadata: {
         event_id: eventId,
-        fan_id: fanId || '',   // empty string for guests (metadata values must be strings)
-        quantity: String(qty), // store for webhook
+        fan_id: fanId || '',          // empty string for guests
+        quantity: String(qty),
         type: 'ticket_purchase',
+        ticket_category: categoryName || '',
       },
-      success_url: `${process.env.URL || 'https://covetedstage.com'}/success?ticket=1&event=${eventId}`,
-      cancel_url: `${process.env.URL || 'https://covetedstage.com'}`,
+      success_url: successUrl || `${process.env.URL || 'https://covetedstage.com'}/success?ticket=1&event=${eventId}`,
+      cancel_url: cancelUrl || `${process.env.URL || 'https://covetedstage.com'}`,
     }
 
     // Pre-fill email only when we have it (logged-in fans)
