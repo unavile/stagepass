@@ -59,7 +59,7 @@ function formatEventDate(dateStr, timeStr) {
   return `${dayName}, ${monthDay} · ${h12}${minStr} ${ampm}`
 }
 
-export default function EventLanding({ slug }) {
+export default function EventLanding({ slug, fallback = null }) {
   const [event, setEvent] = useState(null)
   const [categories, setCategories] = useState([])
   const [loading, setLoading] = useState(true)
@@ -157,7 +157,7 @@ export default function EventLanding({ slug }) {
   const purchased = typeof window !== 'undefined' && new URLSearchParams(window.location.search).get('purchased') === '1'
 
   if (loading) return <Spinner />
-  if (notFound) return <NotFound />
+  if (notFound) return fallback || <NotFound />
 
   const cat = categories[selectedCat] || categories[0]
   const totalPrice = (parseFloat(cat?.price || 0) * qty).toFixed(2)
