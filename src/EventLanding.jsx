@@ -1,6 +1,5 @@
 import { useState, useEffect } from 'react'
 
-// Format date nicely: "Saturday, October 12, 2025 · 7:00 PM"
 function formatEventDate(dateStr, timeStr) {
   if (!dateStr) return null
   const [y, m, d] = dateStr.split('-').map(Number)
@@ -134,69 +133,59 @@ export default function EventLanding({ slug, fallback = null }) {
   const cat = categories[selectedCat] || categories[0]
   const totalPrice = (parseFloat(cat?.price || 0) * qty).toFixed(2)
   const dateDisplay = formatEventDate(event.event_date, event.start_time)
-  // Use event accent color, falling back to a rich plum
   const accent = event.accent_color || '#7c5cbf'
-  // Light tint of accent for backgrounds
   const accentBg = accent + '18'
   const accentBorder = accent + '55'
 
   return (
-    <div style={{
-      minHeight: '100vh',
-      background: '#faf8f4',
-      fontFamily: "'DM Mono', monospace",
-      color: '#111',
-    }}>
-      {/* ── Top nav banner ── */}
+    <div style={{ minHeight: '100vh', background: '#faf8f4', fontFamily: "'DM Mono', monospace", color: '#111' }}>
+
+      {/* ── Top nav banner — compact ── */}
       <div style={{
         background: '#fff',
         borderBottom: '1.5px solid #ede8df',
-        padding: '0 32px',
+        padding: '0 24px',
         height: 64,
         display: 'flex',
         alignItems: 'center',
         justifyContent: 'space-between',
+        gap: 12,
       }}>
-        {/* Left: Coveted Stage wordmark */}
         <a href="https://covetedstage.com" style={{
           textDecoration: 'none',
           fontFamily: "'DM Mono', monospace",
-          fontSize: 15,
+          fontSize: 13,
           fontWeight: 700,
           color: '#111',
           letterSpacing: '0.18em',
           textTransform: 'uppercase',
+          flexShrink: 0,
         }}>
           Coveted Stage
         </a>
-
-        {/* Right: Event name + Tickets */}
         <div style={{
           fontFamily: 'Georgia, serif',
-          fontSize: 17,
+          fontSize: 15,
           color: '#333',
           fontStyle: 'italic',
-          maxWidth: '60%',
-          textAlign: 'right',
           overflow: 'hidden',
           whiteSpace: 'nowrap',
           textOverflow: 'ellipsis',
+          textAlign: 'right',
         }}>
-          {event.name} — <span style={{ color: accent, fontStyle: 'normal', fontFamily: "'DM Mono', monospace", fontSize: 13, letterSpacing: '0.1em' }}>Tickets</span>
+          {event.name} —{' '}
+          <span style={{ color: accent, fontStyle: 'normal', fontFamily: "'DM Mono', monospace", fontSize: 12, letterSpacing: '0.1em' }}>
+            Tickets
+          </span>
         </div>
       </div>
 
       {/* ── Success banner ── */}
       {purchased && (
         <div style={{
-          background: '#e8f7ee',
-          borderBottom: '1.5px solid #b2dfc5',
-          padding: '16px 32px',
-          display: 'flex',
-          alignItems: 'center',
-          gap: 12,
-          color: '#1a7a44',
-          fontSize: 14,
+          background: '#e8f7ee', borderBottom: '1.5px solid #b2dfc5',
+          padding: '14px 24px', display: 'flex', alignItems: 'center', gap: 12,
+          color: '#1a7a44', fontSize: 14,
         }}>
           <span style={{ fontSize: 22 }}>🎉</span>
           <div>
@@ -208,17 +197,17 @@ export default function EventLanding({ slug, fallback = null }) {
         </div>
       )}
 
-      {/* ── Event header area ── */}
+      {/* ── Event header — compact, ~50% height reduction ── */}
       <div style={{
         background: '#fff',
         borderBottom: '1.5px solid #ede8df',
-        padding: '40px 32px 36px',
+        padding: '20px 24px 18px',   /* was 40px/36px */
         textAlign: 'center',
       }}>
         <h1 style={{
-          margin: '0 0 14px',
+          margin: '0 0 10px',
           fontFamily: 'Georgia, serif',
-          fontSize: 'clamp(32px, 5vw, 56px)',
+          fontSize: 'clamp(24px, 4vw, 42px)',   /* was clamp(32,5vw,56) */
           fontWeight: 700,
           color: '#111',
           lineHeight: 1.15,
@@ -226,6 +215,8 @@ export default function EventLanding({ slug, fallback = null }) {
         }}>
           {event.name}
         </h1>
+
+        {/* Date pill — 1.5× larger font than before (was 15px → 22px) */}
         {dateDisplay && (
           <div style={{
             display: 'inline-flex',
@@ -234,136 +225,137 @@ export default function EventLanding({ slug, fallback = null }) {
             background: accentBg,
             border: `1.5px solid ${accentBorder}`,
             borderRadius: 999,
-            padding: '8px 20px',
-            fontSize: 15,
+            padding: '7px 20px',
+            fontSize: 22,           /* 1.5× the previous 15px */
             color: accent,
-            letterSpacing: '0.04em',
-            marginBottom: 10,
+            letterSpacing: '0.03em',
+            marginBottom: 6,
+            fontFamily: 'Georgia, serif',
           }}>
             📅 {dateDisplay}
           </div>
         )}
+
+        {/* Venue — 1.5× larger (was 14px → 21px) */}
         {event.venue && (
-          <div style={{ color: '#777', fontSize: 14, marginTop: 10, letterSpacing: '0.04em' }}>
+          <div style={{ color: '#555', fontSize: 21, marginTop: 6, letterSpacing: '0.02em', fontFamily: 'Georgia, serif' }}>
             📍 {event.venue}
           </div>
         )}
       </div>
 
-      {/* ── Main content: brochure + description side by side ── */}
+      {/* ── Three-column body: brochure | description | tickets ── */}
       <div
         className="landing-grid"
         style={{
-          maxWidth: 1040,
+          maxWidth: 1200,
           margin: '0 auto',
-          padding: '48px 28px',
+          padding: '36px 20px 60px',
           display: 'grid',
-          gridTemplateColumns: '1fr 1fr',
-          gap: 40,
+          gridTemplateColumns: '1fr 1fr 340px',
+          gap: 28,
           alignItems: 'start',
         }}
       >
-        {/* Left: brochure image */}
-        {event.brochure_image_url && (
-          <div style={{ borderRadius: 18, overflow: 'hidden', boxShadow: '0 8px 40px rgba(0,0,0,0.12)' }}>
-            <img
-              src={event.brochure_image_url}
-              alt={event.name}
-              style={{ width: '100%', display: 'block', objectFit: 'cover' }}
-            />
-          </div>
-        )}
+        {/* Col 1: Brochure image */}
+        <div className="col-brochure">
+          {event.brochure_image_url ? (
+            <div style={{ borderRadius: 16, overflow: 'hidden', boxShadow: '0 6px 32px rgba(0,0,0,0.11)', maxWidth: '50%' }}>
+              <img
+                src={event.brochure_image_url}
+                alt={event.name}
+                style={{ width: '100%', display: 'block', objectFit: 'cover' }}
+              />
+            </div>
+          ) : (
+            <div style={{
+              borderRadius: 16, background: '#f0ece4',
+              border: '1.5px solid #ede8df', aspectRatio: '3/4',
+              display: 'flex', alignItems: 'center', justifyContent: 'center',
+              color: '#ccc', fontSize: 48,
+            }}>🎭</div>
+          )}
+        </div>
 
-        {/* Right: description */}
-        {event.landing_description ? (
-          <div>
-            <div style={{
-              fontSize: 11, color: accent, letterSpacing: '0.2em',
-              marginBottom: 16, fontFamily: "'DM Mono', monospace",
-            }}>
-              ABOUT THIS EVENT
-            </div>
-            <div style={{
-              color: '#222',
-              fontSize: 17,
-              lineHeight: 1.85,
-              fontFamily: 'Georgia, serif',
-              whiteSpace: 'pre-wrap',
-            }}>
-              {event.landing_description}
-            </div>
-          </div>
-        ) : (
-          // If no description but also no brochure, fill with event name so grid isn't empty
-          !event.brochure_image_url && (
-            <div style={{ color: '#999', fontSize: 15, fontFamily: 'Georgia, serif', fontStyle: 'italic' }}>
+        {/* Col 2: Description */}
+        <div className="col-description">
+          {event.landing_description ? (
+            <>
+              <div style={{
+                fontSize: 11, color: accent, letterSpacing: '0.2em',
+                marginBottom: 14, fontFamily: "'DM Mono', monospace",
+              }}>
+                ABOUT THIS EVENT
+              </div>
+              <div style={{
+                color: '#222', fontSize: 17, lineHeight: 1.85,
+                fontFamily: 'Georgia, serif', whiteSpace: 'pre-wrap',
+              }}>
+                {event.landing_description}
+              </div>
+            </>
+          ) : (
+            <div style={{ color: '#bbb', fontSize: 15, fontFamily: 'Georgia, serif', fontStyle: 'italic' }}>
               No description provided.
             </div>
-          )
-        )}
-      </div>
+          )}
+        </div>
 
-      {/* ── Ticket purchase section ── */}
-      <div style={{
-        background: '#fff',
-        borderTop: '1.5px solid #ede8df',
-        borderBottom: '1.5px solid #ede8df',
-        padding: '48px 28px',
-      }}>
-        <div style={{ maxWidth: 600, margin: '0 auto' }}>
-          <h2 style={{
-            fontFamily: 'Georgia, serif',
-            fontSize: 30,
-            fontWeight: 700,
-            color: '#111',
-            margin: '0 0 32px',
-            textAlign: 'center',
+        {/* Col 3: Ticket purchase card */}
+        <div
+          className="col-tickets"
+          style={{
+            background: '#fff',
+            border: '1.5px solid #ede8df',
+            borderRadius: 18,
+            padding: '24px 20px',
+            position: 'sticky',
+            top: 20,
+            boxShadow: '0 4px 24px rgba(0,0,0,0.07)',
+          }}
+        >
+          <div style={{
+            fontFamily: 'Georgia, serif', fontSize: 22, fontWeight: 700,
+            color: '#111', marginBottom: 20,
           }}>
             Get Tickets
-          </h2>
+          </div>
 
-          {/* Ticket categories */}
+          {/* Categories (multi) */}
           {categories.length > 1 && (
-            <div style={{ marginBottom: 28 }}>
-              <div style={{
-                fontSize: 11, color: '#777', letterSpacing: '0.18em',
-                marginBottom: 12, fontFamily: "'DM Mono', monospace",
-              }}>
+            <div style={{ marginBottom: 20 }}>
+              <div style={{ fontSize: 10, color: '#999', letterSpacing: '0.18em', marginBottom: 10 }}>
                 TICKET TYPE
               </div>
-              <div style={{ display: 'flex', flexDirection: 'column', gap: 10 }}>
+              <div style={{ display: 'flex', flexDirection: 'column', gap: 8 }}>
                 {categories.map((c, i) => (
                   <button
                     key={c.id}
                     onClick={() => setSelectedCat(i)}
                     style={{
                       background: selectedCat === i ? accentBg : '#faf8f4',
-                      border: `2px solid ${selectedCat === i ? accent : '#ddd'}`,
-                      borderRadius: 12,
-                      padding: '16px 20px',
-                      cursor: 'pointer',
-                      textAlign: 'left',
-                      transition: 'all 0.15s',
+                      border: `2px solid ${selectedCat === i ? accent : '#e0dbd2'}`,
+                      borderRadius: 10, padding: '12px 14px',
+                      cursor: 'pointer', textAlign: 'left', transition: 'all 0.15s',
                     }}
                   >
                     <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
                       <div style={{
                         color: selectedCat === i ? accent : '#222',
-                        fontSize: 16, fontFamily: 'Georgia, serif',
+                        fontSize: 14, fontFamily: 'Georgia, serif',
                         fontWeight: selectedCat === i ? 700 : 400,
                       }}>
                         {c.name}
                       </div>
                       <div style={{
                         color: selectedCat === i ? accent : '#444',
-                        fontSize: 18, fontWeight: 700,
-                        fontFamily: "'DM Mono', monospace",
+                        fontSize: 15, fontWeight: 700, fontFamily: "'DM Mono', monospace",
                       }}>
                         ${parseFloat(c.price).toFixed(2)}
                       </div>
                     </div>
                     {c.description && (
-                      <div style={{ color: '#888', fontSize: 13, marginTop: 6, fontFamily: 'Georgia, serif', fontStyle: 'italic' }}>
+                      <div style={{ color: '#888', fontSize: 12, marginTop: 4, fontFamily: 'Georgia, serif', fontStyle: 'italic' }}>
                         {c.description}
                       </div>
                     )}
@@ -377,53 +369,43 @@ export default function EventLanding({ slug, fallback = null }) {
           {categories.length === 1 && (
             <div style={{
               display: 'flex', justifyContent: 'space-between', alignItems: 'center',
-              background: '#faf8f4',
-              border: '1.5px solid #ede8df',
-              borderRadius: 12,
-              padding: '18px 24px',
-              marginBottom: 24,
+              background: '#faf8f4', border: '1.5px solid #ede8df',
+              borderRadius: 10, padding: '14px 16px', marginBottom: 18,
             }}>
-              <div style={{ color: '#222', fontSize: 17, fontFamily: 'Georgia, serif' }}>
+              <div style={{ color: '#222', fontSize: 15, fontFamily: 'Georgia, serif' }}>
                 {categories[0].name}
               </div>
-              <div style={{ color: accent, fontSize: 22, fontWeight: 700, fontFamily: "'DM Mono', monospace" }}>
+              <div style={{ color: accent, fontSize: 20, fontWeight: 700, fontFamily: "'DM Mono', monospace" }}>
                 ${parseFloat(categories[0].price || 0).toFixed(2)}
               </div>
             </div>
           )}
 
-          {/* Quantity selector */}
-          <div style={{ marginBottom: 24 }}>
-            <div style={{ fontSize: 11, color: '#777', letterSpacing: '0.18em', marginBottom: 12, fontFamily: "'DM Mono', monospace" }}>
-              QUANTITY
-            </div>
-            <div style={{ display: 'flex', alignItems: 'center', gap: 0, border: '1.5px solid #ddd', borderRadius: 12, overflow: 'hidden', width: 180 }}>
+          {/* Quantity */}
+          <div style={{ marginBottom: 18 }}>
+            <div style={{ fontSize: 10, color: '#999', letterSpacing: '0.18em', marginBottom: 10 }}>QUANTITY</div>
+            <div style={{ display: 'flex', alignItems: 'center', border: '1.5px solid #ddd', borderRadius: 10, overflow: 'hidden', width: 160 }}>
               <button
                 onClick={() => setQty(q => Math.max(1, q - 1))}
                 disabled={qty <= 1}
                 style={{
-                  width: 52, height: 52,
-                  background: '#faf8f4', border: 'none', borderRight: '1.5px solid #ddd',
-                  color: qty <= 1 ? '#ccc' : '#333', fontSize: 22,
-                  cursor: qty <= 1 ? 'not-allowed' : 'pointer',
-                  fontFamily: "'DM Mono', monospace",
+                  width: 46, height: 46, background: '#faf8f4', border: 'none',
+                  borderRight: '1.5px solid #ddd', color: qty <= 1 ? '#ccc' : '#333',
+                  fontSize: 20, cursor: qty <= 1 ? 'not-allowed' : 'pointer',
                   display: 'flex', alignItems: 'center', justifyContent: 'center',
                 }}
               >−</button>
               <div style={{
-                flex: 1, textAlign: 'center',
-                fontSize: 22, fontWeight: 700, color: '#111',
-                fontFamily: "'DM Mono', monospace",
+                flex: 1, textAlign: 'center', fontSize: 20, fontWeight: 700,
+                color: '#111', fontFamily: "'DM Mono', monospace",
               }}>{qty}</div>
               <button
                 onClick={() => setQty(q => Math.min(10, q + 1))}
                 disabled={qty >= 10}
                 style={{
-                  width: 52, height: 52,
-                  background: '#faf8f4', border: 'none', borderLeft: '1.5px solid #ddd',
-                  color: qty >= 10 ? '#ccc' : '#333', fontSize: 22,
-                  cursor: qty >= 10 ? 'not-allowed' : 'pointer',
-                  fontFamily: "'DM Mono', monospace",
+                  width: 46, height: 46, background: '#faf8f4', border: 'none',
+                  borderLeft: '1.5px solid #ddd', color: qty >= 10 ? '#ccc' : '#333',
+                  fontSize: 20, cursor: qty >= 10 ? 'not-allowed' : 'pointer',
                   display: 'flex', alignItems: 'center', justifyContent: 'center',
                 }}
               >+</button>
@@ -432,17 +414,12 @@ export default function EventLanding({ slug, fallback = null }) {
 
           {/* Total */}
           <div style={{
-            background: accentBg,
-            border: `1.5px solid ${accentBorder}`,
-            borderRadius: 12,
-            padding: '16px 24px',
-            marginBottom: 24,
-            display: 'flex',
-            justifyContent: 'space-between',
-            alignItems: 'center',
+            background: accentBg, border: `1.5px solid ${accentBorder}`,
+            borderRadius: 10, padding: '12px 16px', marginBottom: 16,
+            display: 'flex', justifyContent: 'space-between', alignItems: 'center',
           }}>
-            <div style={{ color: '#555', fontSize: 13, letterSpacing: '0.12em', fontFamily: "'DM Mono', monospace" }}>TOTAL</div>
-            <div style={{ color: accent, fontSize: 28, fontWeight: 700, fontFamily: "'DM Mono', monospace" }}>
+            <div style={{ color: '#666', fontSize: 11, letterSpacing: '0.12em' }}>TOTAL</div>
+            <div style={{ color: accent, fontSize: 24, fontWeight: 700, fontFamily: "'DM Mono', monospace" }}>
               ${totalPrice}
             </div>
           </div>
@@ -452,34 +429,28 @@ export default function EventLanding({ slug, fallback = null }) {
             onClick={handleBuy}
             disabled={buying}
             style={{
-              width: '100%',
-              padding: '18px 0',
+              width: '100%', padding: '15px 0',
               background: buying ? '#ddd' : accent,
               color: buying ? '#aaa' : '#fff',
-              border: 'none',
-              borderRadius: 12,
-              fontFamily: "'DM Mono', monospace",
-              fontSize: 15,
-              fontWeight: 700,
-              letterSpacing: '0.14em',
-              cursor: buying ? 'not-allowed' : 'pointer',
+              border: 'none', borderRadius: 10,
+              fontFamily: "'DM Mono', monospace", fontSize: 13, fontWeight: 700,
+              letterSpacing: '0.14em', cursor: buying ? 'not-allowed' : 'pointer',
               transition: 'all 0.15s',
-              boxShadow: buying ? 'none' : `0 4px 24px ${accent}44`,
+              boxShadow: buying ? 'none' : `0 4px 20px ${accent}44`,
             }}
           >
             {buying ? 'REDIRECTING...' : `BUY ${qty > 1 ? qty + ' TICKETS' : 'TICKET'} →`}
           </button>
 
           {buyError && (
-            <div style={{ color: '#c0392b', fontSize: 13, marginTop: 12, textAlign: 'center', lineHeight: 1.5 }}>
+            <div style={{ color: '#c0392b', fontSize: 12, marginTop: 10, textAlign: 'center', lineHeight: 1.5 }}>
               {buyError}
             </div>
           )}
 
           <div style={{
-            color: '#aaa', fontSize: 11, textAlign: 'center',
-            marginTop: 16, lineHeight: 1.6, letterSpacing: '0.06em',
-            fontFamily: 'Georgia, serif', fontStyle: 'italic',
+            color: '#bbb', fontSize: 10, textAlign: 'center', marginTop: 14,
+            lineHeight: 1.6, fontFamily: 'Georgia, serif', fontStyle: 'italic',
           }}>
             Secure checkout via Stripe. No account required.
           </div>
@@ -488,12 +459,9 @@ export default function EventLanding({ slug, fallback = null }) {
 
       {/* ── Footer ── */}
       <div style={{
-        padding: '28px 32px',
-        textAlign: 'center',
-        color: '#bbb',
-        fontSize: 11,
-        letterSpacing: '0.16em',
-        fontFamily: "'DM Mono', monospace",
+        borderTop: '1.5px solid #ede8df', padding: '22px 24px',
+        textAlign: 'center', color: '#bbb', fontSize: 11,
+        letterSpacing: '0.16em', fontFamily: "'DM Mono', monospace",
       }}>
         COVETED STAGE · THE STAGE IS YOURS ·{' '}
         <a href="https://covetedstage.com" style={{ color: '#aaa', textDecoration: 'none' }}>
@@ -501,10 +469,33 @@ export default function EventLanding({ slug, fallback = null }) {
         </a>
       </div>
 
+      {/* ── Responsive styles ── */}
       <style>{`
-        @media (max-width: 680px) {
+        /* Tablet: collapse to 2 cols — brochure full width, description + tickets side by side */
+        @media (max-width: 900px) {
+          .landing-grid {
+            grid-template-columns: 1fr 1fr !important;
+          }
+          .col-brochure {
+            grid-column: 1 / -1 !important;
+          }
+          .col-tickets {
+            position: static !important;
+          }
+        }
+
+        /* Mobile: single column, tickets at bottom */
+        @media (max-width: 560px) {
           .landing-grid {
             grid-template-columns: 1fr !important;
+            padding: 20px 16px 40px !important;
+            gap: 20px !important;
+          }
+          .col-brochure, .col-description, .col-tickets {
+            grid-column: 1 / -1 !important;
+          }
+          .col-tickets {
+            position: static !important;
           }
         }
       `}</style>
