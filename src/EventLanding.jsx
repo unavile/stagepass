@@ -1,47 +1,5 @@
 import { useState, useEffect } from 'react'
 
-// ─── Design tokens — bright, vibrant landing page palette ─────────────────────
-const GOLD    = '#c9a84c'
-const GOLD2   = '#e8c96a'
-const CREAM   = '#f4f0e8'
-const DARK    = '#09090b'
-const DARK2   = '#111114'
-const DARK3   = '#18181c'
-const BORDER  = 'rgba(255,255,255,0.12)'
-const TEXT2   = '#9a9690'
-const RED     = '#e55'
-
-function Spinner() {
-  return (
-    <div style={{
-      minHeight: '100vh', background: DARK,
-      display: 'flex', alignItems: 'center', justifyContent: 'center',
-      fontFamily: "'DM Mono', monospace", color: '#555', letterSpacing: '0.2em', fontSize: 12,
-    }}>
-      LOADING...
-    </div>
-  )
-}
-
-function NotFound() {
-  return (
-    <div style={{
-      minHeight: '100vh', background: DARK,
-      display: 'flex', flexDirection: 'column', alignItems: 'center', justifyContent: 'center',
-      fontFamily: "'DM Mono', monospace", gap: 16, padding: 24,
-    }}>
-      <div style={{ fontSize: 48 }}>🎭</div>
-      <div style={{ color: CREAM, fontSize: 18, fontWeight: 700 }}>Event Not Found</div>
-      <div style={{ color: TEXT2, fontSize: 12, textAlign: 'center', maxWidth: 320 }}>
-        This event page doesn't exist or is no longer available.
-      </div>
-      <a href="https://covetedstage.com" style={{ color: GOLD, fontSize: 11, letterSpacing: '0.12em', textDecoration: 'none' }}>
-        ← BACK TO COVETED STAGE
-      </a>
-    </div>
-  )
-}
-
 // Format date nicely: "Saturday, October 12, 2025 · 7:00 PM"
 function formatEventDate(dateStr, timeStr) {
   if (!dateStr) return null
@@ -49,14 +7,43 @@ function formatEventDate(dateStr, timeStr) {
   const date = new Date(y, m - 1, d)
   const dayName = date.toLocaleDateString('en-US', { weekday: 'long' })
   const monthDay = date.toLocaleDateString('en-US', { month: 'long', day: 'numeric', year: 'numeric' })
-
   if (!timeStr) return `${dayName}, ${monthDay}`
-
   const [h, min] = timeStr.split(':').map(Number)
   const ampm = h >= 12 ? 'PM' : 'AM'
   const h12 = h % 12 || 12
   const minStr = min === 0 ? '' : `:${String(min).padStart(2, '0')}`
   return `${dayName}, ${monthDay} · ${h12}${minStr} ${ampm}`
+}
+
+function Spinner() {
+  return (
+    <div style={{
+      minHeight: '100vh', background: '#faf8f4',
+      display: 'flex', alignItems: 'center', justifyContent: 'center',
+      fontFamily: "'DM Mono', monospace", color: '#aaa', letterSpacing: '0.2em', fontSize: 13,
+    }}>
+      Loading…
+    </div>
+  )
+}
+
+function NotFound() {
+  return (
+    <div style={{
+      minHeight: '100vh', background: '#faf8f4',
+      display: 'flex', flexDirection: 'column', alignItems: 'center', justifyContent: 'center',
+      fontFamily: "'DM Mono', monospace", gap: 16, padding: 24,
+    }}>
+      <div style={{ fontSize: 48 }}>🎭</div>
+      <div style={{ color: '#111', fontSize: 20, fontWeight: 700 }}>Event Not Found</div>
+      <div style={{ color: '#777', fontSize: 13, textAlign: 'center', maxWidth: 320 }}>
+        This event page doesn't exist or is no longer available.
+      </div>
+      <a href="https://covetedstage.com" style={{ color: '#7c5cbf', fontSize: 12, letterSpacing: '0.12em', textDecoration: 'none' }}>
+        ← COVETED STAGE
+      </a>
+    </div>
+  )
 }
 
 export default function EventLanding({ slug, fallback = null }) {
@@ -65,7 +52,6 @@ export default function EventLanding({ slug, fallback = null }) {
   const [loading, setLoading] = useState(true)
   const [notFound, setNotFound] = useState(false)
 
-  // Selected category index and quantity
   const [selectedCat, setSelectedCat] = useState(0)
   const [qty, setQty] = useState(1)
   const [buying, setBuying] = useState(false)
@@ -77,21 +63,17 @@ export default function EventLanding({ slug, fallback = null }) {
   useEffect(() => {
     async function load() {
       try {
-        // Fetch event by slug (landing_page_enabled must be true)
         const evRes = await fetch(
           `${sbUrl}/rest/v1/events?slug=eq.${encodeURIComponent(slug)}&landing_page_enabled=eq.true&select=*`,
           { headers: { 'apikey': sbKey } }
         )
         const evData = await evRes.json()
         if (!Array.isArray(evData) || evData.length === 0) {
-          setNotFound(true)
-          setLoading(false)
-          return
+          setNotFound(true); setLoading(false); return
         }
         const ev = evData[0]
         setEvent(ev)
 
-        // Fetch ticket categories for this event
         const catRes = await fetch(
           `${sbUrl}/rest/v1/ticket_categories?event_id=eq.${ev.id}&order=sort_order.asc,created_at.asc&select=*`,
           { headers: { 'apikey': sbKey } }
@@ -100,13 +82,7 @@ export default function EventLanding({ slug, fallback = null }) {
         if (Array.isArray(catData) && catData.length > 0) {
           setCategories(catData)
         } else {
-          // Fall back to single-price from event itself
-          setCategories([{
-            id: 'default',
-            name: 'General Admission',
-            price: ev.ticket_price || 0,
-            description: '',
-          }])
+          setCategories([{ id: 'default', name: 'General Admission', price: ev.ticket_price || 0, description: '' }])
         }
       } catch (err) {
         console.error('EventLanding load error:', err)
@@ -121,11 +97,9 @@ export default function EventLanding({ slug, fallback = null }) {
     if (buying) return
     setBuyError('')
     setBuying(true)
-
     try {
       const cat = categories[selectedCat]
       const currentUrl = window.location.href
-
       const res = await fetch('/.netlify/functions/create-ticket-checkout', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
@@ -136,7 +110,6 @@ export default function EventLanding({ slug, fallback = null }) {
           quantity: qty,
           categoryName: categories.length > 1 ? cat.name : undefined,
           categoryPrice: cat.price,
-          // Return to this landing page after purchase
           successUrl: `${currentUrl}?purchased=1`,
           cancelUrl: currentUrl,
         }),
@@ -153,7 +126,6 @@ export default function EventLanding({ slug, fallback = null }) {
     setBuying(false)
   }
 
-  // Show success banner if returned from Stripe
   const purchased = typeof window !== 'undefined' && new URLSearchParams(window.location.search).get('purchased') === '1'
 
   if (loading) return <Spinner />
@@ -162,215 +134,213 @@ export default function EventLanding({ slug, fallback = null }) {
   const cat = categories[selectedCat] || categories[0]
   const totalPrice = (parseFloat(cat?.price || 0) * qty).toFixed(2)
   const dateDisplay = formatEventDate(event.event_date, event.start_time)
-  const accent = event.accent_color || GOLD
+  // Use event accent color, falling back to a rich plum
+  const accent = event.accent_color || '#7c5cbf'
+  // Light tint of accent for backgrounds
+  const accentBg = accent + '18'
+  const accentBorder = accent + '55'
 
   return (
     <div style={{
       minHeight: '100vh',
-      background: DARK,
+      background: '#faf8f4',
       fontFamily: "'DM Mono', monospace",
-      color: CREAM,
+      color: '#111',
     }}>
-      {/* ── Hero ── */}
+      {/* ── Top nav banner ── */}
       <div style={{
-        position: 'relative',
-        width: '100%',
-        minHeight: 420,
-        overflow: 'hidden',
+        background: '#fff',
+        borderBottom: '1.5px solid #ede8df',
+        padding: '0 32px',
+        height: 64,
         display: 'flex',
-        flexDirection: 'column',
         alignItems: 'center',
-        justifyContent: 'flex-end',
-        paddingBottom: 48,
+        justifyContent: 'space-between',
       }}>
-        {/* Background image */}
-        {event.brochure_image_url ? (
-          <img
-            src={event.brochure_image_url}
-            alt=""
-            style={{
-              position: 'absolute', inset: 0, width: '100%', height: '100%',
-              objectFit: 'cover', objectPosition: 'center',
-            }}
-          />
-        ) : (
-          <div style={{
-            position: 'absolute', inset: 0,
-            background: `linear-gradient(135deg, ${DARK2} 0%, #1a1020 50%, ${DARK3} 100%)`,
-          }} />
-        )}
-        {/* Gradient overlay */}
-        <div style={{
-          position: 'absolute', inset: 0,
-          background: 'linear-gradient(to bottom, rgba(9,9,11,0.3) 0%, rgba(9,9,11,0.85) 100%)',
-        }} />
-
-        {/* Coveted Stage branding */}
-        <div style={{
-          position: 'absolute', top: 24, left: 0, right: 0,
-          display: 'flex', justifyContent: 'center',
+        {/* Left: Coveted Stage wordmark */}
+        <a href="https://covetedstage.com" style={{
+          textDecoration: 'none',
+          fontFamily: "'DM Mono', monospace",
+          fontSize: 15,
+          fontWeight: 700,
+          color: '#111',
+          letterSpacing: '0.18em',
+          textTransform: 'uppercase',
         }}>
-          <a href="https://covetedstage.com" style={{
-            color: accent, fontSize: 13, letterSpacing: '0.22em',
-            fontWeight: 700, textDecoration: 'none', opacity: 0.9,
-          }}>
-            ✦ COVETED STAGE
-          </a>
-        </div>
+          Coveted Stage
+        </a>
 
-        {/* Event title */}
-        <div style={{ position: 'relative', textAlign: 'center', padding: '0 24px', maxWidth: 700 }}>
-          {event.category && (
-            <div style={{
-              display: 'inline-block',
-              background: accent + '22',
-              border: `1px solid ${accent}55`,
-              borderRadius: 20,
-              padding: '4px 14px',
-              fontSize: 10,
-              color: accent,
-              letterSpacing: '0.18em',
-              marginBottom: 16,
-            }}>
-              {event.category.toUpperCase()}
-            </div>
-          )}
-          <h1 style={{
-            fontSize: 'clamp(28px, 6vw, 52px)',
-            fontWeight: 800,
-            color: CREAM,
-            margin: '0 0 12px',
-            lineHeight: 1.15,
-            letterSpacing: '-0.01em',
-            fontFamily: 'Georgia, serif',
-          }}>
-            {event.name}
-          </h1>
-          {dateDisplay && (
-            <div style={{
-              color: accent,
-              fontSize: 13,
-              letterSpacing: '0.12em',
-              marginBottom: 8,
-            }}>
-              📅 {dateDisplay}
-            </div>
-          )}
-          {event.location && (
-            <div style={{ color: TEXT2, fontSize: 12, letterSpacing: '0.08em' }}>
-              📍 {event.location}
-            </div>
-          )}
+        {/* Right: Event name + Tickets */}
+        <div style={{
+          fontFamily: 'Georgia, serif',
+          fontSize: 17,
+          color: '#333',
+          fontStyle: 'italic',
+          maxWidth: '60%',
+          textAlign: 'right',
+          overflow: 'hidden',
+          whiteSpace: 'nowrap',
+          textOverflow: 'ellipsis',
+        }}>
+          {event.name} — <span style={{ color: accent, fontStyle: 'normal', fontFamily: "'DM Mono', monospace", fontSize: 13, letterSpacing: '0.1em' }}>Tickets</span>
         </div>
       </div>
 
       {/* ── Success banner ── */}
       {purchased && (
         <div style={{
-          background: 'rgba(80,200,120,0.12)',
-          border: '1px solid rgba(80,200,120,0.35)',
-          borderRadius: 12,
-          padding: '16px 24px',
-          margin: '24px auto',
-          maxWidth: 700,
+          background: '#e8f7ee',
+          borderBottom: '1.5px solid #b2dfc5',
+          padding: '16px 32px',
           display: 'flex',
           alignItems: 'center',
           gap: 12,
-          color: '#6ee7a0',
-          fontSize: 13,
-          letterSpacing: '0.08em',
+          color: '#1a7a44',
+          fontSize: 14,
         }}>
-          <span style={{ fontSize: 20 }}>🎉</span>
+          <span style={{ fontSize: 22 }}>🎉</span>
           <div>
             <div style={{ fontWeight: 700, marginBottom: 2 }}>Purchase confirmed!</div>
-            <div style={{ fontSize: 11, color: TEXT2 }}>A confirmation email has been sent to you. See you at the event!</div>
+            <div style={{ fontSize: 12, color: '#3a9a64', fontFamily: 'Georgia, serif' }}>
+              A confirmation email has been sent to you. See you at the event!
+            </div>
           </div>
         </div>
       )}
 
-      {/* ── Main content ── */}
+      {/* ── Event header area ── */}
       <div style={{
-        maxWidth: 900,
-        margin: '0 auto',
-        padding: '40px 20px 80px',
-        display: 'grid',
-        gridTemplateColumns: 'minmax(0,1fr) 340px',
-        gap: 40,
-        alignItems: 'start',
-      }}
-        className="landing-grid"
-      >
-        {/* Left: description + brochure */}
-        <div>
-          {event.landing_description && (
-            <div style={{
-              background: 'rgba(255,255,255,0.03)',
-              border: `1px solid ${BORDER}`,
-              borderRadius: 16,
-              padding: '28px 32px',
-              marginBottom: 28,
-            }}>
-              <div style={{
-                fontSize: 10, color: accent, letterSpacing: '0.2em', marginBottom: 16,
-              }}>
-                ABOUT THIS EVENT
-              </div>
-              <div style={{
-                color: CREAM,
-                fontSize: 15,
-                lineHeight: 1.8,
-                fontFamily: 'Georgia, serif',
-                whiteSpace: 'pre-wrap',
-              }}>
-                {event.landing_description}
-              </div>
-            </div>
-          )}
+        background: '#fff',
+        borderBottom: '1.5px solid #ede8df',
+        padding: '40px 32px 36px',
+        textAlign: 'center',
+      }}>
+        <h1 style={{
+          margin: '0 0 14px',
+          fontFamily: 'Georgia, serif',
+          fontSize: 'clamp(32px, 5vw, 56px)',
+          fontWeight: 700,
+          color: '#111',
+          lineHeight: 1.15,
+          letterSpacing: '-0.01em',
+        }}>
+          {event.name}
+        </h1>
+        {dateDisplay && (
+          <div style={{
+            display: 'inline-flex',
+            alignItems: 'center',
+            gap: 8,
+            background: accentBg,
+            border: `1.5px solid ${accentBorder}`,
+            borderRadius: 999,
+            padding: '8px 20px',
+            fontSize: 15,
+            color: accent,
+            letterSpacing: '0.04em',
+            marginBottom: 10,
+          }}>
+            📅 {dateDisplay}
+          </div>
+        )}
+        {event.venue && (
+          <div style={{ color: '#777', fontSize: 14, marginTop: 10, letterSpacing: '0.04em' }}>
+            📍 {event.venue}
+          </div>
+        )}
+      </div>
 
-          {event.brochure_image_url && (
+      {/* ── Main content: brochure + description side by side ── */}
+      <div
+        className="landing-grid"
+        style={{
+          maxWidth: 1040,
+          margin: '0 auto',
+          padding: '48px 28px',
+          display: 'grid',
+          gridTemplateColumns: '1fr 1fr',
+          gap: 40,
+          alignItems: 'start',
+        }}
+      >
+        {/* Left: brochure image */}
+        {event.brochure_image_url && (
+          <div style={{ borderRadius: 18, overflow: 'hidden', boxShadow: '0 8px 40px rgba(0,0,0,0.12)' }}>
             <img
               src={event.brochure_image_url}
               alt={event.name}
-              style={{
-                width: '100%',
-                borderRadius: 16,
-                border: `1px solid ${BORDER}`,
-                objectFit: 'cover',
-                maxHeight: 480,
-              }}
+              style={{ width: '100%', display: 'block', objectFit: 'cover' }}
             />
-          )}
-        </div>
-
-        {/* Right: ticket purchase card */}
-        <div style={{
-          background: DARK2,
-          border: `1px solid ${BORDER}`,
-          borderRadius: 20,
-          padding: '28px 24px',
-          position: 'sticky',
-          top: 24,
-        }}>
-          <div style={{ fontSize: 10, color: accent, letterSpacing: '0.2em', marginBottom: 20 }}>
-            GET TICKETS
           </div>
+        )}
+
+        {/* Right: description */}
+        {event.landing_description ? (
+          <div>
+            <div style={{
+              fontSize: 11, color: accent, letterSpacing: '0.2em',
+              marginBottom: 16, fontFamily: "'DM Mono', monospace",
+            }}>
+              ABOUT THIS EVENT
+            </div>
+            <div style={{
+              color: '#222',
+              fontSize: 17,
+              lineHeight: 1.85,
+              fontFamily: 'Georgia, serif',
+              whiteSpace: 'pre-wrap',
+            }}>
+              {event.landing_description}
+            </div>
+          </div>
+        ) : (
+          // If no description but also no brochure, fill with event name so grid isn't empty
+          !event.brochure_image_url && (
+            <div style={{ color: '#999', fontSize: 15, fontFamily: 'Georgia, serif', fontStyle: 'italic' }}>
+              No description provided.
+            </div>
+          )
+        )}
+      </div>
+
+      {/* ── Ticket purchase section ── */}
+      <div style={{
+        background: '#fff',
+        borderTop: '1.5px solid #ede8df',
+        borderBottom: '1.5px solid #ede8df',
+        padding: '48px 28px',
+      }}>
+        <div style={{ maxWidth: 600, margin: '0 auto' }}>
+          <h2 style={{
+            fontFamily: 'Georgia, serif',
+            fontSize: 30,
+            fontWeight: 700,
+            color: '#111',
+            margin: '0 0 32px',
+            textAlign: 'center',
+          }}>
+            Get Tickets
+          </h2>
 
           {/* Ticket categories */}
           {categories.length > 1 && (
-            <div style={{ marginBottom: 20 }}>
-              <div style={{ fontSize: 9, color: TEXT2, letterSpacing: '0.14em', marginBottom: 10 }}>
+            <div style={{ marginBottom: 28 }}>
+              <div style={{
+                fontSize: 11, color: '#777', letterSpacing: '0.18em',
+                marginBottom: 12, fontFamily: "'DM Mono', monospace",
+              }}>
                 TICKET TYPE
               </div>
-              <div style={{ display: 'flex', flexDirection: 'column', gap: 8 }}>
+              <div style={{ display: 'flex', flexDirection: 'column', gap: 10 }}>
                 {categories.map((c, i) => (
                   <button
                     key={c.id}
                     onClick={() => setSelectedCat(i)}
                     style={{
-                      background: selectedCat === i ? accent + '18' : 'transparent',
-                      border: `1.5px solid ${selectedCat === i ? accent : BORDER}`,
-                      borderRadius: 10,
-                      padding: '12px 14px',
+                      background: selectedCat === i ? accentBg : '#faf8f4',
+                      border: `2px solid ${selectedCat === i ? accent : '#ddd'}`,
+                      borderRadius: 12,
+                      padding: '16px 20px',
                       cursor: 'pointer',
                       textAlign: 'left',
                       transition: 'all 0.15s',
@@ -378,22 +348,22 @@ export default function EventLanding({ slug, fallback = null }) {
                   >
                     <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
                       <div style={{
-                        color: selectedCat === i ? accent : CREAM,
-                        fontSize: 12, fontFamily: "'DM Mono', monospace",
-                        letterSpacing: '0.06em',
+                        color: selectedCat === i ? accent : '#222',
+                        fontSize: 16, fontFamily: 'Georgia, serif',
+                        fontWeight: selectedCat === i ? 700 : 400,
                       }}>
                         {c.name}
                       </div>
                       <div style={{
-                        color: selectedCat === i ? accent : TEXT2,
-                        fontSize: 13, fontWeight: 700,
+                        color: selectedCat === i ? accent : '#444',
+                        fontSize: 18, fontWeight: 700,
                         fontFamily: "'DM Mono', monospace",
                       }}>
                         ${parseFloat(c.price).toFixed(2)}
                       </div>
                     </div>
                     {c.description && (
-                      <div style={{ color: TEXT2, fontSize: 10, marginTop: 4, letterSpacing: '0.06em' }}>
+                      <div style={{ color: '#888', fontSize: 13, marginTop: 6, fontFamily: 'Georgia, serif', fontStyle: 'italic' }}>
                         {c.description}
                       </div>
                     )}
@@ -403,76 +373,76 @@ export default function EventLanding({ slug, fallback = null }) {
             </div>
           )}
 
-          {/* Single category price display */}
+          {/* Single category */}
           {categories.length === 1 && (
             <div style={{
               display: 'flex', justifyContent: 'space-between', alignItems: 'center',
-              marginBottom: 20, paddingBottom: 16,
-              borderBottom: `1px solid ${BORDER}`,
+              background: '#faf8f4',
+              border: '1.5px solid #ede8df',
+              borderRadius: 12,
+              padding: '18px 24px',
+              marginBottom: 24,
             }}>
-              <div style={{ color: CREAM, fontSize: 12, letterSpacing: '0.06em' }}>
+              <div style={{ color: '#222', fontSize: 17, fontFamily: 'Georgia, serif' }}>
                 {categories[0].name}
               </div>
-              <div style={{ color: accent, fontSize: 18, fontWeight: 700 }}>
+              <div style={{ color: accent, fontSize: 22, fontWeight: 700, fontFamily: "'DM Mono', monospace" }}>
                 ${parseFloat(categories[0].price || 0).toFixed(2)}
               </div>
             </div>
           )}
 
           {/* Quantity selector */}
-          <div style={{ marginBottom: 20 }}>
-            <div style={{ fontSize: 9, color: TEXT2, letterSpacing: '0.14em', marginBottom: 10 }}>
+          <div style={{ marginBottom: 24 }}>
+            <div style={{ fontSize: 11, color: '#777', letterSpacing: '0.18em', marginBottom: 12, fontFamily: "'DM Mono', monospace" }}>
               QUANTITY
             </div>
-            <div style={{ display: 'flex', alignItems: 'center', gap: 12 }}>
+            <div style={{ display: 'flex', alignItems: 'center', gap: 0, border: '1.5px solid #ddd', borderRadius: 12, overflow: 'hidden', width: 180 }}>
               <button
                 onClick={() => setQty(q => Math.max(1, q - 1))}
+                disabled={qty <= 1}
                 style={{
-                  width: 36, height: 36,
-                  background: DARK3, border: `1px solid ${BORDER}`,
-                  borderRadius: 8, color: CREAM, fontSize: 18,
+                  width: 52, height: 52,
+                  background: '#faf8f4', border: 'none', borderRight: '1.5px solid #ddd',
+                  color: qty <= 1 ? '#ccc' : '#333', fontSize: 22,
                   cursor: qty <= 1 ? 'not-allowed' : 'pointer',
-                  opacity: qty <= 1 ? 0.3 : 1,
                   fontFamily: "'DM Mono', monospace",
                   display: 'flex', alignItems: 'center', justifyContent: 'center',
-                  flexShrink: 0,
                 }}
-                disabled={qty <= 1}
               >−</button>
               <div style={{
                 flex: 1, textAlign: 'center',
-                fontSize: 20, fontWeight: 700, color: CREAM,
+                fontSize: 22, fontWeight: 700, color: '#111',
+                fontFamily: "'DM Mono', monospace",
               }}>{qty}</div>
               <button
                 onClick={() => setQty(q => Math.min(10, q + 1))}
+                disabled={qty >= 10}
                 style={{
-                  width: 36, height: 36,
-                  background: DARK3, border: `1px solid ${BORDER}`,
-                  borderRadius: 8, color: CREAM, fontSize: 18,
+                  width: 52, height: 52,
+                  background: '#faf8f4', border: 'none', borderLeft: '1.5px solid #ddd',
+                  color: qty >= 10 ? '#ccc' : '#333', fontSize: 22,
                   cursor: qty >= 10 ? 'not-allowed' : 'pointer',
-                  opacity: qty >= 10 ? 0.3 : 1,
                   fontFamily: "'DM Mono', monospace",
                   display: 'flex', alignItems: 'center', justifyContent: 'center',
-                  flexShrink: 0,
                 }}
-                disabled={qty >= 10}
               >+</button>
             </div>
           </div>
 
           {/* Total */}
           <div style={{
-            background: accent + '10',
-            border: `1px solid ${accent}30`,
-            borderRadius: 10,
-            padding: '12px 16px',
-            marginBottom: 20,
+            background: accentBg,
+            border: `1.5px solid ${accentBorder}`,
+            borderRadius: 12,
+            padding: '16px 24px',
+            marginBottom: 24,
             display: 'flex',
             justifyContent: 'space-between',
             alignItems: 'center',
           }}>
-            <div style={{ color: TEXT2, fontSize: 11, letterSpacing: '0.1em' }}>TOTAL</div>
-            <div style={{ color: accent, fontSize: 20, fontWeight: 700 }}>
+            <div style={{ color: '#555', fontSize: 13, letterSpacing: '0.12em', fontFamily: "'DM Mono', monospace" }}>TOTAL</div>
+            <div style={{ color: accent, fontSize: 28, fontWeight: 700, fontFamily: "'DM Mono', monospace" }}>
               ${totalPrice}
             </div>
           </div>
@@ -483,34 +453,33 @@ export default function EventLanding({ slug, fallback = null }) {
             disabled={buying}
             style={{
               width: '100%',
-              padding: '14px 0',
-              background: buying ? DARK3 : accent,
-              color: buying ? TEXT2 : DARK,
+              padding: '18px 0',
+              background: buying ? '#ddd' : accent,
+              color: buying ? '#aaa' : '#fff',
               border: 'none',
-              borderRadius: 10,
+              borderRadius: 12,
               fontFamily: "'DM Mono', monospace",
-              fontSize: 12,
+              fontSize: 15,
               fontWeight: 700,
               letterSpacing: '0.14em',
               cursor: buying ? 'not-allowed' : 'pointer',
               transition: 'all 0.15s',
+              boxShadow: buying ? 'none' : `0 4px 24px ${accent}44`,
             }}
           >
             {buying ? 'REDIRECTING...' : `BUY ${qty > 1 ? qty + ' TICKETS' : 'TICKET'} →`}
           </button>
 
           {buyError && (
-            <div style={{
-              color: RED, fontSize: 11, marginTop: 10,
-              textAlign: 'center', lineHeight: 1.5,
-            }}>
+            <div style={{ color: '#c0392b', fontSize: 13, marginTop: 12, textAlign: 'center', lineHeight: 1.5 }}>
               {buyError}
             </div>
           )}
 
           <div style={{
-            color: TEXT2, fontSize: 10, textAlign: 'center',
-            marginTop: 14, lineHeight: 1.6, letterSpacing: '0.06em',
+            color: '#aaa', fontSize: 11, textAlign: 'center',
+            marginTop: 16, lineHeight: 1.6, letterSpacing: '0.06em',
+            fontFamily: 'Georgia, serif', fontStyle: 'italic',
           }}>
             Secure checkout via Stripe. No account required.
           </div>
@@ -519,22 +488,21 @@ export default function EventLanding({ slug, fallback = null }) {
 
       {/* ── Footer ── */}
       <div style={{
-        borderTop: `1px solid ${BORDER}`,
-        padding: '24px 20px',
+        padding: '28px 32px',
         textAlign: 'center',
-        color: '#444',
-        fontSize: 10,
+        color: '#bbb',
+        fontSize: 11,
         letterSpacing: '0.16em',
+        fontFamily: "'DM Mono', monospace",
       }}>
         COVETED STAGE · THE STAGE IS YOURS ·{' '}
-        <a href="https://covetedstage.com" style={{ color: '#555', textDecoration: 'none' }}>
+        <a href="https://covetedstage.com" style={{ color: '#aaa', textDecoration: 'none' }}>
           covetedstage.com
         </a>
       </div>
 
-      {/* Responsive grid collapse */}
       <style>{`
-        @media (max-width: 700px) {
+        @media (max-width: 680px) {
           .landing-grid {
             grid-template-columns: 1fr !important;
           }
