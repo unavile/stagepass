@@ -257,10 +257,10 @@ export default function EventLanding({ slug, fallback = null }) {
           alignItems: 'stretch',
         }}
       >
-        {/* Col 1: Brochure image */}
+        {/* Col 1: Brochure image — 75% of column width */}
         <div className="col-brochure">
           {event.brochure_image_url ? (
-            <div style={{ borderRadius: 16, overflow: 'hidden', boxShadow: '0 6px 32px rgba(0,0,0,0.11)', height: '100%' }}>
+            <div style={{ borderRadius: 16, overflow: 'hidden', boxShadow: '0 6px 32px rgba(0,0,0,0.11)', height: '100%', maxWidth: '75%' }}>
               <img
                 src={event.brochure_image_url}
                 alt={event.name}
@@ -317,11 +317,8 @@ export default function EventLanding({ slug, fallback = null }) {
         >
           {/* Categories (multi) */}
           {categories.length > 1 && (
-            <div style={{ marginBottom: 12 }}>
-              <div style={{ fontSize: 10, color: '#999', letterSpacing: '0.18em', marginBottom: 8 }}>
-                TICKET TYPE
-              </div>
-              <div style={{ display: 'flex', flexDirection: 'column', gap: 6 }}>
+            <div style={{ marginBottom: 8 }}>
+              <div style={{ display: 'flex', flexDirection: 'column', gap: 5 }}>
                 {categories.map((c, i) => (
                   <button
                     key={c.id}
@@ -329,7 +326,7 @@ export default function EventLanding({ slug, fallback = null }) {
                     style={{
                       background: selectedCat === i ? accentBg : '#faf8f4',
                       border: `2px solid ${selectedCat === i ? accent : '#e0dbd2'}`,
-                      borderRadius: 10, padding: '8px 12px',
+                      borderRadius: 10, padding: '7px 10px',
                       cursor: 'pointer', textAlign: 'left', transition: 'all 0.15s',
                     }}
                   >
@@ -364,7 +361,7 @@ export default function EventLanding({ slug, fallback = null }) {
             <div style={{
               display: 'flex', justifyContent: 'space-between', alignItems: 'center',
               background: '#faf8f4', border: '1.5px solid #ede8df',
-              borderRadius: 10, padding: '10px 14px', marginBottom: 12,
+              borderRadius: 10, padding: '8px 12px', marginBottom: 8,
             }}>
               <div style={{ color: '#222', fontSize: 15, fontFamily: 'Georgia, serif' }}>
                 {categories[0].name}
@@ -376,8 +373,7 @@ export default function EventLanding({ slug, fallback = null }) {
           )}
 
           {/* Quantity */}
-          <div style={{ marginBottom: 12 }}>
-            <div style={{ fontSize: 10, color: '#999', letterSpacing: '0.18em', marginBottom: 8 }}>QUANTITY</div>
+          <div style={{ marginBottom: 8 }}>
             <div style={{ display: 'flex', alignItems: 'center', border: '1.5px solid #ddd', borderRadius: 10, overflow: 'hidden', width: 150 }}>
               <button
                 onClick={() => setQty(q => Math.max(1, q - 1))}
@@ -409,7 +405,7 @@ export default function EventLanding({ slug, fallback = null }) {
           {/* Total */}
           <div style={{
             background: accentBg, border: `1.5px solid ${accentBorder}`,
-            borderRadius: 10, padding: '10px 14px', marginBottom: 12,
+            borderRadius: 10, padding: '8px 12px', marginBottom: 8,
             display: 'flex', justifyContent: 'space-between', alignItems: 'center',
           }}>
             <div style={{ color: '#666', fontSize: 11, letterSpacing: '0.12em' }}>TOTAL</div>
@@ -423,7 +419,7 @@ export default function EventLanding({ slug, fallback = null }) {
             onClick={handleBuy}
             disabled={buying}
             style={{
-              width: '100%', padding: '12px 0',
+              width: '100%', padding: '10px 0',
               background: buying ? '#ddd' : accent,
               color: buying ? '#aaa' : '#fff',
               border: 'none', borderRadius: 10,
@@ -443,8 +439,8 @@ export default function EventLanding({ slug, fallback = null }) {
           )}
 
           <div style={{
-            color: '#bbb', fontSize: 10, textAlign: 'center', marginTop: 10,
-            lineHeight: 1.5, fontFamily: 'Georgia, serif', fontStyle: 'italic',
+            color: '#bbb', fontSize: 10, textAlign: 'center', marginTop: 6,
+            lineHeight: 1.4, fontFamily: 'Georgia, serif', fontStyle: 'italic',
           }}>
             Secure checkout via Stripe. No account required.
           </div>
