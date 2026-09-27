@@ -11,6 +11,7 @@ export default function NewEventModal({ creatorId, accentColor, onClose, onEvent
   const [accessType, setAccessType] = useState('free') // 'free' | 'subscribers' | 'ticketed'
   const [ticketPrice, setTicketPrice] = useState('')
   const [startTime, setStartTime] = useState('18:00')
+  const [endTime, setEndTime] = useState('20:00')
   const [duration, setDuration] = useState('60')
   const [eventMode, setEventMode] = useState('broadcast') // 'broadcast' | 'class'
   const [alwaysOn, setAlwaysOn] = useState(false) // Class Mode only: no fixed date/time
@@ -30,6 +31,17 @@ export default function NewEventModal({ creatorId, accentColor, onClose, onEvent
     colorScheme: 'dark',
   }
 
+  function computeDurationFromEndTime() {
+    // Parse HH:MM strings and return difference in minutes
+    const [sh, sm] = startTime.split(':').map(Number)
+    const [eh, em] = endTime.split(':').map(Number)
+    const startMins = sh * 60 + sm
+    const endMins = eh * 60 + em
+    // Handle overnight events (end < start)
+    const diff = endMins > startMins ? endMins - startMins : (24 * 60) - startMins + endMins
+    return diff > 0 ? diff : 60
+  }
+
   async function handleSubmit() {
     if (!name.trim()) { setError('Please add an event name.'); return }
     if (!alwaysOn && !eventDate) { setError('Please set a date.'); return }
@@ -42,6 +54,10 @@ export default function NewEventModal({ creatorId, accentColor, onClose, onEvent
     try {
       let dailyRoomName = null
 
+      const durationMinutes = eventType === 'virtual'
+        ? (parseInt(duration) || 60)
+        : computeDurationFromEndTime()
+
       if (eventType === 'virtual') {
         const startDateTime = `${eventDate}T${startTime}:00`
         const res = await fetch('/.netlify/functions/create-daily-room', {
@@ -51,7 +67,7 @@ export default function NewEventModal({ creatorId, accentColor, onClose, onEvent
             eventId: crypto.randomUUID(),
             eventName: name.trim(),
             startTime: startDateTime,
-            durationMinutes: parseInt(duration) || 60,
+            durationMinutes,
             eventMode,
           })
         })
@@ -83,7 +99,7 @@ export default function NewEventModal({ creatorId, accentColor, onClose, onEvent
           access_type: accessType,
           ticket_price: accessType === 'ticketed' ? parseFloat(ticketPrice) : null,
           daily_room_name: dailyRoomName,
-          duration_minutes: parseInt(duration) || 60,
+          duration_minutes: durationMinutes,
           start_time: alwaysOn ? null : startTime,
           event_mode: eventType === 'virtual' ? eventMode : 'broadcast',
           always_on: alwaysOn,
@@ -267,6 +283,20 @@ export default function NewEventModal({ creatorId, accentColor, onClose, onEvent
             <div style={{ fontFamily: "'DM Mono', monospace", fontSize: 10, color: '#555', letterSpacing: '0.14em', marginBottom: 8 }}>SELECT DATE</div>
             <input style={input} type="date" value={eventDate} onChange={e => setEventDate(e.target.value)} />
           </>
+        )}
+
+        {/* Start + end time — in-person only, hidden for always-on */}
+        {eventType === 'in_person' && !alwaysOn && (
+          <div style={{ display: 'flex', gap: 10, marginBottom: 12 }}>
+            <div style={{ flex: 1 }}>
+              <div style={{ fontFamily: "'DM Mono', monospace", fontSize: 10, color: '#555', letterSpacing: '0.12em', marginBottom: 6 }}>START TIME</div>
+              <input style={{ ...input, marginBottom: 0 }} type="time" value={startTime} onChange={e => setStartTime(e.target.value)} />
+            </div>
+            <div style={{ flex: 1 }}>
+              <div style={{ fontFamily: "'DM Mono', monospace", fontSize: 10, color: '#555', letterSpacing: '0.12em', marginBottom: 6 }}>END TIME</div>
+              <input style={{ ...input, marginBottom: 0 }} type="time" value={endTime} onChange={e => setEndTime(e.target.value)} />
+            </div>
+          </div>
         )}
 
         {/* Time + duration — virtual only, hidden for always-on */}

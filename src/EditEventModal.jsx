@@ -1,12 +1,27 @@
 import { useState } from 'react'
 import { supabase } from './supabaseClient'
 
+// Compute end time string (HH:MM) from start time + duration_minutes
+function computeEndTime(startTime, durationMinutes) {
+  if (!startTime) return '20:00'
+  const [sh, sm] = startTime.split(':').map(Number)
+  const totalMins = sh * 60 + sm + (parseInt(durationMinutes) || 60)
+  const h = Math.floor(totalMins / 60) % 24
+  const m = totalMins % 60
+  return `${String(h).padStart(2, '0')}:${String(m).padStart(2, '0')}`
+}
+
 export default function EditEventModal({ event, accentColor, accessToken, onClose, onSaved }) {
   const [name, setName] = useState(event.name || '')
   const [description, setDescription] = useState(event.description || '')
   const [venue, setVenue] = useState(event.venue || '')
   const [eventDate, setEventDate] = useState(event.event_date || '')
   const [startTime, setStartTime] = useState(event.start_time || '18:00')
+  const [endTime, setEndTime] = useState(
+    event.event_type !== 'virtual'
+      ? computeEndTime(event.start_time || '18:00', event.duration_minutes)
+      : '20:00'
+  )
   const [duration, setDuration] = useState(event.duration_minutes || 60)
   const [capacity, setCapacity] = useState(event.capacity || '')
   const [accessType, setAccessType] = useState(event.access_type || (event.is_free ? 'free' : 'subscribers'))
@@ -36,14 +51,27 @@ export default function EditEventModal({ event, accentColor, accessToken, onClos
     { id: 'ticketed',    icon: '🎟', label: 'Ticketed',    sub: 'Anyone can buy a ticket to attend' },
   ]
 
+  function computeDurationFromEndTime() {
+    const [sh, sm] = startTime.split(':').map(Number)
+    const [eh, em] = endTime.split(':').map(Number)
+    const startMins = sh * 60 + sm
+    const endMins = eh * 60 + em
+    const diff = endMins > startMins ? endMins - startMins : (24 * 60) - startMins + endMins
+    return diff > 0 ? diff : 60
+  }
+
   async function handleSave() {
     if (!name.trim()) { setError('Event name is required.'); return }
-    if (!eventDate) { setError('Please set a date.'); return }
+    if (!alwaysOn && !eventDate) { setError('Please set a date.'); return }
     if (accessType === 'ticketed' && (!ticketPrice || isNaN(parseFloat(ticketPrice)) || parseFloat(ticketPrice) <= 0)) {
       setError('Please enter a valid ticket price.'); return
     }
     setLoading(true)
     setError(null)
+
+    const durationMinutes = isVirtual
+      ? (parseInt(duration) || 60)
+      : computeDurationFromEndTime()
 
     try {
       const sbUrl = import.meta.env.VITE_SUPABASE_URL
@@ -62,7 +90,7 @@ export default function EditEventModal({ event, accentColor, accessToken, onClos
           venue: venue.trim() || null,
           event_date: eventDate,
           start_time: startTime,
-          duration_minutes: parseInt(duration) || 60,
+          duration_minutes: durationMinutes,
           capacity: capacity ? parseInt(capacity) : null,
           access_type: accessType,
           is_free: accessType === 'free',
@@ -209,6 +237,20 @@ export default function EditEventModal({ event, accentColor, accessToken, onClos
             <div style={{ fontFamily: "'DM Mono', monospace", fontSize: 10, color: '#555', letterSpacing: '0.14em', marginBottom: 8 }}>SELECT DATE</div>
             <input style={input} type="date" value={eventDate} onChange={e => setEventDate(e.target.value)} />
           </>
+        )}
+
+        {/* Start + end time — in-person only, hidden for always-on */}
+        {!isVirtual && !alwaysOn && (
+          <div style={{ display: 'flex', gap: 10, marginBottom: 12 }}>
+            <div style={{ flex: 1 }}>
+              <div style={{ fontFamily: "'DM Mono', monospace", fontSize: 10, color: '#555', letterSpacing: '0.12em', marginBottom: 6 }}>START TIME</div>
+              <input style={{ ...input, marginBottom: 0 }} type="time" value={startTime} onChange={e => setStartTime(e.target.value)} />
+            </div>
+            <div style={{ flex: 1 }}>
+              <div style={{ fontFamily: "'DM Mono', monospace", fontSize: 10, color: '#555', letterSpacing: '0.12em', marginBottom: 6 }}>END TIME</div>
+              <input style={{ ...input, marginBottom: 0 }} type="time" value={endTime} onChange={e => setEndTime(e.target.value)} />
+            </div>
+          </div>
         )}
 
         {/* Time + duration — virtual only, hidden for always-on */}
