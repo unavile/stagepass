@@ -226,7 +226,7 @@ export default function EventLanding({ slug, fallback = null }) {
             border: `1.5px solid ${accentBorder}`,
             borderRadius: 999,
             padding: '7px 20px',
-            fontSize: 22,           /* 1.5× the previous 15px */
+            fontSize: 18,
             color: accent,
             letterSpacing: '0.03em',
             marginBottom: 6,
@@ -238,7 +238,7 @@ export default function EventLanding({ slug, fallback = null }) {
 
         {/* Venue — 1.5× larger (was 14px → 21px) */}
         {event.venue && (
-          <div style={{ color: '#555', fontSize: 21, marginTop: 6, letterSpacing: '0.02em', fontFamily: 'Georgia, serif' }}>
+          <div style={{ color: '#555', fontSize: 18, marginTop: 6, letterSpacing: '0.02em', fontFamily: 'Georgia, serif' }}>
             📍 {event.venue}
           </div>
         )}
@@ -250,21 +250,21 @@ export default function EventLanding({ slug, fallback = null }) {
         style={{
           maxWidth: 1200,
           margin: '0 auto',
-          padding: '36px 20px 60px',
+          padding: '24px 20px 32px',
           display: 'grid',
-          gridTemplateColumns: '1fr 1fr 340px',
+          gridTemplateColumns: '1fr 1fr 300px',
           gap: 28,
-          alignItems: 'start',
+          alignItems: 'stretch',
         }}
       >
         {/* Col 1: Brochure image */}
         <div className="col-brochure">
           {event.brochure_image_url ? (
-            <div style={{ borderRadius: 16, overflow: 'hidden', boxShadow: '0 6px 32px rgba(0,0,0,0.11)', maxWidth: '50%' }}>
+            <div style={{ borderRadius: 16, overflow: 'hidden', boxShadow: '0 6px 32px rgba(0,0,0,0.11)', height: '100%' }}>
               <img
                 src={event.brochure_image_url}
                 alt={event.name}
-                style={{ width: '100%', display: 'block', objectFit: 'cover' }}
+                style={{ width: '100%', height: '100%', display: 'block', objectFit: 'cover' }}
               />
             </div>
           ) : (
@@ -308,26 +308,27 @@ export default function EventLanding({ slug, fallback = null }) {
             background: '#fff',
             border: '1.5px solid #ede8df',
             borderRadius: 18,
-            padding: '24px 20px',
-            position: 'sticky',
-            top: 20,
+            padding: '16px 16px',
+            display: 'flex',
+            flexDirection: 'column',
+            justifyContent: 'space-between',
             boxShadow: '0 4px 24px rgba(0,0,0,0.07)',
           }}
         >
           <div style={{
-            fontFamily: 'Georgia, serif', fontSize: 22, fontWeight: 700,
-            color: '#111', marginBottom: 20,
+            fontFamily: 'Georgia, serif', fontSize: 20, fontWeight: 700,
+            color: '#111', marginBottom: 12,
           }}>
             Get Tickets
           </div>
 
           {/* Categories (multi) */}
           {categories.length > 1 && (
-            <div style={{ marginBottom: 20 }}>
-              <div style={{ fontSize: 10, color: '#999', letterSpacing: '0.18em', marginBottom: 10 }}>
+            <div style={{ marginBottom: 12 }}>
+              <div style={{ fontSize: 10, color: '#999', letterSpacing: '0.18em', marginBottom: 8 }}>
                 TICKET TYPE
               </div>
-              <div style={{ display: 'flex', flexDirection: 'column', gap: 8 }}>
+              <div style={{ display: 'flex', flexDirection: 'column', gap: 6 }}>
                 {categories.map((c, i) => (
                   <button
                     key={c.id}
@@ -335,7 +336,7 @@ export default function EventLanding({ slug, fallback = null }) {
                     style={{
                       background: selectedCat === i ? accentBg : '#faf8f4',
                       border: `2px solid ${selectedCat === i ? accent : '#e0dbd2'}`,
-                      borderRadius: 10, padding: '12px 14px',
+                      borderRadius: 10, padding: '8px 12px',
                       cursor: 'pointer', textAlign: 'left', transition: 'all 0.15s',
                     }}
                   >
@@ -370,7 +371,7 @@ export default function EventLanding({ slug, fallback = null }) {
             <div style={{
               display: 'flex', justifyContent: 'space-between', alignItems: 'center',
               background: '#faf8f4', border: '1.5px solid #ede8df',
-              borderRadius: 10, padding: '14px 16px', marginBottom: 18,
+              borderRadius: 10, padding: '10px 14px', marginBottom: 12,
             }}>
               <div style={{ color: '#222', fontSize: 15, fontFamily: 'Georgia, serif' }}>
                 {categories[0].name}
@@ -382,30 +383,30 @@ export default function EventLanding({ slug, fallback = null }) {
           )}
 
           {/* Quantity */}
-          <div style={{ marginBottom: 18 }}>
-            <div style={{ fontSize: 10, color: '#999', letterSpacing: '0.18em', marginBottom: 10 }}>QUANTITY</div>
-            <div style={{ display: 'flex', alignItems: 'center', border: '1.5px solid #ddd', borderRadius: 10, overflow: 'hidden', width: 160 }}>
+          <div style={{ marginBottom: 12 }}>
+            <div style={{ fontSize: 10, color: '#999', letterSpacing: '0.18em', marginBottom: 8 }}>QUANTITY</div>
+            <div style={{ display: 'flex', alignItems: 'center', border: '1.5px solid #ddd', borderRadius: 10, overflow: 'hidden', width: 150 }}>
               <button
                 onClick={() => setQty(q => Math.max(1, q - 1))}
                 disabled={qty <= 1}
                 style={{
-                  width: 46, height: 46, background: '#faf8f4', border: 'none',
+                  width: 40, height: 40, background: '#faf8f4', border: 'none',
                   borderRight: '1.5px solid #ddd', color: qty <= 1 ? '#ccc' : '#333',
-                  fontSize: 20, cursor: qty <= 1 ? 'not-allowed' : 'pointer',
+                  fontSize: 18, cursor: qty <= 1 ? 'not-allowed' : 'pointer',
                   display: 'flex', alignItems: 'center', justifyContent: 'center',
                 }}
               >−</button>
               <div style={{
-                flex: 1, textAlign: 'center', fontSize: 20, fontWeight: 700,
+                flex: 1, textAlign: 'center', fontSize: 18, fontWeight: 700,
                 color: '#111', fontFamily: "'DM Mono', monospace",
               }}>{qty}</div>
               <button
                 onClick={() => setQty(q => Math.min(10, q + 1))}
                 disabled={qty >= 10}
                 style={{
-                  width: 46, height: 46, background: '#faf8f4', border: 'none',
+                  width: 40, height: 40, background: '#faf8f4', border: 'none',
                   borderLeft: '1.5px solid #ddd', color: qty >= 10 ? '#ccc' : '#333',
-                  fontSize: 20, cursor: qty >= 10 ? 'not-allowed' : 'pointer',
+                  fontSize: 18, cursor: qty >= 10 ? 'not-allowed' : 'pointer',
                   display: 'flex', alignItems: 'center', justifyContent: 'center',
                 }}
               >+</button>
@@ -415,11 +416,11 @@ export default function EventLanding({ slug, fallback = null }) {
           {/* Total */}
           <div style={{
             background: accentBg, border: `1.5px solid ${accentBorder}`,
-            borderRadius: 10, padding: '12px 16px', marginBottom: 16,
+            borderRadius: 10, padding: '10px 14px', marginBottom: 12,
             display: 'flex', justifyContent: 'space-between', alignItems: 'center',
           }}>
             <div style={{ color: '#666', fontSize: 11, letterSpacing: '0.12em' }}>TOTAL</div>
-            <div style={{ color: accent, fontSize: 24, fontWeight: 700, fontFamily: "'DM Mono', monospace" }}>
+            <div style={{ color: accent, fontSize: 22, fontWeight: 700, fontFamily: "'DM Mono', monospace" }}>
               ${totalPrice}
             </div>
           </div>
@@ -429,7 +430,7 @@ export default function EventLanding({ slug, fallback = null }) {
             onClick={handleBuy}
             disabled={buying}
             style={{
-              width: '100%', padding: '15px 0',
+              width: '100%', padding: '12px 0',
               background: buying ? '#ddd' : accent,
               color: buying ? '#aaa' : '#fff',
               border: 'none', borderRadius: 10,
@@ -449,8 +450,8 @@ export default function EventLanding({ slug, fallback = null }) {
           )}
 
           <div style={{
-            color: '#bbb', fontSize: 10, textAlign: 'center', marginTop: 14,
-            lineHeight: 1.6, fontFamily: 'Georgia, serif', fontStyle: 'italic',
+            color: '#bbb', fontSize: 10, textAlign: 'center', marginTop: 10,
+            lineHeight: 1.5, fontFamily: 'Georgia, serif', fontStyle: 'italic',
           }}>
             Secure checkout via Stripe. No account required.
           </div>
