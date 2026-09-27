@@ -315,13 +315,6 @@ export default function EventLanding({ slug, fallback = null }) {
             boxShadow: '0 4px 24px rgba(0,0,0,0.07)',
           }}
         >
-          <div style={{
-            fontFamily: 'Georgia, serif', fontSize: 20, fontWeight: 700,
-            color: '#111', marginBottom: 12,
-          }}>
-            Get Tickets
-          </div>
-
           {/* Categories (multi) */}
           {categories.length > 1 && (
             <div style={{ marginBottom: 12 }}>
