@@ -264,7 +264,7 @@ export default function EventLanding({ slug, fallback = null }) {
               <img
                 src={event.brochure_image_url}
                 alt={event.name}
-                style={{ width: '75%', height: '75%', display: 'block', objectFit: 'cover' }}
+                style={{ width: '100%', height: '100%', display: 'block', objectFit: 'cover' }}
               />
             </div>
           ) : (
