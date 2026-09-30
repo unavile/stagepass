@@ -201,7 +201,7 @@ export default function EventLanding({ slug, fallback = null }) {
       <div style={{
         background: '#fff',
         borderBottom: '1.5px solid #ede8df',
-        padding: '20px 24px 18px',   /* was 40px/36px */
+        padding: '14px 24px 12px',
         textAlign: 'center',
       }}>
         <h1 style={{
@@ -238,7 +238,7 @@ export default function EventLanding({ slug, fallback = null }) {
 
         {/* Venue — 1.5× larger (was 14px → 21px) */}
         {event.venue && (
-          <div style={{ color: '#555', fontSize: 18, fontWeight: 'bold' , marginTop: 6, letterSpacing: '0.02em', fontFamily: 'Georgia, serif' }}>
+          <div style={{ color: '#555', fontSize: 18, marginTop: 6, letterSpacing: '0.02em', fontFamily: 'Georgia, serif' }}>
             📍 {event.venue}
           </div>
         )}
@@ -250,17 +250,18 @@ export default function EventLanding({ slug, fallback = null }) {
         style={{
           maxWidth: 1200,
           margin: '0 auto',
-          padding: '24px 20px 32px',
+          padding: '16px 20px 20px',
           display: 'grid',
           gridTemplateColumns: '1fr 1fr 300px',
-          gap: 28,
+          gap: 24,
           alignItems: 'stretch',
+          height: 'calc(100vh - 64px - 70px - 66px)',  /* viewport minus nav, header, footer */
         }}
       >
-        {/* Col 1: Brochure image — 75% of column width */}
-        <div className="col-brochure">
+        {/* Col 1: Brochure image — constrained to grid height */}
+        <div className="col-brochure" style={{ minHeight: 0 }}>
           {event.brochure_image_url ? (
-            <div style={{ borderRadius: 16, overflow: 'hidden', boxShadow: '0 6px 32px rgba(0,0,0,0.11)', height: '100%', maxWidth: '75%' }}>
+            <div style={{ borderRadius: 16, overflow: 'hidden', boxShadow: '0 6px 32px rgba(0,0,0,0.11)', height: '100%', maxWidth: '80%' }}>
               <img
                 src={event.brochure_image_url}
                 alt={event.name}
@@ -278,7 +279,7 @@ export default function EventLanding({ slug, fallback = null }) {
         </div>
 
         {/* Col 2: Description */}
-        <div className="col-description">
+        <div className="col-description" style={{ minHeight: 0, overflowY: 'auto' }}>
           {event.landing_description ? (
             <>
               <div style={{
@@ -313,6 +314,8 @@ export default function EventLanding({ slug, fallback = null }) {
             flexDirection: 'column',
             justifyContent: 'space-between',
             boxShadow: '0 4px 24px rgba(0,0,0,0.07)',
+            minHeight: 0,
+            overflowY: 'auto',
           }}
         >
           {/* Categories (multi) */}
