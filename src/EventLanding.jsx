@@ -238,7 +238,7 @@ export default function EventLanding({ slug, fallback = null }) {
 
         {/* Venue — 1.5× larger (was 14px → 21px) */}
         {event.venue && (
-          <div style={{ color: '#555', fontSize: 18, marginTop: 6, letterSpacing: '0.02em', fontFamily: 'Georgia, serif' }}>
+          <div style={{ color: '#555', fontSize: 18, fontWeight: 'bold' , marginTop: 6, letterSpacing: '0.02em', fontFamily: 'Georgia, serif' }}>
             📍 {event.venue}
           </div>
         )}
@@ -264,7 +264,7 @@ export default function EventLanding({ slug, fallback = null }) {
               <img
                 src={event.brochure_image_url}
                 alt={event.name}
-                style={{ width: '100%', height: '100%', display: 'block', objectFit: 'cover' }}
+                style={{ width: '75%', height: '75%', display: 'block', objectFit: 'cover' }}
               />
             </div>
           ) : (
