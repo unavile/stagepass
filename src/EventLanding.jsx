@@ -255,10 +255,10 @@ export default function EventLanding({ slug, fallback = null }) {
           gridTemplateColumns: '1fr 1fr 300px',
           gap: 24,
           alignItems: 'stretch',
-          height: 'calc(100vh - 64px - 70px - 66px)',  /* viewport minus nav, header, footer */
+          height: 'calc(100vh - 64px - 70px - 66px)',  /* desktop: fits in one screen */
         }}
       >
-        {/* Col 1: Brochure image — constrained to grid height */}
+        {/* Col 1: Brochure image — constrained to grid height on desktop */}
         <div className="col-brochure" style={{ minHeight: 0 }}>
           {event.brochure_image_url ? (
             <div style={{ borderRadius: 16, overflow: 'hidden', boxShadow: '0 6px 32px rgba(0,0,0,0.11)', height: '100%', maxWidth: '80%' }}>
@@ -464,28 +464,55 @@ export default function EventLanding({ slug, fallback = null }) {
 
       {/* ── Responsive styles ── */}
       <style>{`
-        /* Tablet: collapse to 2 cols — brochure full width, description + tickets side by side */
+        /* Tablet: collapse to 2 cols, remove fixed height */
         @media (max-width: 900px) {
           .landing-grid {
             grid-template-columns: 1fr 1fr !important;
+            height: auto !important;
+          }
+          .col-brochure {
+            grid-column: 1 / -1 !important;
+            min-height: unset !important;
+          }
+          .col-brochure > div {
+            height: auto !important;
+            max-width: 100% !important;
+            aspect-ratio: 16/7;
+          }
+          .col-brochure img {
+            height: 100% !important;
+          }
+          .col-description {
+            overflow-y: visible !important;
+          }
+          .col-tickets {
+            position: static !important;
+            overflow-y: visible !important;
+          }
+        }
+
+        /* Mobile: single column, natural flow */
+        @media (max-width: 560px) {
+          .landing-grid {
+            grid-template-columns: 1fr !important;
+            height: auto !important;
+            padding: 16px 16px 32px !important;
+            gap: 16px !important;
           }
           .col-brochure {
             grid-column: 1 / -1 !important;
           }
-          .col-tickets {
-            position: static !important;
+          .col-brochure > div {
+            height: auto !important;
+            max-width: 100% !important;
+            aspect-ratio: 4/3;
           }
-        }
-
-        /* Mobile: single column, tickets at bottom */
-        @media (max-width: 560px) {
-          .landing-grid {
-            grid-template-columns: 1fr !important;
-            padding: 20px 16px 40px !important;
-            gap: 20px !important;
+          .col-brochure img {
+            height: 100% !important;
           }
-          .col-brochure, .col-description, .col-tickets {
+          .col-description, .col-tickets {
             grid-column: 1 / -1 !important;
+            overflow-y: visible !important;
           }
           .col-tickets {
             position: static !important;
