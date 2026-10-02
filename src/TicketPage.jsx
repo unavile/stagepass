@@ -79,7 +79,8 @@ export default function TicketPage({ eventSlug }) {
   const accent = event?.accent_color || '#7c5cbf'
   const dateDisplay = event ? formatEventDate(event.event_date, event.start_time) : null
   const bookingRef = sessionId.replace('cs_live_', '').replace('cs_test_', '').slice(0, 16).toUpperCase()
-  const qrUrl = `https://api.qrserver.com/v1/create-qr-code/?size=220x220&data=${encodeURIComponent(sessionId)}&bgcolor=0f0f0f&color=ffffff&margin=6`
+  // White bg + dark modules — cameras (especially iPhone) read dark-on-light far more reliably
+  const qrUrl = `https://api.qrserver.com/v1/create-qr-code/?size=220x220&data=${encodeURIComponent(sessionId)}&bgcolor=ffffff&color=111111&margin=8`
 
   return (
     <div style={{
@@ -138,16 +139,16 @@ export default function TicketPage({ eventSlug }) {
         {/* QR code */}
         <div style={{ padding: '28px 24px', textAlign: 'center', borderBottom: '1px dashed #2a2a2a' }}>
           <div style={{
-            display: 'inline-block', padding: 16,
-            background: '#0f0f0f', borderRadius: 16,
-            border: `2px solid ${accent}44`,
+            display: 'inline-block', padding: 14,
+            background: '#ffffff', borderRadius: 16,
+            boxShadow: `0 0 0 3px ${accent}55`,
           }}>
             <img
               src={qrUrl}
               alt="Ticket QR Code"
               width={220}
               height={220}
-              style={{ display: 'block', borderRadius: 8 }}
+              style={{ display: 'block', borderRadius: 6 }}
             />
           </div>
           <div style={{ color: '#555', fontSize: 10, letterSpacing: '0.18em', marginTop: 14, textTransform: 'uppercase' }}>

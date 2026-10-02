@@ -242,7 +242,8 @@ exports.handler = async (event) => {
           const ticketUrl = eventSlug
             ? `https://covetedstage.com/${eventSlug}/ticket?session_id=${encodeURIComponent(session.id)}`
             : null
-          const qrUrl = `https://api.qrserver.com/v1/create-qr-code/?size=180x180&data=${encodeURIComponent(session.id)}&bgcolor=09090b&color=c9a84c&margin=6`
+          // White bg + dark modules — cameras read dark-on-light far more reliably
+          const qrUrl = `https://api.qrserver.com/v1/create-qr-code/?size=180x180&data=${encodeURIComponent(session.id)}&bgcolor=ffffff&color=111111&margin=8`
 
           await fetch('https://api.resend.com/emails', {
             method: 'POST',
