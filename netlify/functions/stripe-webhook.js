@@ -66,10 +66,34 @@ exports.handler = async (event) => {
     const session = stripeEvent.data.object
     console.log('Session metadata:', JSON.stringify(session.metadata))
 
+    const PLATFORM_FEE_RATE = 0.10  // 10% platform fee
+
     // ── Donation ───────────────────────────────────────────────────────────
     if (session.metadata?.type === 'donation') {
       const { creator_id, fan_id, creator_name } = session.metadata
       const amountDollars = (session.amount_total / 100).toFixed(2)
+      const grossAmount   = session.amount_total / 100
+      const platformFee   = parseFloat((grossAmount * PLATFORM_FEE_RATE).toFixed(2))
+      const netAmount     = parseFloat((grossAmount - platformFee).toFixed(2))
+
+      // Record donation with fee breakdown in Supabase
+      try {
+        await sbUpsert('donations', {
+          creator_id,
+          fan_id: fan_id || null,
+          stripe_session_id: session.id,
+          amount:        grossAmount,
+          platform_fee:  platformFee,
+          net_amount:    netAmount,
+          status:        'paid',
+          donor_email:   session.customer_details?.email || null,
+          donor_name:    session.customer_details?.name  || null,
+        }, 'stripe_session_id')
+        console.log(`Donation recorded — gross: $${grossAmount}, fee: $${platformFee}, net: $${netAmount}`)
+      } catch (donErr) {
+        console.error('Donation upsert error:', donErr.message)
+        // Don't block email on DB error
+      }
       console.log('Donation received — creator:', creator_id, 'amount: $' + amountDollars)
 
       // Send thank-you email to fan via Resend
@@ -140,6 +164,10 @@ exports.handler = async (event) => {
             cancelled_at: null,
           }, 'event_id,fan_id', `${event_id}&fan_id=eq.${fan_id}`)
         } else {
+          const classGross = session.amount_total ? session.amount_total / 100 : null
+          const classFee   = classGross != null ? parseFloat((classGross * PLATFORM_FEE_RATE).toFixed(2)) : null
+          const classNet   = classGross != null ? parseFloat((classGross - classFee).toFixed(2))          : null
+
           await sbUpsert('class_registrations', {
             event_id,
             fan_id,
@@ -148,6 +176,8 @@ exports.handler = async (event) => {
             stripe_subscription_id: session.subscription,
             stripe_customer_id: session.customer,
             status: 'active',
+            platform_fee: classFee,
+            net_amount:   classNet,
           }, 'event_id,fan_id')
         }
         console.log('Class registration recorded')
@@ -176,11 +206,17 @@ exports.handler = async (event) => {
       try {
         // Use stripe_session_id as the unique conflict key so guest purchases
         // (which have no fan_id) can be upserted safely.
+        const ticketGross   = session.amount_total / 100
+        const ticketFee     = parseFloat((ticketGross * PLATFORM_FEE_RATE).toFixed(2))
+        const ticketNet     = parseFloat((ticketGross - ticketFee).toFixed(2))
+
         await sbUpsert('ticket_purchases', {
           event_id,
           fan_id:            fanIdOrNull,
           stripe_session_id: session.id,
-          amount:            session.amount_total / 100,  // total paid (price × qty)
+          amount:            ticketGross,  // total paid (price × qty)
+          platform_fee:      ticketFee,
+          net_amount:        ticketNet,
           quantity:          qty,
           status:            'paid',
           buyer_name:        buyerName,
@@ -188,13 +224,13 @@ exports.handler = async (event) => {
           buyer_phone:       buyerPhone,
           ticket_category:   ticket_category || null,
         }, 'stripe_session_id')
+        console.log(`Ticket purchase recorded — gross: $${ticketGross}, fee: $${ticketFee}, net: $${ticketNet}`)
 
         // Only create an RSVP row for logged-in fans (guests have no fan account)
         if (fanIdOrNull) {
           await sbUpsert('rsvps', { event_id, fan_id: fanIdOrNull }, 'event_id,fan_id')
         }
 
-        console.log('Ticket purchase recorded')
       } catch (err) {
         console.error('Ticket purchase error:', err.message)
         return { statusCode: 500, body: err.message }
@@ -333,15 +369,97 @@ exports.handler = async (event) => {
     console.log('Upserting subscription — fan:', fan_id, 'creator:', creator_id)
 
     try {
+      const subGross = session.amount_total ? session.amount_total / 100 : null
+      const subFee   = subGross != null ? parseFloat((subGross * PLATFORM_FEE_RATE).toFixed(2)) : null
+      const subNet   = subGross != null ? parseFloat((subGross - subFee).toFixed(2))            : null
+
       await sbUpsert('subscriptions', {
         fan_id,
         creator_id,
         stripe_subscription_id: session.subscription,
         status: 'active',
+        platform_fee: subFee,
+        net_amount:   subNet,
       }, 'fan_id,creator_id')
-      console.log('Subscription created successfully')
+      console.log(`Subscription created — gross: $${subGross}, fee: $${subFee}, net: $${subNet}`)
     } catch (err) {
       console.error('Subscription upsert error:', err.message)
+      return { statusCode: 500, body: err.message }
+    }
+  }
+
+  // ── invoice.payment_succeeded — recurring monthly charge ──────────────────
+  if (stripeEvent.type === 'invoice.payment_succeeded') {
+    const invoice = stripeEvent.data.object
+
+    // Skip the initial checkout invoice — checkout.session.completed already handles it
+    if (invoice.billing_reason === 'subscription_create') {
+      console.log('Skipping initial invoice — handled by checkout.session.completed')
+      return { statusCode: 200, body: JSON.stringify({ received: true }) }
+    }
+
+    const stripeSubscriptionId = invoice.subscription
+    const grossAmount = invoice.amount_paid / 100
+    const platformFee = parseFloat((grossAmount * 0.10).toFixed(2))
+    const netAmount   = parseFloat((grossAmount - platformFee).toFixed(2))
+    const periodStart = invoice.period_start ? new Date(invoice.period_start * 1000).toISOString() : null
+    const periodEnd   = invoice.period_end   ? new Date(invoice.period_end   * 1000).toISOString() : null
+
+    console.log(`Invoice paid — sub: ${stripeSubscriptionId}, gross: $${grossAmount}, fee: $${platformFee}, net: $${netAmount}`)
+
+    // Look up subscription to get fan_id + creator_id
+    let fan_id = null, creator_id = null, subscription_type = 'creator'
+    let event_id = null
+
+    try {
+      // Check subscriptions table first
+      const subRes = await fetch(
+        `${SB_URL}/rest/v1/subscriptions?stripe_subscription_id=eq.${stripeSubscriptionId}&select=fan_id,creator_id`,
+        { headers: sbHeaders() }
+      )
+      const subs = await subRes.json()
+      if (Array.isArray(subs) && subs[0]) {
+        fan_id     = subs[0].fan_id
+        creator_id = subs[0].creator_id
+        subscription_type = 'creator'
+      }
+
+      // If not found, check class_registrations
+      if (!fan_id) {
+        const crRes = await fetch(
+          `${SB_URL}/rest/v1/class_registrations?stripe_subscription_id=eq.${stripeSubscriptionId}&select=fan_id,event_id`,
+          { headers: sbHeaders() }
+        )
+        const crs = await crRes.json()
+        if (Array.isArray(crs) && crs[0]) {
+          fan_id           = crs[0].fan_id
+          event_id         = crs[0].event_id
+          subscription_type = 'class'
+        }
+      }
+    } catch (lookupErr) {
+      console.error('Subscription lookup error:', lookupErr.message)
+    }
+
+    try {
+      await sbUpsert('subscription_payments', {
+        stripe_subscription_id: stripeSubscriptionId,
+        stripe_invoice_id:      invoice.id,
+        fan_id,
+        creator_id:        creator_id || null,
+        event_id:          event_id   || null,
+        subscription_type,
+        gross_amount:      grossAmount,
+        platform_fee:      platformFee,
+        net_amount:        netAmount,
+        period_start:      periodStart,
+        period_end:        periodEnd,
+        status:            'paid',
+        paid_at:           new Date().toISOString(),
+      }, 'stripe_invoice_id')
+      console.log('subscription_payments record written')
+    } catch (err) {
+      console.error('subscription_payments upsert error:', err.message)
       return { statusCode: 500, body: err.message }
     }
   }

@@ -12,7 +12,7 @@ const TEXT3  = '#555250'
 const ACCENT = '#c9a84c'
 const RED    = '#e84545'
 const GREEN  = '#6dbf8a'
-const PLATFORM_FEE = 0.15
+const PLATFORM_FEE = 0.10
 
 const SB_URL = import.meta.env.VITE_SUPABASE_URL
 const SB_KEY = import.meta.env.VITE_SUPABASE_ANON_KEY
@@ -662,8 +662,8 @@ export default function AdminPortal() {
                 </div>
                 <div style={{ display: 'grid', gridTemplateColumns: isMobile ? '1fr' : 'repeat(3, 1fr)', gap: 12, marginBottom: 28 }}>
                   <StatCard label="Platform Gross (Monthly)" value={`$${totalGross.toLocaleString()}`} sub="All creator subscriptions" accent={ACCENT} />
-                  <StatCard label="Coveted Stage Revenue (15%)" value={`$${platformRevenue.toFixed(2)}`} sub="Platform net" accent={GREEN} />
-                  <StatCard label="Creator Payouts (85%)" value={`$${creatorPayouts.toFixed(2)}`} sub="Paid to creators" />
+                  <StatCard label="Coveted Stage Revenue (10%)" value={`$${platformRevenue.toFixed(2)}`} sub="Platform net" accent={GREEN} />
+                  <StatCard label="Creator Payouts (90%)" value={`$${creatorPayouts.toFixed(2)}`} sub="Paid to creators" />
                 </div>
 
                 <div style={{ fontFamily: "'DM Mono', monospace", fontSize: 9, color: TEXT3, letterSpacing: '0.2em', marginBottom: 12 }}>TOP CREATORS BY REVENUE</div>
@@ -848,8 +848,8 @@ export default function AdminPortal() {
 
               <div style={{ display: 'grid', gridTemplateColumns: isMobile ? '1fr 1fr' : 'repeat(3, 1fr)', gap: 12, marginBottom: 28 }}>
                 <StatCard label="Total Gross" value={`$${totalGross.toLocaleString()}`} sub="All subscriptions" accent={ACCENT} />
-                <StatCard label="Coveted Stage (15%)" value={`$${platformRevenue.toFixed(2)}`} accent={GREEN} />
-                <StatCard label="Creator Payouts (85%)" value={`$${creatorPayouts.toFixed(2)}`} />
+                <StatCard label="Coveted Stage (10%)" value={`$${platformRevenue.toFixed(2)}`} accent={GREEN} />
+                <StatCard label="Creator Payouts (90%)" value={`$${creatorPayouts.toFixed(2)}`} />
               </div>
 
               {/* Search */}
@@ -858,7 +858,7 @@ export default function AdminPortal() {
               <div style={{ fontFamily: "'DM Mono', monospace", fontSize: 9, color: TEXT3, letterSpacing: '0.2em', marginBottom: 12 }}>REVENUE BY CREATOR</div>
               <div style={{ background: BG2, border: `1px solid ${BORDER}`, borderRadius: 12, overflow: 'hidden' }}>
                 <div style={{ display: 'grid', gridTemplateColumns: isMobile ? '2fr 1fr 1fr' : '2fr 1fr 1fr 1fr 1fr', padding: '10px 16px', borderBottom: `1px solid ${BORDER2}` }}>
-                  {(isMobile ? ['Creator', 'Subs', 'Gross'] : ['Creator', 'Category', 'Subscribers', 'Gross/mo', 'Platform (15%)']).map(h => (
+                  {(isMobile ? ['Creator', 'Subs', 'Gross'] : ['Creator', 'Category', 'Subscribers', 'Gross/mo', 'Platform (10%)']).map(h => (
                     <div key={h} style={{ fontFamily: "'DM Mono', monospace", fontSize: 9, color: TEXT3, letterSpacing: '0.12em' }}>{h.toUpperCase()}</div>
                   ))}
                 </div>
