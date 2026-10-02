@@ -220,6 +220,9 @@ export default function AdminPortal() {
   const [tbEventList, setTbEventList] = useState([])      // ticketed events for that creator
   const [tbEventId, setTbEventId] = useState('')          // selected event id
   const [tbEventsLoading, setTbEventsLoading] = useState(false)
+  // Ticket sales summary report state
+  const [tsDateFrom, setTsDateFrom] = useState('')
+  const [tsDateTo, setTsDateTo] = useState('')
   const [importRows, setImportRows] = useState([])
   const [importErrors, setImportErrors] = useState([])
   const [importLoading, setImportLoading] = useState(false)
@@ -534,6 +537,84 @@ export default function AdminPortal() {
           registered_attendances:  e.registered_attendances || 0,
           guest_attendances:       e.guest_attendances || 0,
         })))
+
+      // ── Ticket sales summary by event ───────────────────────────────────
+      } else if (reportType === 'ticket_sales') {
+        // Fetch all paid ticket purchases with event + creator info
+        let query = 'ticket_purchases?status=eq.paid&select=event_id,quantity,ticket_category,amount,stripe_fee,platform_fee,net_amount,created_at,events(name,event_date,creators(profiles(handle)))&order=created_at.asc'
+        if (tsDateFrom) query += `&created_at=gte.${tsDateFrom}T00:00:00`
+        if (tsDateTo)   query += `&created_at=lte.${tsDateTo}T23:59:59`
+        let data = await sbFetch(query)
+        data = Array.isArray(data) ? data : []
+
+        // Aggregate by event_id + ticket_category
+        const eventMap = {}
+        for (const tp of data) {
+          const eventId  = tp.event_id
+          const cat      = (tp.ticket_category || 'General').trim()
+          const key      = eventId
+
+          if (!eventMap[key]) {
+            eventMap[key] = {
+              _event:          tp.events?.name        || '—',
+              _event_date:     tp.events?.event_date  || '—',
+              _handle:         tp.events?.creators?.profiles?.handle || '—',
+              _cats:           {},   // category → qty
+              _gross:          0,
+              _stripe_fee:     0,
+              _platform_fee:   0,
+              _net:            0,
+            }
+          }
+
+          eventMap[key]._cats[cat]      = (eventMap[key]._cats[cat] || 0) + (tp.quantity || 1)
+          eventMap[key]._gross         += Number(tp.amount        || 0)
+          eventMap[key]._stripe_fee    += Number(tp.stripe_fee    || 0)
+          eventMap[key]._platform_fee  += Number(tp.platform_fee  || 0)
+          eventMap[key]._net           += Number(tp.net_amount    || 0)
+        }
+
+        // Collect all ticket categories seen across all events for dynamic columns
+        const allCats = [...new Set(data.map(tp => (tp.ticket_category || 'General').trim()))].sort()
+
+        const rows = Object.values(eventMap).map(ev => {
+          const row = {
+            creator_handle: ev._handle,
+            event_name:     ev._event,
+            event_date:     ev._event_date,
+          }
+          for (const cat of allCats) {
+            row[`tickets_${cat.toLowerCase().replace(/\s+/g, '_')}`] = ev._cats[cat] || 0
+          }
+          row.gross_sales    = `$${ev._gross.toFixed(2)}`
+          row.stripe_fees    = `$${ev._stripe_fee.toFixed(2)}`
+          row.platform_fees  = `$${ev._platform_fee.toFixed(2)}`
+          row.net_sales      = `$${ev._net.toFixed(2)}`
+          return row
+        })
+
+        // Sort by event date descending
+        rows.sort((a, b) => (b.event_date > a.event_date ? 1 : -1))
+
+        // Totals row
+        if (rows.length > 0) {
+          const totals = { creator_handle: '— TOTAL —', event_name: '', event_date: '' }
+          for (const cat of allCats) {
+            const k = `tickets_${cat.toLowerCase().replace(/\s+/g, '_')}`
+            totals[k] = rows.reduce((s, r) => s + (r[k] || 0), 0)
+          }
+          const sumGross    = Object.values(eventMap).reduce((s, e) => s + e._gross, 0)
+          const sumStripe   = Object.values(eventMap).reduce((s, e) => s + e._stripe_fee, 0)
+          const sumPlatform = Object.values(eventMap).reduce((s, e) => s + e._platform_fee, 0)
+          const sumNet      = Object.values(eventMap).reduce((s, e) => s + e._net, 0)
+          totals.gross_sales   = `$${sumGross.toFixed(2)}`
+          totals.stripe_fees   = `$${sumStripe.toFixed(2)}`
+          totals.platform_fees = `$${sumPlatform.toFixed(2)}`
+          totals.net_sales     = `$${sumNet.toFixed(2)}`
+          rows.push(totals)
+        }
+
+        setReportData(rows)
 
       // ── Ticket buyers by creator + event ────────────────────────────────
       } else if (reportType === 'ticket_buyers') {
@@ -1183,6 +1264,7 @@ export default function AdminPortal() {
               { id: 'post_access',    label: '▶ Post Access'    },
               { id: 'event_access',   label: '⬡ Event Access'   },
               { id: 'ticket_buyers',  label: '🎟 Ticket Buyers'  },
+              { id: 'ticket_sales',   label: '◈ Ticket Sales'   },
             ].map(t => (
               <button key={t.id} onClick={() => { setReportType(t.id); setReportFilter('all'); setReportData([]); setTbCreatorId(''); setTbEventList([]); setTbEventId('') }} style={{
                 background: reportType === t.id ? ACCENT + '18' : BG2,
@@ -1273,6 +1355,35 @@ export default function AdminPortal() {
             </div>
           )}
 
+          {/* Ticket sales: optional date range filter */}
+          {reportType === 'ticket_sales' && (
+            <div style={{ display: 'flex', gap: 12, flexWrap: 'wrap', marginBottom: 20, alignItems: 'flex-end' }}>
+              <div>
+                <div style={{ fontFamily: "'DM Mono', monospace", fontSize: 9, color: TEXT3, letterSpacing: '0.16em', marginBottom: 6 }}>FROM DATE (optional)</div>
+                <input type="date" value={tsDateFrom} onChange={e => setTsDateFrom(e.target.value)} style={{
+                  background: BG2, border: `1px solid ${BORDER}`, borderRadius: 8,
+                  padding: '8px 14px', color: TEXT1, fontFamily: "'DM Mono', monospace", fontSize: 12,
+                  outline: 'none', colorScheme: 'dark',
+                }} />
+              </div>
+              <div>
+                <div style={{ fontFamily: "'DM Mono', monospace", fontSize: 9, color: TEXT3, letterSpacing: '0.16em', marginBottom: 6 }}>TO DATE (optional)</div>
+                <input type="date" value={tsDateTo} onChange={e => setTsDateTo(e.target.value)} style={{
+                  background: BG2, border: `1px solid ${BORDER}`, borderRadius: 8,
+                  padding: '8px 14px', color: TEXT1, fontFamily: "'DM Mono', monospace", fontSize: 12,
+                  outline: 'none', colorScheme: 'dark',
+                }} />
+              </div>
+              {(tsDateFrom || tsDateTo) && (
+                <button onClick={() => { setTsDateFrom(''); setTsDateTo('') }} style={{
+                  background: 'transparent', color: TEXT3, border: `1px solid ${BORDER}`,
+                  borderRadius: 8, padding: '8px 14px', fontFamily: "'DM Mono', monospace",
+                  fontSize: 10, cursor: 'pointer', alignSelf: 'flex-end',
+                }}>CLEAR</button>
+              )}
+            </div>
+          )}
+
           {/* Run + Export */}
           <div style={{ display: 'flex', gap: 10, marginBottom: 24, flexWrap: 'wrap' }}>
             <button onClick={runReport} disabled={reportLoading} style={{
@@ -1288,7 +1399,7 @@ export default function AdminPortal() {
                 borderRadius: 8, padding: '10px 24px',
                 fontFamily: "'DM Mono', monospace", fontSize: 11, fontWeight: 700,
                 letterSpacing: '0.12em', cursor: 'pointer',
-              }}>↓ DOWNLOAD CSV ({reportData.length} rows)</button>
+              }}>↓ DOWNLOAD CSV ({reportType === 'ticket_sales' ? reportData.length - 1 : reportData.length} rows)</button>
             )}
           </div>
 
@@ -1307,15 +1418,28 @@ export default function AdminPortal() {
                     </tr>
                   </thead>
                   <tbody>
-                    {reportData.map((row, i) => (
-                      <tr key={i} style={{ borderBottom: i < reportData.length - 1 ? `1px solid ${BORDER2}` : 'none' }}>
-                        {Object.values(row).map((val, j) => (
-                          <td key={j} style={{ padding: '9px 14px', color: TEXT2, maxWidth: 200, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>
-                            {val !== null && val !== undefined ? String(val) : '—'}
-                          </td>
-                        ))}
-                      </tr>
-                    ))}
+                    {reportData.map((row, i) => {
+                      const isTotals = reportType === 'ticket_sales' && i === reportData.length - 1 && row.creator_handle === '— TOTAL —'
+                      return (
+                        <tr key={i} style={{
+                          borderBottom: i < reportData.length - 1 ? `1px solid ${BORDER2}` : 'none',
+                          background: isTotals ? ACCENT + '10' : 'transparent',
+                          borderTop: isTotals ? `1px solid ${ACCENT}33` : 'none',
+                        }}>
+                          {Object.values(row).map((val, j) => (
+                            <td key={j} style={{
+                              padding: '9px 14px',
+                              color: isTotals ? ACCENT : TEXT2,
+                              fontWeight: isTotals ? 700 : 400,
+                              fontFamily: isTotals ? "'DM Mono', monospace" : 'inherit',
+                              maxWidth: 200, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap',
+                            }}>
+                              {val !== null && val !== undefined ? String(val) : '—'}
+                            </td>
+                          ))}
+                        </tr>
+                      )
+                    })}
                   </tbody>
                 </table>
               </div>
