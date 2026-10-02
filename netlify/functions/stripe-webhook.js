@@ -42,6 +42,33 @@ async function sbUpdate(table, data, filterCol, filterVal) {
   return res
 }
 
+// ── Fee helper — fetches the exact Stripe processing fee for a charge ────────
+// Returns { stripeFee, platformFee, netAmount } all in dollars.
+// gross        = amount the fan paid (dollars)
+// paymentIntent or chargeId from the session — used to look up balance_transaction
+async function calcFees(stripe, gross, paymentIntentId) {
+  const PLATFORM_RATE = 0.10
+  let stripeFee = parseFloat((gross * 0.029 + 0.30).toFixed(2))  // fallback estimate
+
+  if (paymentIntentId) {
+    try {
+      const pi = await stripe.paymentIntents.retrieve(paymentIntentId, {
+        expand: ['latest_charge.balance_transaction'],
+      })
+      const bt = pi.latest_charge?.balance_transaction
+      if (bt && bt.fee != null) {
+        stripeFee = parseFloat((bt.fee / 100).toFixed(2))
+      }
+    } catch (e) {
+      console.warn('Could not fetch balance_transaction, using estimate:', e.message)
+    }
+  }
+
+  const platformFee = parseFloat((gross * PLATFORM_RATE).toFixed(2))
+  const netAmount   = parseFloat((gross - platformFee - stripeFee).toFixed(2))
+  return { stripeFee, platformFee, netAmount }
+}
+
 // ── Handler ───────────────────────────────────────────────────────────────────
 exports.handler = async (event) => {
   const stripe = new Stripe(process.env.STRIPE_SECRET_KEY)
@@ -66,30 +93,28 @@ exports.handler = async (event) => {
     const session = stripeEvent.data.object
     console.log('Session metadata:', JSON.stringify(session.metadata))
 
-    const PLATFORM_FEE_RATE = 0.10  // 10% platform fee
-
     // ── Donation ───────────────────────────────────────────────────────────
     if (session.metadata?.type === 'donation') {
       const { creator_id, fan_id, creator_name } = session.metadata
-      const amountDollars = (session.amount_total / 100).toFixed(2)
       const grossAmount   = session.amount_total / 100
-      const platformFee   = parseFloat((grossAmount * PLATFORM_FEE_RATE).toFixed(2))
-      const netAmount     = parseFloat((grossAmount - platformFee).toFixed(2))
+      const amountDollars = grossAmount.toFixed(2)
+      const { stripeFee, platformFee, netAmount } = await calcFees(stripe, grossAmount, session.payment_intent)
 
       // Record donation with fee breakdown in Supabase
       try {
         await sbUpsert('donations', {
           creator_id,
-          fan_id: fan_id || null,
+          fan_id:            fan_id || null,
           stripe_session_id: session.id,
-          amount:        grossAmount,
-          platform_fee:  platformFee,
-          net_amount:    netAmount,
-          status:        'paid',
-          donor_email:   session.customer_details?.email || null,
-          donor_name:    session.customer_details?.name  || null,
+          amount:            grossAmount,
+          stripe_fee:        stripeFee,
+          platform_fee:      platformFee,
+          net_amount:        netAmount,
+          status:            'paid',
+          donor_email:       session.customer_details?.email || null,
+          donor_name:        session.customer_details?.name  || null,
         }, 'stripe_session_id')
-        console.log(`Donation recorded — gross: $${grossAmount}, fee: $${platformFee}, net: $${netAmount}`)
+        console.log(`Donation recorded — gross: $${grossAmount}, stripe: $${stripeFee}, platform: $${platformFee}, net: $${netAmount}`)
       } catch (donErr) {
         console.error('Donation upsert error:', donErr.message)
         // Don't block email on DB error
@@ -164,9 +189,12 @@ exports.handler = async (event) => {
             cancelled_at: null,
           }, 'event_id,fan_id', `${event_id}&fan_id=eq.${fan_id}`)
         } else {
-          const classGross = session.amount_total ? session.amount_total / 100 : null
-          const classFee   = classGross != null ? parseFloat((classGross * PLATFORM_FEE_RATE).toFixed(2)) : null
-          const classNet   = classGross != null ? parseFloat((classGross - classFee).toFixed(2))          : null
+          let classStripeFee = null, classPlatformFee = null, classNet = null
+          if (session.amount_total) {
+            const classGross = session.amount_total / 100
+            ;({ stripeFee: classStripeFee, platformFee: classPlatformFee, netAmount: classNet } =
+              await calcFees(stripe, classGross, session.payment_intent))
+          }
 
           await sbUpsert('class_registrations', {
             event_id,
@@ -176,7 +204,8 @@ exports.handler = async (event) => {
             stripe_subscription_id: session.subscription,
             stripe_customer_id: session.customer,
             status: 'active',
-            platform_fee: classFee,
+            stripe_fee:   classStripeFee,
+            platform_fee: classPlatformFee,
             net_amount:   classNet,
           }, 'event_id,fan_id')
         }
@@ -206,16 +235,17 @@ exports.handler = async (event) => {
       try {
         // Use stripe_session_id as the unique conflict key so guest purchases
         // (which have no fan_id) can be upserted safely.
-        const ticketGross   = session.amount_total / 100
-        const ticketFee     = parseFloat((ticketGross * PLATFORM_FEE_RATE).toFixed(2))
-        const ticketNet     = parseFloat((ticketGross - ticketFee).toFixed(2))
+        const ticketGross = session.amount_total / 100
+        const { stripeFee: ticketStripeFee, platformFee: ticketPlatformFee, netAmount: ticketNet } =
+          await calcFees(stripe, ticketGross, session.payment_intent)
 
         await sbUpsert('ticket_purchases', {
           event_id,
           fan_id:            fanIdOrNull,
           stripe_session_id: session.id,
           amount:            ticketGross,  // total paid (price × qty)
-          platform_fee:      ticketFee,
+          stripe_fee:        ticketStripeFee,
+          platform_fee:      ticketPlatformFee,
           net_amount:        ticketNet,
           quantity:          qty,
           status:            'paid',
@@ -224,7 +254,7 @@ exports.handler = async (event) => {
           buyer_phone:       buyerPhone,
           ticket_category:   ticket_category || null,
         }, 'stripe_session_id')
-        console.log(`Ticket purchase recorded — gross: $${ticketGross}, fee: $${ticketFee}, net: $${ticketNet}`)
+        console.log(`Ticket recorded — gross: $${ticketGross}, stripe: $${ticketStripeFee}, platform: $${ticketPlatformFee}, net: $${ticketNet}`)
 
         // Only create an RSVP row for logged-in fans (guests have no fan account)
         if (fanIdOrNull) {
@@ -369,19 +399,23 @@ exports.handler = async (event) => {
     console.log('Upserting subscription — fan:', fan_id, 'creator:', creator_id)
 
     try {
-      const subGross = session.amount_total ? session.amount_total / 100 : null
-      const subFee   = subGross != null ? parseFloat((subGross * PLATFORM_FEE_RATE).toFixed(2)) : null
-      const subNet   = subGross != null ? parseFloat((subGross - subFee).toFixed(2))            : null
+      let subStripeFee = null, subPlatformFee = null, subNet = null
+      if (session.amount_total) {
+        const subGross = session.amount_total / 100
+        ;({ stripeFee: subStripeFee, platformFee: subPlatformFee, netAmount: subNet } =
+          await calcFees(stripe, subGross, session.payment_intent))
+      }
 
       await sbUpsert('subscriptions', {
         fan_id,
         creator_id,
         stripe_subscription_id: session.subscription,
         status: 'active',
-        platform_fee: subFee,
+        stripe_fee:   subStripeFee,
+        platform_fee: subPlatformFee,
         net_amount:   subNet,
       }, 'fan_id,creator_id')
-      console.log(`Subscription created — gross: $${subGross}, fee: $${subFee}, net: $${subNet}`)
+      console.log(`Subscription created — stripe: $${subStripeFee}, platform: $${subPlatformFee}, net: $${subNet}`)
     } catch (err) {
       console.error('Subscription upsert error:', err.message)
       return { statusCode: 500, body: err.message }
@@ -400,12 +434,13 @@ exports.handler = async (event) => {
 
     const stripeSubscriptionId = invoice.subscription
     const grossAmount = invoice.amount_paid / 100
-    const platformFee = parseFloat((grossAmount * 0.10).toFixed(2))
-    const netAmount   = parseFloat((grossAmount - platformFee).toFixed(2))
     const periodStart = invoice.period_start ? new Date(invoice.period_start * 1000).toISOString() : null
     const periodEnd   = invoice.period_end   ? new Date(invoice.period_end   * 1000).toISOString() : null
 
-    console.log(`Invoice paid — sub: ${stripeSubscriptionId}, gross: $${grossAmount}, fee: $${platformFee}, net: $${netAmount}`)
+    // Get exact Stripe fee from the invoice's charge
+    const { stripeFee, platformFee, netAmount } = await calcFees(stripe, grossAmount, invoice.payment_intent)
+
+    console.log(`Invoice paid — sub: ${stripeSubscriptionId}, gross: $${grossAmount}, stripe: $${stripeFee}, platform: $${platformFee}, net: $${netAmount}`)
 
     // Look up subscription to get fan_id + creator_id
     let fan_id = null, creator_id = null, subscription_type = 'creator'
@@ -450,6 +485,7 @@ exports.handler = async (event) => {
         event_id:          event_id   || null,
         subscription_type,
         gross_amount:      grossAmount,
+        stripe_fee:        stripeFee,
         platform_fee:      platformFee,
         net_amount:        netAmount,
         period_start:      periodStart,

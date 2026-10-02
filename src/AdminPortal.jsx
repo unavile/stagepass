@@ -263,8 +263,9 @@ export default function AdminPortal() {
 
   // ── Stats ──────────────────────────────────────────────────────────────
   const totalGross = creators.reduce((s, c) => s + (c.subCount || 0) * (c.monthly_price || 0), 0)
+  const STRIPE_FEE_ESTIMATE = 0.03   // ~3% blended estimate for display
   const platformRevenue = totalGross * PLATFORM_FEE
-  const creatorPayouts = totalGross * (1 - PLATFORM_FEE)
+  const creatorPayouts = totalGross * (1 - PLATFORM_FEE - STRIPE_FEE_ESTIMATE)
   const totalSubs = creators.reduce((s, c) => s + (c.subCount || 0), 0)
   const activeCreators = creators.filter(c => !c.suspended).length
   const suspendedCount = creators.filter(c => c.suspended).length
@@ -663,7 +664,7 @@ export default function AdminPortal() {
                 <div style={{ display: 'grid', gridTemplateColumns: isMobile ? '1fr' : 'repeat(3, 1fr)', gap: 12, marginBottom: 28 }}>
                   <StatCard label="Platform Gross (Monthly)" value={`$${totalGross.toLocaleString()}`} sub="All creator subscriptions" accent={ACCENT} />
                   <StatCard label="Coveted Stage Revenue (10%)" value={`$${platformRevenue.toFixed(2)}`} sub="Platform net" accent={GREEN} />
-                  <StatCard label="Creator Payouts (90%)" value={`$${creatorPayouts.toFixed(2)}`} sub="Paid to creators" />
+                  <StatCard label="Creator Payouts (~87%)" value={`$${creatorPayouts.toFixed(2)}`} sub="After platform + Stripe fees" />
                 </div>
 
                 <div style={{ fontFamily: "'DM Mono', monospace", fontSize: 9, color: TEXT3, letterSpacing: '0.2em', marginBottom: 12 }}>TOP CREATORS BY REVENUE</div>
@@ -849,7 +850,7 @@ export default function AdminPortal() {
               <div style={{ display: 'grid', gridTemplateColumns: isMobile ? '1fr 1fr' : 'repeat(3, 1fr)', gap: 12, marginBottom: 28 }}>
                 <StatCard label="Total Gross" value={`$${totalGross.toLocaleString()}`} sub="All subscriptions" accent={ACCENT} />
                 <StatCard label="Coveted Stage (10%)" value={`$${platformRevenue.toFixed(2)}`} accent={GREEN} />
-                <StatCard label="Creator Payouts (90%)" value={`$${creatorPayouts.toFixed(2)}`} />
+                <StatCard label="Creator Payouts (~87%)" value={`$${creatorPayouts.toFixed(2)}`} sub="After platform + Stripe fees" />
               </div>
 
               {/* Search */}

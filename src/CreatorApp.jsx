@@ -391,7 +391,7 @@ export default function CreatorApp({ session, profile, onSignOut }) {
   const unreadCount = notifications.filter(n => !n.read).length
 
   const monthlyRevenue = subscribers.length * creator.monthlyPrice
-  const netRevenue = (monthlyRevenue * 0.90).toFixed(2)
+  const netRevenue = (monthlyRevenue * 0.87).toFixed(2)   // ~90% after 10% platform fee − ~3% Stripe fee
   const platformFee = (monthlyRevenue * 0.10).toFixed(2)
 
   const TABS = [
@@ -605,7 +605,7 @@ export default function CreatorApp({ session, profile, onSignOut }) {
                 <StatCard label="Subscribers" value={subscribers.length} sub="Active" accent={ac} />
                 <StatCard label="Monthly Revenue" value={`$${monthlyRevenue}`} sub="Gross" />
                 <StatCard label="Posts" value={posts.length} sub="Published" />
-                <StatCard label="Net Revenue" value={`$${netRevenue}`} sub="After 10% platform fee" />
+                <StatCard label="Net Revenue" value={`$${netRevenue}`} sub="After platform + Stripe fees" />
               </div>
 
               <SectionLabel>Recent Posts</SectionLabel>
@@ -732,7 +732,7 @@ export default function CreatorApp({ session, profile, onSignOut }) {
               <div style={{ display: 'grid', gridTemplateColumns: 'repeat(3, 1fr)', gap: 12, marginBottom: 28 }}>
                 <StatCard label="Active" value={subscribers.length} accent={ac} />
                 <StatCard label="Gross (Monthly)" value={`$${monthlyRevenue}`} />
-                <StatCard label="Net (Monthly)" value={`$${netRevenue}`} sub="After 10% platform fee" />
+                <StatCard label="Net (Monthly)" value={`$${netRevenue}`} sub="After platform + Stripe fees" />
               </div>
               {subsLoading ? (
                 <div style={{ color: TEXT3, fontFamily: "'DM Mono', monospace", fontSize: 11 }}>Loading...</div>
@@ -1102,7 +1102,7 @@ export default function CreatorApp({ session, profile, onSignOut }) {
               <div style={{ fontFamily: "'DM Serif Display', Georgia, serif", fontSize: isMobile ? 24 : 34, color: TEXT1, marginBottom: 24 }}>Earnings</div>
               <div style={{ display: 'grid', gridTemplateColumns: 'repeat(3, 1fr)', gap: 12, marginBottom: 28 }}>
                 <StatCard label="Gross (Monthly)" value={`$${monthlyRevenue}`} accent={ac} />
-                <StatCard label="Net (Monthly)" value={`$${netRevenue}`} sub="After 10% platform fee" />
+                <StatCard label="Net (Monthly)" value={`$${netRevenue}`} sub="After platform + Stripe fees" />
                 <StatCard label="Active Subs" value={subscribers.length} />
               </div>
               <SectionLabel>Subscription Breakdown</SectionLabel>
@@ -1120,6 +1120,10 @@ export default function CreatorApp({ session, profile, onSignOut }) {
                 <div style={{ display: 'flex', justifyContent: 'space-between', padding: '10px 0', borderBottom: `1px solid ${BORDER2}` }}>
                   <span style={{ fontSize: 13, color: TEXT2 }}>Platform fee (10%)</span>
                   <span style={{ fontFamily: "'DM Mono', monospace", fontSize: 13, color: '#e84545' }}>-${platformFee}</span>
+                </div>
+                <div style={{ display: 'flex', justifyContent: 'space-between', padding: '10px 0', borderBottom: `1px solid ${BORDER2}` }}>
+                  <span style={{ fontSize: 13, color: TEXT2 }}>Payment processing (~3%)</span>
+                  <span style={{ fontFamily: "'DM Mono', monospace", fontSize: 13, color: '#e84545' }}>-${(monthlyRevenue * 0.03).toFixed(2)}</span>
                 </div>
                 <div style={{ display: 'flex', justifyContent: 'space-between', padding: '14px 0 0' }}>
                   <span style={{ fontSize: 14, color: TEXT1, fontWeight: 600 }}>Net revenue</span>
