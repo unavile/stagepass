@@ -11,7 +11,7 @@ function formatEventDate(dateStr, timeStr) {
   const ampm = h >= 12 ? 'PM' : 'AM'
   const h12 = h % 12 || 12
   const minStr = min === 0 ? '' : `:${String(min).padStart(2, '0')}`
-  return `${dayName}, ${monthDay} · ${h12}${minStr} ${ampm}`
+  return `${dayName}, ${monthDay} · ${h12}${minStr} ${ampm} · Seating starts at 3PM`
 }
 
 function Spinner() {
@@ -236,10 +236,24 @@ export default function EventLanding({ slug, fallback = null }) {
           </div>
         )}
 
-        {/* Venue — 1.5× larger (was 14px → 21px) */}
+        {/* Venue — clickable link to Google Maps */}
         {event.venue && (
-          <div style={{ color: '#555', fontSize: 18, marginTop: 6, letterSpacing: '0.02em', fontFamily: 'Georgia, serif' }}>
-            📍 {event.venue}
+          <div style={{ marginTop: 6 }}>
+            <a
+              href={`https://www.google.com/maps/search/?api=1&query=${encodeURIComponent(event.venue)}`}
+              target="_blank"
+              rel="noopener noreferrer"
+              style={{
+                color: '#555', fontSize: 18, letterSpacing: '0.02em',
+                fontFamily: 'Georgia, serif', textDecoration: 'none',
+                borderBottom: '1px dotted #aaa',
+                transition: 'color 0.15s',
+              }}
+              onMouseEnter={e => e.currentTarget.style.color = accent}
+              onMouseLeave={e => e.currentTarget.style.color = '#555'}
+            >
+              📍 {event.venue}
+            </a>
           </div>
         )}
       </div>
