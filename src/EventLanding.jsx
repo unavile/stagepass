@@ -56,6 +56,11 @@ export default function EventLanding({ slug, fallback = null }) {
   const [buying, setBuying] = useState(false)
   const [buyError, setBuyError] = useState('')
 
+  // Email send state
+  const [emailSent, setEmailSent] = useState(false)
+  const [emailSending, setEmailSending] = useState(false)
+  const [emailError, setEmailError] = useState('')
+
   const sbUrl = import.meta.env.VITE_SUPABASE_URL
   const sbKey = import.meta.env.VITE_SUPABASE_ANON_KEY
 
@@ -125,6 +130,51 @@ export default function EventLanding({ slug, fallback = null }) {
     setBuying(false)
   }
 
+  async function handleSendTicketEmail() {
+    if (emailSending || emailSent || !sessionId || !event) return
+    setEmailSending(true)
+    setEmailError('')
+    try {
+      // Get the customer email from the Stripe session via validate-ticket
+      const validateRes = await fetch('/.netlify/functions/validate-ticket', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ sessionId, eventId: event.id }),
+      })
+      const validateData = await validateRes.json()
+      const fanEmail = validateData?.customerEmail
+
+      if (!fanEmail || fanEmail === 'N/A') {
+        setEmailError('Could not find your email address. Please check your Stripe confirmation email.')
+        setEmailSending(false)
+        return
+      }
+
+      const dateDisplay = formatEventDate(event.event_date, event.start_time)
+      const res = await fetch('/.netlify/functions/send-ticket-email', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          sessionId,
+          eventName: event.name,
+          eventDate: dateDisplay,
+          eventVenue: event.venue || '',
+          eventSlug: slug,
+          fanEmail,
+        }),
+      })
+      const data = await res.json()
+      if (data.sent) {
+        setEmailSent(true)
+      } else {
+        setEmailError('Failed to send email. Please screenshot your QR code.')
+      }
+    } catch (err) {
+      setEmailError('Failed to send email. Please screenshot your QR code.')
+    }
+    setEmailSending(false)
+  }
+
   const purchased = typeof window !== 'undefined' && new URLSearchParams(window.location.search).get('purchased') === '1'
   const sessionId = typeof window !== 'undefined' && new URLSearchParams(window.location.search).get('session_id')
 
@@ -137,6 +187,7 @@ export default function EventLanding({ slug, fallback = null }) {
   const accent = event.accent_color || '#7c5cbf'
   const accentBg = accent + '18'
   const accentBorder = accent + '55'
+  const ticketPageUrl = `/${slug}/ticket?session_id=${encodeURIComponent(sessionId || '')}`
 
   return (
     <div style={{ minHeight: '100vh', background: '#faf8f4', fontFamily: "'DM Mono', monospace", color: '#111' }}>
@@ -194,12 +245,53 @@ export default function EventLanding({ slug, fallback = null }) {
             <div style={{ fontSize: 13, color: '#3a9a64', fontFamily: 'Georgia, serif', lineHeight: 1.6 }}>
               A confirmation email has been sent to you. See you at the event!
             </div>
+
             {sessionId && (
-              <div style={{ fontSize: 12, color: '#3a9a64', marginTop: 10, fontFamily: "'DM Mono', monospace" }}>
-                Show the QR code at the door for entry. →
+              <div style={{ marginTop: 14, display: 'flex', flexDirection: 'column', gap: 8 }}>
+                {/* Save My Ticket button */}
+                <a
+                  href={ticketPageUrl}
+                  style={{
+                    display: 'inline-block',
+                    background: '#1a7a44', color: '#fff',
+                    textDecoration: 'none', borderRadius: 8,
+                    padding: '10px 20px', fontFamily: "'DM Mono', monospace",
+                    fontSize: 12, fontWeight: 700, letterSpacing: '0.12em',
+                    width: 'fit-content',
+                  }}
+                >
+                  🎟 SAVE MY TICKET →
+                </a>
+
+                {/* Email me my ticket */}
+                {!emailSent ? (
+                  <div>
+                    <button
+                      onClick={handleSendTicketEmail}
+                      disabled={emailSending}
+                      style={{
+                        background: 'none', border: '1.5px solid #5aaa7a',
+                        color: '#1a7a44', borderRadius: 8,
+                        padding: '8px 16px', fontFamily: "'DM Mono', monospace",
+                        fontSize: 11, cursor: emailSending ? 'not-allowed' : 'pointer',
+                        letterSpacing: '0.1em', opacity: emailSending ? 0.6 : 1,
+                      }}
+                    >
+                      {emailSending ? 'SENDING...' : '📧 EMAIL ME MY TICKET'}
+                    </button>
+                    {emailError && (
+                      <div style={{ color: '#c0392b', fontSize: 11, marginTop: 6 }}>{emailError}</div>
+                    )}
+                  </div>
+                ) : (
+                  <div style={{ fontSize: 12, color: '#1a7a44', fontFamily: "'DM Mono', monospace" }}>
+                    ✓ Ticket link sent to your email
+                  </div>
+                )}
               </div>
             )}
           </div>
+
           {sessionId && (
             <div style={{ textAlign: 'center' }}>
               <img
@@ -227,7 +319,7 @@ export default function EventLanding({ slug, fallback = null }) {
         <h1 style={{
           margin: '0 0 10px',
           fontFamily: 'Georgia, serif',
-          fontSize: 'clamp(24px, 4vw, 42px)',   /* was clamp(32,5vw,56) */
+          fontSize: 'clamp(24px, 4vw, 42px)',
           fontWeight: 700,
           color: '#111',
           lineHeight: 1.15,
@@ -236,7 +328,6 @@ export default function EventLanding({ slug, fallback = null }) {
           {event.name}
         </h1>
 
-        {/* Date pill — 1.5× larger font than before (was 15px → 22px) */}
         {dateDisplay && (
           <div style={{
             display: 'inline-flex',
@@ -289,10 +380,10 @@ export default function EventLanding({ slug, fallback = null }) {
           gridTemplateColumns: '1fr 1fr 300px',
           gap: 24,
           alignItems: 'stretch',
-          height: 'calc(100vh - 64px - 70px - 66px)',  /* desktop: fits in one screen */
+          height: 'calc(100vh - 64px - 70px - 66px)',
         }}
       >
-        {/* Col 1: Brochure image — constrained to grid height on desktop */}
+        {/* Col 1: Brochure image */}
         <div className="col-brochure" style={{ minHeight: 0 }}>
           {event.brochure_image_url ? (
             <div style={{ borderRadius: 16, overflow: 'hidden', boxShadow: '0 6px 32px rgba(0,0,0,0.11)', height: '100%', maxWidth: '80%' }}>
