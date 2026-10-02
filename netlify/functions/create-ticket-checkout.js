@@ -57,7 +57,8 @@ exports.handler = async (event) => {
         type: 'ticket_purchase',
         ticket_category: categoryName || '',
       },
-      success_url: successUrl || `${process.env.URL || 'https://covetedstage.com'}/success?ticket=1&event=${eventId}`,
+      // {CHECKOUT_SESSION_ID} is a Stripe template variable — it gets replaced with the real session ID at redirect time
+      success_url: (successUrl || `${process.env.URL || 'https://covetedstage.com'}/success?ticket=1&event=${eventId}`) + '&session_id={CHECKOUT_SESSION_ID}',
       cancel_url: cancelUrl || `${process.env.URL || 'https://covetedstage.com'}`,
     }
 

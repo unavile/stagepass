@@ -126,6 +126,7 @@ export default function EventLanding({ slug, fallback = null }) {
   }
 
   const purchased = typeof window !== 'undefined' && new URLSearchParams(window.location.search).get('purchased') === '1'
+  const sessionId = typeof window !== 'undefined' && new URLSearchParams(window.location.search).get('session_id')
 
   if (loading) return <Spinner />
   if (notFound) return fallback || <NotFound />
@@ -184,16 +185,35 @@ export default function EventLanding({ slug, fallback = null }) {
       {purchased && (
         <div style={{
           background: '#e8f7ee', borderBottom: '1.5px solid #b2dfc5',
-          padding: '14px 24px', display: 'flex', alignItems: 'center', gap: 12,
-          color: '#1a7a44', fontSize: 14,
+          padding: '20px 24px', display: 'flex', alignItems: 'flex-start', gap: 20,
+          color: '#1a7a44', fontSize: 14, flexWrap: 'wrap',
         }}>
-          <span style={{ fontSize: 22 }}>🎉</span>
-          <div>
-            <div style={{ fontWeight: 700, marginBottom: 2 }}>Purchase confirmed!</div>
-            <div style={{ fontSize: 12, color: '#3a9a64', fontFamily: 'Georgia, serif' }}>
+          <div style={{ flex: 1, minWidth: 200 }}>
+            <div style={{ fontSize: 20, marginBottom: 4 }}>🎉</div>
+            <div style={{ fontWeight: 700, fontSize: 16, marginBottom: 6 }}>Purchase confirmed!</div>
+            <div style={{ fontSize: 13, color: '#3a9a64', fontFamily: 'Georgia, serif', lineHeight: 1.6 }}>
               A confirmation email has been sent to you. See you at the event!
             </div>
+            {sessionId && (
+              <div style={{ fontSize: 12, color: '#3a9a64', marginTop: 10, fontFamily: "'DM Mono', monospace" }}>
+                Show the QR code at the door for entry. →
+              </div>
+            )}
           </div>
+          {sessionId && (
+            <div style={{ textAlign: 'center' }}>
+              <img
+                src={`https://api.qrserver.com/v1/create-qr-code/?size=140x140&data=${encodeURIComponent(sessionId)}&bgcolor=e8f7ee&color=1a7a44&margin=4`}
+                alt="Ticket QR Code"
+                style={{ borderRadius: 8, display: 'block', border: '2px solid #b2dfc5' }}
+                width={140}
+                height={140}
+              />
+              <div style={{ fontSize: 10, color: '#5aaa7a', marginTop: 6, fontFamily: "'DM Mono', monospace", letterSpacing: '0.1em' }}>
+                TICKET QR CODE
+              </div>
+            </div>
+          )}
         </div>
       )}
 

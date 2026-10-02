@@ -8,13 +8,16 @@ import Success from './Success'
 import ResetPassword from './ResetPassword'
 import ResetPasswordFan from './ResetPasswordFan'
 import EventLanding from './EventLanding'
+import ValidateTicket from './ValidateTicket'
 
 const path = window.location.pathname.toLowerCase()
 const hash = window.location.hash
 const RESERVED = ['success', 'reset-password', 'reset-password-fan', 'creator', 'admin', '']
 
-// Extract segment after leading slash e.g. /shantimantra → shantimantra
-const segment = path.replace(/^\//, '').split('/')[0].trim()
+// Extract path segments: /shantimantra/validate → ['shantimantra', 'validate']
+const segments = path.replace(/^\//, '').replace(/\/$/, '').split('/')
+const segment = segments[0].trim()
+const subSegment = segments[1]?.trim()
 
 // Supabase appends #access_token=...&type=recovery to the redirect path
 const hashParams = new URLSearchParams(hash.substring(1))
@@ -34,6 +37,9 @@ if (segment === 'reset-password-fan') {
   Root = <CreatorPortal />
 } else if (segment === 'admin') {
   Root = <AdminPortal />
+} else if (segment && !RESERVED.includes(segment) && subSegment === 'validate') {
+  // /<event-slug>/validate → staff ticket validation page
+  Root = <ValidateTicket eventSlug={segment} />
 } else if (segment && !RESERVED.includes(segment)) {
   // Unknown segment — could be a creator handle (fan portal) OR an event slug (landing page)
   // EventLanding will fetch by slug; if not found it falls back gracefully showing "Not Found"
