@@ -13,10 +13,7 @@ export default function ValidateTicket({ eventSlug }) {
   const [loading, setLoading] = useState(false)
   const [error, setError] = useState('')
 
-  const videoRef = useRef(null)
-  const streamRef = useRef(null)
-  const detectorRef = useRef(null)
-  const animFrameRef = useRef(null)
+  const scannerRef = useRef(null)   // Html5Qrcode instance
 
   // Fetch event to get event_id for cross-checking
   const [eventId, setEventId] = useState(null)
@@ -37,51 +34,51 @@ export default function ValidateTicket({ eventSlug }) {
     if (authed) fetchEvent()
   }, [authed, eventSlug])
 
-  // ── Camera scanning ──────────────────────────────────────────────────────────
+  // Clean up scanner on unmount
+  useEffect(() => {
+    return () => { stopScanner() }
+  }, [])
+
+  // ── Camera scanning (html5-qrcode — works on Safari iOS + Chrome Android) ────
 
   async function startScanner() {
     setResult(null)
     setError('')
-    try {
-      const stream = await navigator.mediaDevices.getUserMedia({
-        video: { facingMode: 'environment' },
-      })
-      streamRef.current = stream
-      if (videoRef.current) {
-        videoRef.current.srcObject = stream
-        videoRef.current.play()
-      }
-      setScanning(true)
+    setScanning(true)
 
-      // Use BarcodeDetector if available (Chrome/Android), otherwise show manual input
-      if ('BarcodeDetector' in window) {
-        detectorRef.current = new window.BarcodeDetector({ formats: ['qr_code'] })
-        scanFrame()
-      }
+    // Dynamically import html5-qrcode to avoid bundling it eagerly
+    try {
+      const { Html5Qrcode } = await import('html5-qrcode')
+      const qr = new Html5Qrcode('qr-reader')
+      scannerRef.current = qr
+
+      await qr.start(
+        { facingMode: 'environment' },
+        { fps: 10, qrbox: { width: 220, height: 220 } },
+        (decodedText) => {
+          stopScanner()
+          validateSession(decodedText)
+        },
+        () => { /* ignore scan errors — called on every undetected frame */ }
+      )
     } catch (err) {
-      setError('Camera access denied. Use manual entry below.')
       setScanning(false)
+      if (err?.message?.includes('Permission')) {
+        setError('Camera access denied. Use manual entry below.')
+      } else {
+        setError('Could not start camera. Use manual entry below.')
+      }
     }
   }
 
-  function scanFrame() {
-    if (!videoRef.current || !detectorRef.current) return
-    detectorRef.current.detect(videoRef.current).then(barcodes => {
-      if (barcodes.length > 0) {
-        const value = barcodes[0].rawValue
-        stopScanner()
-        validateSession(value)
-      } else {
-        animFrameRef.current = requestAnimationFrame(scanFrame)
-      }
-    }).catch(() => {
-      animFrameRef.current = requestAnimationFrame(scanFrame)
-    })
-  }
-
-  function stopScanner() {
-    if (animFrameRef.current) cancelAnimationFrame(animFrameRef.current)
-    if (streamRef.current) streamRef.current.getTracks().forEach(t => t.stop())
+  async function stopScanner() {
+    if (scannerRef.current) {
+      try {
+        await scannerRef.current.stop()
+        scannerRef.current.clear()
+      } catch (_) {}
+      scannerRef.current = null
+    }
     setScanning(false)
   }
 
@@ -235,49 +232,32 @@ export default function ValidateTicket({ eventSlug }) {
         </div>
       )}
 
-      {/* Camera scanner */}
+      {/* Camera scanner — html5-qrcode mounts into #qr-reader div */}
       {!result && (
         <div style={{ width: '100%', maxWidth: 400 }}>
+          {/* The div below is the mount point for html5-qrcode */}
+          <div
+            id="qr-reader"
+            style={{
+              width: '100%',
+              display: scanning ? 'block' : 'none',
+              borderRadius: 16,
+              overflow: 'hidden',
+            }}
+          />
+
           {scanning ? (
-            <div style={{ position: 'relative' }}>
-              <video
-                ref={videoRef}
-                style={{ width: '100%', borderRadius: 16, display: 'block', background: '#000' }}
-                playsInline
-                muted
-              />
-              {/* Scan overlay */}
-              <div style={{
-                position: 'absolute', inset: 0, borderRadius: 16,
-                display: 'flex', alignItems: 'center', justifyContent: 'center',
-                pointerEvents: 'none',
-              }}>
-                <div style={{
-                  width: 200, height: 200, border: '2px solid #7c5cbf',
-                  borderRadius: 12, boxShadow: '0 0 0 9999px rgba(0,0,0,0.45)',
-                }} />
-              </div>
-              <button
-                onClick={stopScanner}
-                style={{
-                  marginTop: 12, width: '100%', background: '#1a1a1a',
-                  border: '1.5px solid #333', color: '#aaa', borderRadius: 10,
-                  padding: '12px 0', fontFamily: "'DM Mono', monospace",
-                  fontSize: 12, cursor: 'pointer', letterSpacing: '0.1em',
-                }}
-              >
-                CANCEL
-              </button>
-              {'BarcodeDetector' in window ? (
-                <div style={{ color: '#666', fontSize: 11, textAlign: 'center', marginTop: 8 }}>
-                  Point camera at QR code
-                </div>
-              ) : (
-                <div style={{ color: '#e5a020', fontSize: 11, textAlign: 'center', marginTop: 8 }}>
-                  Auto-scan not supported on this browser — use manual entry below
-                </div>
-              )}
-            </div>
+            <button
+              onClick={stopScanner}
+              style={{
+                marginTop: 12, width: '100%', background: '#1a1a1a',
+                border: '1.5px solid #333', color: '#aaa', borderRadius: 10,
+                padding: '12px 0', fontFamily: "'DM Mono', monospace",
+                fontSize: 12, cursor: 'pointer', letterSpacing: '0.1em',
+              }}
+            >
+              CANCEL
+            </button>
           ) : (
             <button
               onClick={startScanner}
