@@ -203,18 +203,46 @@ exports.handler = async (event) => {
       // Send ticket confirmation email to buyer
       if (buyerEmail && process.env.RESEND_API_KEY) {
         try {
-          // Fetch event name from Supabase for the email
+          // Fetch event name and slug from Supabase for the email
           let eventName = 'the event'
+          let eventSlug = ''
+          let eventDate = ''
+          let eventVenue = ''
           try {
             const evRes = await fetch(
-              `${SB_URL}/rest/v1/events?id=eq.${event_id}&select=name`,
+              `${SB_URL}/rest/v1/events?id=eq.${event_id}&select=name,slug,event_date,start_time,venue`,
               { headers: sbHeaders() }
             )
             const evData = await evRes.json()
-            if (Array.isArray(evData) && evData[0]?.name) eventName = evData[0].name
+            if (Array.isArray(evData) && evData[0]) {
+              eventName  = evData[0].name  || eventName
+              eventSlug  = evData[0].slug  || ''
+              eventVenue = evData[0].venue || ''
+              // Format date
+              if (evData[0].event_date) {
+                const [y, m, d] = evData[0].event_date.split('-').map(Number)
+                const dateObj = new Date(y, m - 1, d)
+                const dayName  = dateObj.toLocaleDateString('en-US', { weekday: 'long' })
+                const monthDay = dateObj.toLocaleDateString('en-US', { month: 'long', day: 'numeric', year: 'numeric' })
+                if (evData[0].start_time) {
+                  const [h, min] = evData[0].start_time.split(':').map(Number)
+                  const ampm = h >= 12 ? 'PM' : 'AM'
+                  const h12  = h % 12 || 12
+                  const minStr = min === 0 ? '' : `:${String(min).padStart(2, '0')}`
+                  eventDate = `${dayName}, ${monthDay} · ${h12}${minStr} ${ampm}`
+                } else {
+                  eventDate = `${dayName}, ${monthDay}`
+                }
+              }
+            }
           } catch (evErr) {
-            console.error('Event name fetch error:', evErr.message)
+            console.error('Event fetch error:', evErr.message)
           }
+
+          const ticketUrl = eventSlug
+            ? `https://covetedstage.com/${eventSlug}/ticket?session_id=${encodeURIComponent(session.id)}`
+            : null
+          const qrUrl = `https://api.qrserver.com/v1/create-qr-code/?size=180x180&data=${encodeURIComponent(session.id)}&bgcolor=09090b&color=c9a84c&margin=6`
 
           await fetch('https://api.resend.com/emails', {
             method: 'POST',
@@ -237,13 +265,44 @@ exports.handler = async (event) => {
                     <strong style="color: #f4f0e8;">${eventName}</strong> ${qty > 1 ? 'have' : 'has'} been confirmed.
                     Your payment of <strong style="color: #c9a84c;">$${(session.amount_total / 100).toFixed(2)}</strong>${qty > 1 ? ` (${qty} × $${(session.amount_total / 100 / qty).toFixed(2)})` : ''} was received successfully.
                   </p>
+
+                  ${eventDate ? `<p style="color: #9a9690; line-height: 1.7;">📅 ${eventDate}</p>` : ''}
+                  ${eventVenue ? `<p style="color: #9a9690; line-height: 1.7;">📍 ${eventVenue}</p>` : ''}
+
+                  <!-- QR code -->
+                  <div style="margin: 28px 0; text-align: center;">
+                    <div style="display: inline-block; padding: 16px; background: #111; border: 1px solid rgba(201,168,76,0.3); border-radius: 12px;">
+                      <img
+                        src="${qrUrl}"
+                        width="180"
+                        height="180"
+                        alt="Ticket QR Code"
+                        style="display: block; border-radius: 8px;"
+                      />
+                      <div style="font-family: monospace; font-size: 10px; letter-spacing: 0.15em; color: #c9a84c; margin-top: 10px;">TICKET QR CODE</div>
+                    </div>
+                    <p style="color: #555; font-size: 12px; margin-top: 12px; line-height: 1.6;">
+                      Show this QR code at the door for entry.<br/>
+                      Screenshot this email or use the button below to access your ticket anytime.
+                    </p>
+                  </div>
+
+                  <!-- Booking reference -->
                   <div style="margin: 28px 0; padding: 20px 24px; background: rgba(201,168,76,0.08); border: 1px solid rgba(201,168,76,0.25); border-radius: 10px;">
                     <div style="font-family: monospace; font-size: 10px; letter-spacing: 0.18em; color: #c9a84c; margin-bottom: 8px;">BOOKING REFERENCE</div>
                     <div style="font-family: monospace; font-size: 13px; color: #f4f0e8; word-break: break-all;">${session.id}</div>
                   </div>
-                  <p style="color: #9a9690; line-height: 1.7;">
-                    Visit <a href="https://covetedstage.com" style="color: #c9a84c;">covetedstage.com</a> closer to the event date to join the live room.
-                  </p>
+
+                  <!-- View ticket CTA -->
+                  ${ticketUrl ? `
+                  <div style="text-align: center; margin: 28px 0;">
+                    <a href="${ticketUrl}" style="display: inline-block; background: #c9a84c; color: #09090b; text-decoration: none; padding: 14px 32px; border-radius: 10px; font-family: monospace; font-size: 13px; font-weight: 700; letter-spacing: 0.12em;">
+                      🎟 VIEW MY TICKET →
+                    </a>
+                    <p style="color: #555; font-size: 11px; margin-top: 10px;">Bookmark this link to access your ticket anytime</p>
+                  </div>
+                  ` : ''}
+
                   <hr style="border: none; border-top: 1px solid #333; margin: 28px 0;" />
                   <div style="font-size: 11px; color: #555; font-family: monospace; letter-spacing: 0.1em;">
                     COVETED STAGE · THE STAGE IS YOURS
