@@ -220,41 +220,73 @@ exports.handler = async (event) => {
 
     // ── Ticket purchase ────────────────────────────────────────────────────
     if (session.metadata?.type === 'ticket_purchase') {
-      const { event_id, fan_id, quantity, ticket_category } = session.metadata
+      const { event_id, fan_id, quantity, ticket_categories: ticketCategoriesJson } = session.metadata
       // fan_id is empty string for guests — treat as null
       const fanIdOrNull = fan_id && fan_id.trim() !== '' ? fan_id : null
-      const qty = parseInt(quantity) || 1
+      const totalQty = parseInt(quantity) || 1
+
+      // Parse multi-category metadata (new path) or build legacy single entry
+      let ticketCategories = []
+      try {
+        ticketCategories = JSON.parse(ticketCategoriesJson || '[]')
+      } catch (_) {}
+      // Legacy fallback: if no categories parsed, treat entire amount as one row
+      if (!ticketCategories.length) {
+        ticketCategories = [{
+          name: session.metadata.ticket_category || 'General Admission',
+          price: session.amount_total / 100 / totalQty,
+          quantity: totalQty,
+        }]
+      }
 
       // Capture buyer details from Stripe customer_details
       const buyerName  = session.customer_details?.name  || null
       const buyerEmail = session.customer_details?.email || null
       const buyerPhone = session.customer_details?.phone || null
 
-      console.log('Ticket purchase — event:', event_id, 'fan:', fanIdOrNull || 'guest', 'qty:', qty, 'buyer:', buyerEmail)
+      console.log('Ticket purchase — event:', event_id, 'fan:', fanIdOrNull || 'guest', 'total qty:', totalQty, 'categories:', ticketCategories.length)
+
+      // Total gross for proportional Stripe fee allocation
+      const ticketGross = session.amount_total / 100
+      const { stripeFee: totalStripeFee, platformFee: totalPlatformFee } =
+        await calcFees(stripe, ticketGross, session.payment_intent)
 
       try {
-        // Use stripe_session_id as the unique conflict key so guest purchases
-        // (which have no fan_id) can be upserted safely.
-        const ticketGross = session.amount_total / 100
-        const { stripeFee: ticketStripeFee, platformFee: ticketPlatformFee, netAmount: ticketNet } =
-          await calcFees(stripe, ticketGross, session.payment_intent)
+        // Insert one ticket_purchases row per category with proportional fees
+        for (const cat of ticketCategories) {
+          const catQty    = parseInt(cat.quantity) || 1
+          const catGross  = parseFloat((parseFloat(cat.price) * catQty).toFixed(2))
+          // Allocate fees proportionally by this category's share of total gross
+          const share = ticketGross > 0 ? catGross / ticketGross : 1 / ticketCategories.length
+          const catStripeFee   = parseFloat((totalStripeFee   * share).toFixed(2))
+          const catPlatformFee = parseFloat((totalPlatformFee * share).toFixed(2))
+          const catNet         = parseFloat((catGross - catStripeFee - catPlatformFee).toFixed(2))
 
-        await sbUpsert('ticket_purchases', {
-          event_id,
-          fan_id:            fanIdOrNull,
-          stripe_session_id: session.id,
-          amount:            ticketGross,  // total paid (price × qty)
-          stripe_fee:        ticketStripeFee,
-          platform_fee:      ticketPlatformFee,
-          net_amount:        ticketNet,
-          quantity:          qty,
-          status:            'paid',
-          buyer_name:        buyerName,
-          buyer_email:       buyerEmail,
-          buyer_phone:       buyerPhone,
-          ticket_category:   ticket_category || null,
-        }, 'stripe_session_id')
-        console.log(`Ticket recorded — gross: $${ticketGross}, stripe: $${ticketStripeFee}, platform: $${ticketPlatformFee}, net: $${ticketNet}`)
+          // Use stripe_session_id + ticket_category as composite key.
+          // For guests (no fan_id) stripe_session_id alone keeps it unique per transaction.
+          // We suffix the session_id with the category name so multiple categories
+          // can each have their own row without conflicting on the unique constraint.
+          const sessionCatId = ticketCategories.length > 1
+            ? `${session.id}__${cat.name.replace(/\s+/g, '_').toLowerCase()}`
+            : session.id
+
+          await sbUpsert('ticket_purchases', {
+            event_id,
+            fan_id:            fanIdOrNull,
+            stripe_session_id: sessionCatId,
+            amount:            catGross,
+            stripe_fee:        catStripeFee,
+            platform_fee:      catPlatformFee,
+            net_amount:        catNet,
+            quantity:          catQty,
+            status:            'paid',
+            buyer_name:        buyerName,
+            buyer_email:       buyerEmail,
+            buyer_phone:       buyerPhone,
+            ticket_category:   cat.name,
+          }, 'stripe_session_id')
+          console.log(`Ticket row — category: ${cat.name}, qty: ${catQty}, gross: $${catGross}, stripe: $${catStripeFee}, platform: $${catPlatformFee}, net: $${catNet}`)
+        }
 
         // Only create an RSVP row for logged-in fans (guests have no fan account)
         if (fanIdOrNull) {
@@ -284,7 +316,6 @@ exports.handler = async (event) => {
               eventName  = evData[0].name  || eventName
               eventSlug  = evData[0].slug  || ''
               eventVenue = evData[0].venue || ''
-              // Format date
               if (evData[0].event_date) {
                 const [y, m, d] = evData[0].event_date.split('-').map(Number)
                 const dateObj = new Date(y, m - 1, d)
@@ -311,6 +342,19 @@ exports.handler = async (event) => {
           // White bg + dark modules — cameras read dark-on-light far more reliably
           const qrUrl = `https://api.qrserver.com/v1/create-qr-code/?size=180x180&data=${encodeURIComponent(session.id)}&bgcolor=ffffff&color=111111&margin=8`
 
+          // Build itemized ticket table rows for the email
+          const ticketRowsHtml = ticketCategories.map(cat => {
+            const catTotal = (parseFloat(cat.price) * parseInt(cat.quantity)).toFixed(2)
+            return `
+              <tr>
+                <td style="padding: 8px 0; color: #9a9690; border-bottom: 1px solid #222;">${cat.name}</td>
+                <td style="padding: 8px 0; color: #9a9690; text-align: center; border-bottom: 1px solid #222;">${cat.quantity}</td>
+                <td style="padding: 8px 0; color: #9a9690; text-align: right; border-bottom: 1px solid #222; font-family: monospace;">$${parseFloat(cat.price).toFixed(2)}</td>
+                <td style="padding: 8px 0; color: #c9a84c; text-align: right; border-bottom: 1px solid #222; font-family: monospace; font-weight: 700;">$${catTotal}</td>
+              </tr>
+            `
+          }).join('')
+
           await fetch('https://api.resend.com/emails', {
             method: 'POST',
             headers: {
@@ -320,7 +364,7 @@ exports.handler = async (event) => {
             body: JSON.stringify({
               from: 'Coveted Stage <hello@covetedstage.com>',
               to: buyerEmail,
-              subject: `Your ${qty > 1 ? qty + ' tickets' : 'ticket'} for ${eventName} ${qty > 1 ? 'are' : 'is'} confirmed! 🎟`,
+              subject: `Your ${totalQty > 1 ? totalQty + ' tickets' : 'ticket'} for ${eventName} ${totalQty > 1 ? 'are' : 'is'} confirmed! 🎟`,
               html: `
                 <div style="font-family: Georgia, serif; max-width: 520px; margin: 0 auto; padding: 40px 24px; background: #09090b; color: #f4f0e8;">
                   <div style="font-size: 28px; color: #c9a84c; margin-bottom: 8px;">Coveted Stage</div>
@@ -328,13 +372,35 @@ exports.handler = async (event) => {
                   <h2 style="font-size: 22px; color: #f4f0e8; margin-bottom: 12px;">You're going! 🎉</h2>
                   <p style="color: #9a9690; line-height: 1.7;">
                     Hi ${buyerName || 'there'},<br/><br/>
-                    Your ${qty > 1 ? `<strong style="color: #c9a84c;">${qty} tickets</strong>` : 'ticket'} for
-                    <strong style="color: #f4f0e8;">${eventName}</strong> ${qty > 1 ? 'have' : 'has'} been confirmed.
-                    Your payment of <strong style="color: #c9a84c;">$${(session.amount_total / 100).toFixed(2)}</strong>${qty > 1 ? ` (${qty} × $${(session.amount_total / 100 / qty).toFixed(2)})` : ''} was received successfully.
+                    Your tickets for <strong style="color: #f4f0e8;">${eventName}</strong> have been confirmed.
                   </p>
 
                   ${eventDate ? `<p style="color: #9a9690; line-height: 1.7;">📅 ${eventDate}</p>` : ''}
                   ${eventVenue ? `<p style="color: #9a9690; line-height: 1.7;">📍 ${eventVenue}</p>` : ''}
+
+                  <!-- Itemized ticket breakdown -->
+                  <div style="margin: 24px 0; padding: 20px 24px; background: rgba(201,168,76,0.08); border: 1px solid rgba(201,168,76,0.25); border-radius: 10px;">
+                    <div style="font-family: monospace; font-size: 10px; letter-spacing: 0.18em; color: #c9a84c; margin-bottom: 12px;">ORDER SUMMARY</div>
+                    <table style="width: 100%; border-collapse: collapse; font-size: 14px;">
+                      <thead>
+                        <tr>
+                          <th style="text-align: left; color: #555; font-size: 11px; font-weight: 400; padding-bottom: 6px; border-bottom: 1px solid #333; font-family: monospace; letter-spacing: 0.1em;">TICKET TYPE</th>
+                          <th style="text-align: center; color: #555; font-size: 11px; font-weight: 400; padding-bottom: 6px; border-bottom: 1px solid #333; font-family: monospace; letter-spacing: 0.1em;">QTY</th>
+                          <th style="text-align: right; color: #555; font-size: 11px; font-weight: 400; padding-bottom: 6px; border-bottom: 1px solid #333; font-family: monospace; letter-spacing: 0.1em;">PRICE</th>
+                          <th style="text-align: right; color: #555; font-size: 11px; font-weight: 400; padding-bottom: 6px; border-bottom: 1px solid #333; font-family: monospace; letter-spacing: 0.1em;">SUBTOTAL</th>
+                        </tr>
+                      </thead>
+                      <tbody>
+                        ${ticketRowsHtml}
+                      </tbody>
+                      <tfoot>
+                        <tr>
+                          <td colspan="3" style="padding: 10px 0 0; color: #c9a84c; font-family: monospace; font-size: 11px; letter-spacing: 0.1em;">TOTAL PAID</td>
+                          <td style="padding: 10px 0 0; text-align: right; color: #c9a84c; font-family: monospace; font-weight: 700; font-size: 16px;">$${ticketGross.toFixed(2)}</td>
+                        </tr>
+                      </tfoot>
+                    </table>
+                  </div>
 
                   <!-- QR code -->
                   <div style="margin: 28px 0; text-align: center;">
@@ -350,7 +416,7 @@ exports.handler = async (event) => {
                     </div>
                     <p style="color: #555; font-size: 12px; margin-top: 12px; line-height: 1.6;">
                       Show this QR code at the door for entry.<br/>
-                      Screenshot this email or use the button below to access your ticket anytime.
+                      One scan covers all tickets in this order.
                     </p>
                   </div>
 

@@ -51,8 +51,8 @@ export default function EventLanding({ slug, fallback = null }) {
   const [loading, setLoading] = useState(true)
   const [notFound, setNotFound] = useState(false)
 
-  const [selectedCat, setSelectedCat] = useState(0)
-  const [qty, setQty] = useState(1)
+  // Multi-category quantities: { [catId]: number }
+  const [quantities, setQuantities] = useState({})
   const [buying, setBuying] = useState(false)
   const [buyError, setBuyError] = useState('')
 
@@ -83,11 +83,15 @@ export default function EventLanding({ slug, fallback = null }) {
           { headers: { 'apikey': sbKey } }
         )
         const catData = await catRes.json()
-        if (Array.isArray(catData) && catData.length > 0) {
-          setCategories(catData)
-        } else {
-          setCategories([{ id: 'default', name: 'General Admission', price: ev.ticket_price || 0, description: '' }])
-        }
+        const cats = Array.isArray(catData) && catData.length > 0
+          ? catData
+          : [{ id: 'default', name: 'General Admission', price: ev.ticket_price || 0, description: '' }]
+        setCategories(cats)
+
+        // Initialise all quantities to 0
+        const initQtys = {}
+        cats.forEach(c => { initQtys[c.id] = 0 })
+        setQuantities(initQtys)
       } catch (err) {
         console.error('EventLanding load error:', err)
         setNotFound(true)
@@ -97,12 +101,27 @@ export default function EventLanding({ slug, fallback = null }) {
     load()
   }, [slug])
 
+  function setQty(catId, val) {
+    setQuantities(prev => ({ ...prev, [catId]: Math.min(10, Math.max(0, val)) }))
+  }
+
+  // Build the line items array for categories with qty > 0
+  function buildLineItems() {
+    return categories
+      .filter(c => (quantities[c.id] || 0) > 0)
+      .map(c => ({ id: c.id, name: c.name, price: c.price, quantity: quantities[c.id] }))
+  }
+
+  const lineItems = buildLineItems()
+  const totalQty = lineItems.reduce((s, li) => s + li.quantity, 0)
+  const totalPrice = lineItems.reduce((s, li) => s + parseFloat(li.price) * li.quantity, 0).toFixed(2)
+  const hasSelection = totalQty > 0
+
   async function handleBuy() {
-    if (buying) return
+    if (buying || !hasSelection) return
     setBuyError('')
     setBuying(true)
     try {
-      const cat = categories[selectedCat]
       const currentUrl = window.location.href
       const res = await fetch('/.netlify/functions/create-ticket-checkout', {
         method: 'POST',
@@ -110,10 +129,7 @@ export default function EventLanding({ slug, fallback = null }) {
         body: JSON.stringify({
           eventId: event.id,
           eventName: event.name,
-          ticketPrice: cat.price,
-          quantity: qty,
-          categoryName: categories.length > 1 ? cat.name : undefined,
-          categoryPrice: cat.price,
+          lineItems,                             // array of { id, name, price, quantity }
           successUrl: `${currentUrl}?purchased=1`,
           cancelUrl: currentUrl,
         }),
@@ -181,8 +197,6 @@ export default function EventLanding({ slug, fallback = null }) {
   if (loading) return <Spinner />
   if (notFound) return fallback || <NotFound />
 
-  const cat = categories[selectedCat] || categories[0]
-  const totalPrice = (parseFloat(cat?.price || 0) * qty).toFixed(2)
   const dateDisplay = formatEventDate(event.event_date, event.start_time)
   const accent = event.accent_color || '#7c5cbf'
   const accentBg = accent + '18'
@@ -309,7 +323,7 @@ export default function EventLanding({ slug, fallback = null }) {
         </div>
       )}
 
-      {/* ── Event header — compact, ~50% height reduction ── */}
+      {/* ── Event header — compact ── */}
       <div style={{
         background: '#fff',
         borderBottom: '1.5px solid #ede8df',
@@ -347,7 +361,6 @@ export default function EventLanding({ slug, fallback = null }) {
           </div>
         )}
 
-        {/* Venue — clickable link to Google Maps */}
         {event.venue && (
           <div style={{ marginTop: 6 }}>
             <a
@@ -437,137 +450,142 @@ export default function EventLanding({ slug, fallback = null }) {
             padding: '16px 16px',
             display: 'flex',
             flexDirection: 'column',
-            justifyContent: 'space-between',
+            gap: 10,
             boxShadow: '0 4px 24px rgba(0,0,0,0.07)',
             minHeight: 0,
             overflowY: 'auto',
           }}
         >
-          {/* Categories (multi) */}
-          {categories.length > 1 && (
-            <div style={{ marginBottom: 8 }}>
-              <div style={{ display: 'flex', flexDirection: 'column', gap: 5 }}>
-                {categories.map((c, i) => (
+          <div style={{ fontSize: 11, color: accent, letterSpacing: '0.18em', marginBottom: 2 }}>
+            SELECT TICKETS
+          </div>
+
+          {/* Per-category quantity steppers */}
+          {categories.map(c => {
+            const q = quantities[c.id] || 0
+            return (
+              <div key={c.id} style={{
+                border: `1.5px solid ${q > 0 ? accent : '#e0dbd2'}`,
+                borderRadius: 12,
+                padding: '10px 12px',
+                background: q > 0 ? accentBg : '#faf8f4',
+                transition: 'all 0.15s',
+              }}>
+                {/* Category name + price row */}
+                <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: c.description ? 4 : 8 }}>
+                  <div style={{
+                    color: q > 0 ? accent : '#222',
+                    fontSize: 14, fontFamily: 'Georgia, serif',
+                    fontWeight: q > 0 ? 700 : 400,
+                  }}>
+                    {c.name}
+                  </div>
+                  <div style={{
+                    color: q > 0 ? accent : '#444',
+                    fontSize: 15, fontWeight: 700, fontFamily: "'DM Mono', monospace",
+                  }}>
+                    ${parseFloat(c.price).toFixed(2)}
+                  </div>
+                </div>
+                {c.description && (
+                  <div style={{ color: '#888', fontSize: 12, marginBottom: 8, fontFamily: 'Georgia, serif', fontStyle: 'italic' }}>
+                    {c.description}
+                  </div>
+                )}
+                {/* Quantity stepper */}
+                <div style={{ display: 'flex', alignItems: 'center', gap: 0, border: '1.5px solid #ddd', borderRadius: 8, overflow: 'hidden', width: 120 }}>
                   <button
-                    key={c.id}
-                    onClick={() => setSelectedCat(i)}
+                    onClick={() => setQty(c.id, q - 1)}
+                    disabled={q <= 0}
                     style={{
-                      background: selectedCat === i ? accentBg : '#faf8f4',
-                      border: `2px solid ${selectedCat === i ? accent : '#e0dbd2'}`,
-                      borderRadius: 10, padding: '7px 10px',
-                      cursor: 'pointer', textAlign: 'left', transition: 'all 0.15s',
+                      width: 36, height: 34, background: '#fff', border: 'none',
+                      borderRight: '1.5px solid #ddd', color: q <= 0 ? '#ccc' : '#333',
+                      fontSize: 16, cursor: q <= 0 ? 'not-allowed' : 'pointer',
+                      display: 'flex', alignItems: 'center', justifyContent: 'center',
+                      flexShrink: 0,
                     }}
-                  >
-                    <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
-                      <div style={{
-                        color: selectedCat === i ? accent : '#222',
-                        fontSize: 14, fontFamily: 'Georgia, serif',
-                        fontWeight: selectedCat === i ? 700 : 400,
-                      }}>
-                        {c.name}
-                      </div>
-                      <div style={{
-                        color: selectedCat === i ? accent : '#444',
-                        fontSize: 15, fontWeight: 700, fontFamily: "'DM Mono', monospace",
-                      }}>
-                        ${parseFloat(c.price).toFixed(2)}
-                      </div>
-                    </div>
-                    {c.description && (
-                      <div style={{ color: '#888', fontSize: 12, marginTop: 4, fontFamily: 'Georgia, serif', fontStyle: 'italic' }}>
-                        {c.description}
-                      </div>
-                    )}
-                  </button>
-                ))}
+                  >−</button>
+                  <div style={{
+                    flex: 1, textAlign: 'center', fontSize: 15, fontWeight: 700,
+                    color: q > 0 ? accent : '#bbb', fontFamily: "'DM Mono', monospace",
+                  }}>{q}</div>
+                  <button
+                    onClick={() => setQty(c.id, q + 1)}
+                    disabled={q >= 10}
+                    style={{
+                      width: 36, height: 34, background: '#fff', border: 'none',
+                      borderLeft: '1.5px solid #ddd', color: q >= 10 ? '#ccc' : '#333',
+                      fontSize: 16, cursor: q >= 10 ? 'not-allowed' : 'pointer',
+                      display: 'flex', alignItems: 'center', justifyContent: 'center',
+                      flexShrink: 0,
+                    }}
+                  >+</button>
+                </div>
+                {/* Per-category subtotal */}
+                {q > 0 && (
+                  <div style={{ fontSize: 11, color: accent, marginTop: 6, fontFamily: "'DM Mono', monospace", letterSpacing: '0.08em' }}>
+                    {q} × ${parseFloat(c.price).toFixed(2)} = ${(parseFloat(c.price) * q).toFixed(2)}
+                  </div>
+                )}
               </div>
-            </div>
-          )}
+            )
+          })}
 
-          {/* Single category */}
-          {categories.length === 1 && (
+          {/* Order summary */}
+          {hasSelection && (
             <div style={{
-              display: 'flex', justifyContent: 'space-between', alignItems: 'center',
-              background: '#faf8f4', border: '1.5px solid #ede8df',
-              borderRadius: 10, padding: '8px 12px', marginBottom: 8,
+              background: accentBg, border: `1.5px solid ${accentBorder}`,
+              borderRadius: 10, padding: '10px 12px',
             }}>
-              <div style={{ color: '#222', fontSize: 15, fontFamily: 'Georgia, serif' }}>
-                {categories[0].name}
-              </div>
-              <div style={{ color: accent, fontSize: 20, fontWeight: 700, fontFamily: "'DM Mono', monospace" }}>
-                ${parseFloat(categories[0].price || 0).toFixed(2)}
+              <div style={{ fontSize: 10, color: accent, letterSpacing: '0.15em', marginBottom: 6 }}>ORDER SUMMARY</div>
+              {lineItems.map(li => (
+                <div key={li.id} style={{ display: 'flex', justifyContent: 'space-between', fontSize: 12, color: '#555', marginBottom: 3 }}>
+                  <span>{li.name} × {li.quantity}</span>
+                  <span style={{ fontFamily: "'DM Mono', monospace" }}>${(parseFloat(li.price) * li.quantity).toFixed(2)}</span>
+                </div>
+              ))}
+              <div style={{
+                display: 'flex', justifyContent: 'space-between', alignItems: 'center',
+                borderTop: `1px solid ${accentBorder}`, marginTop: 6, paddingTop: 6,
+              }}>
+                <div style={{ color: '#666', fontSize: 11, letterSpacing: '0.12em' }}>TOTAL</div>
+                <div style={{ color: accent, fontSize: 20, fontWeight: 700, fontFamily: "'DM Mono', monospace" }}>
+                  ${totalPrice}
+                </div>
               </div>
             </div>
           )}
-
-          {/* Quantity */}
-          <div style={{ marginBottom: 8 }}>
-            <div style={{ display: 'flex', alignItems: 'center', border: '1.5px solid #ddd', borderRadius: 10, overflow: 'hidden', width: 150 }}>
-              <button
-                onClick={() => setQty(q => Math.max(1, q - 1))}
-                disabled={qty <= 1}
-                style={{
-                  width: 40, height: 40, background: '#faf8f4', border: 'none',
-                  borderRight: '1.5px solid #ddd', color: qty <= 1 ? '#ccc' : '#333',
-                  fontSize: 18, cursor: qty <= 1 ? 'not-allowed' : 'pointer',
-                  display: 'flex', alignItems: 'center', justifyContent: 'center',
-                }}
-              >−</button>
-              <div style={{
-                flex: 1, textAlign: 'center', fontSize: 18, fontWeight: 700,
-                color: '#111', fontFamily: "'DM Mono', monospace",
-              }}>{qty}</div>
-              <button
-                onClick={() => setQty(q => Math.min(10, q + 1))}
-                disabled={qty >= 10}
-                style={{
-                  width: 40, height: 40, background: '#faf8f4', border: 'none',
-                  borderLeft: '1.5px solid #ddd', color: qty >= 10 ? '#ccc' : '#333',
-                  fontSize: 18, cursor: qty >= 10 ? 'not-allowed' : 'pointer',
-                  display: 'flex', alignItems: 'center', justifyContent: 'center',
-                }}
-              >+</button>
-            </div>
-          </div>
-
-          {/* Total */}
-          <div style={{
-            background: accentBg, border: `1.5px solid ${accentBorder}`,
-            borderRadius: 10, padding: '8px 12px', marginBottom: 8,
-            display: 'flex', justifyContent: 'space-between', alignItems: 'center',
-          }}>
-            <div style={{ color: '#666', fontSize: 11, letterSpacing: '0.12em' }}>TOTAL</div>
-            <div style={{ color: accent, fontSize: 22, fontWeight: 700, fontFamily: "'DM Mono', monospace" }}>
-              ${totalPrice}
-            </div>
-          </div>
 
           {/* Buy button */}
           <button
             onClick={handleBuy}
-            disabled={buying}
+            disabled={buying || !hasSelection}
             style={{
               width: '100%', padding: '10px 0',
-              background: buying ? '#ddd' : accent,
-              color: buying ? '#aaa' : '#fff',
+              background: (buying || !hasSelection) ? '#ddd' : accent,
+              color: (buying || !hasSelection) ? '#aaa' : '#fff',
               border: 'none', borderRadius: 10,
               fontFamily: "'DM Mono', monospace", fontSize: 13, fontWeight: 700,
-              letterSpacing: '0.14em', cursor: buying ? 'not-allowed' : 'pointer',
+              letterSpacing: '0.14em', cursor: (buying || !hasSelection) ? 'not-allowed' : 'pointer',
               transition: 'all 0.15s',
-              boxShadow: buying ? 'none' : `0 4px 20px ${accent}44`,
+              boxShadow: (buying || !hasSelection) ? 'none' : `0 4px 20px ${accent}44`,
             }}
           >
-            {buying ? 'REDIRECTING...' : `BUY ${qty > 1 ? qty + ' TICKETS' : 'TICKET'} →`}
+            {buying
+              ? 'REDIRECTING...'
+              : !hasSelection
+                ? 'SELECT TICKETS ABOVE'
+                : `BUY ${totalQty} TICKET${totalQty !== 1 ? 'S' : ''} →`}
           </button>
 
           {buyError && (
-            <div style={{ color: '#c0392b', fontSize: 12, marginTop: 10, textAlign: 'center', lineHeight: 1.5 }}>
+            <div style={{ color: '#c0392b', fontSize: 12, textAlign: 'center', lineHeight: 1.5 }}>
               {buyError}
             </div>
           )}
 
           <div style={{
-            color: '#bbb', fontSize: 10, textAlign: 'center', marginTop: 6,
+            color: '#bbb', fontSize: 10, textAlign: 'center',
             lineHeight: 1.4, fontFamily: 'Georgia, serif', fontStyle: 'italic',
           }}>
             Secure checkout via Stripe. No account required.
