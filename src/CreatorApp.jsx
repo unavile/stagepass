@@ -131,6 +131,11 @@ export default function CreatorApp({ session, profile, onSignOut }) {
   const [ticketBuyers, setTicketBuyers] = useState({})         // { eventId: [...rows] }
   const [loadingTicketBuyers, setLoadingTicketBuyers] = useState({}) // { eventId: bool }
   const [expandedTicketBuyers, setExpandedTicketBuyers] = useState({}) // { eventId: bool }
+
+  // ── Earnings state — real figures from Supabase ───────────────────────────
+  const [earnings, setEarnings] = useState(null)   // null = not yet loaded
+  const [earningsLoading, setEarningsLoading] = useState(false)
+
   // Use local date (not UTC) so US timezones don't get pushed to tomorrow
   const now = new Date()
   const todayStr = `${now.getFullYear()}-${String(now.getMonth()+1).padStart(2,'0')}-${String(now.getDate()).padStart(2,'0')}`
@@ -196,6 +201,7 @@ export default function CreatorApp({ session, profile, onSignOut }) {
     const data = await res.json()
     if (Array.isArray(data)) setEvents(data)
   }
+
   async function fetchNotifications() {
     setNotifsLoading(true)
     const sbUrl = import.meta.env.VITE_SUPABASE_URL
@@ -217,6 +223,80 @@ export default function CreatorApp({ session, profile, onSignOut }) {
       console.error('fetchNotifications error:', err)
     }
     setNotifsLoading(false)
+  }
+
+  // ── Fetch real earnings from all four revenue channels ────────────────────
+  async function fetchEarnings() {
+    setEarningsLoading(true)
+    const sbUrl = import.meta.env.VITE_SUPABASE_URL
+    const sbKey = import.meta.env.VITE_SUPABASE_ANON_KEY
+    const creatorId = session.user.id
+    const headers = { 'apikey': sbKey, 'Authorization': `Bearer ${session.access_token}` }
+
+    function sumRows(rows, field) {
+      return (rows || []).reduce((s, r) => s + (parseFloat(r[field]) || 0), 0)
+    }
+
+    try {
+      // ── subscriptions: sum from subscription_payments (recurring charges)
+      // plus any initial checkout amounts from subscriptions table
+      const [subPayRes, subInitRes, ticketRes, donationRes, classRes] = await Promise.all([
+        fetch(`${sbUrl}/rest/v1/subscription_payments?creator_id=eq.${creatorId}&status=eq.paid&select=gross_amount,stripe_fee,platform_fee,net_amount`, { headers }),
+        fetch(`${sbUrl}/rest/v1/subscriptions?creator_id=eq.${creatorId}&status=eq.active&select=net_amount,stripe_fee,platform_fee`, { headers }),
+        fetch(`${sbUrl}/rest/v1/ticket_purchases?status=eq.paid&select=amount,stripe_fee,platform_fee,net_amount,event_id,events!inner(creator_id)&events.creator_id=eq.${creatorId}`, { headers }),
+        fetch(`${sbUrl}/rest/v1/donations?creator_id=eq.${creatorId}&status=eq.paid&select=amount,stripe_fee,platform_fee,net_amount`, { headers }),
+        fetch(`${sbUrl}/rest/v1/class_registrations?status=eq.active&select=net_amount,stripe_fee,platform_fee,event_id,events!inner(creator_id)&events.creator_id=eq.${creatorId}`, { headers }),
+      ])
+
+      const subPayRows  = await subPayRes.json().catch(() => [])
+      const subInitRows = await subInitRes.json().catch(() => [])
+      const ticketRows  = await ticketRes.json().catch(() => [])
+      const donRows     = await donationRes.json().catch(() => [])
+      const classRows   = await classRes.json().catch(() => [])
+
+      // Subscription payments: prefer subscription_payments table (has recurring records);
+      // fall back to subscriptions rows that have net_amount (initial payment, pre-payment-table era)
+      const subGross    = sumRows(subPayRows, 'gross_amount')
+      const subStripe   = sumRows(subPayRows, 'stripe_fee')
+      const subPlatform = sumRows(subPayRows, 'platform_fee')
+      const subNet      = sumRows(subPayRows, 'net_amount')
+
+      // Ticket purchases: filter rows that actually belong to this creator
+      // (the join ensures event belongs to creator)
+      const ticketGross    = sumRows(ticketRows, 'amount')
+      const ticketStripe   = sumRows(ticketRows, 'stripe_fee')
+      const ticketPlatform = sumRows(ticketRows, 'platform_fee')
+      const ticketNet      = sumRows(ticketRows, 'net_amount')
+
+      // Donations
+      const donGross    = sumRows(donRows, 'amount')
+      const donStripe   = sumRows(donRows, 'stripe_fee')
+      const donPlatform = sumRows(donRows, 'platform_fee')
+      const donNet      = sumRows(donRows, 'net_amount')
+
+      // Class registrations
+      const classGross    = sumRows(classRows, 'net_amount') + sumRows(classRows, 'platform_fee') + sumRows(classRows, 'stripe_fee')
+      const classStripe   = sumRows(classRows, 'stripe_fee')
+      const classPlatform = sumRows(classRows, 'platform_fee')
+      const classNet      = sumRows(classRows, 'net_amount')
+
+      // Totals
+      const totalGross    = subGross + ticketGross + donGross + classGross
+      const totalStripe   = subStripe + ticketStripe + donStripe + classStripe
+      const totalPlatform = subPlatform + ticketPlatform + donPlatform + classPlatform
+      const totalNet      = subNet + ticketNet + donNet + classNet
+
+      setEarnings({
+        subscriptions: { gross: subGross, stripe: subStripe, platform: subPlatform, net: subNet, count: subPayRows.length },
+        tickets:       { gross: ticketGross, stripe: ticketStripe, platform: ticketPlatform, net: ticketNet, count: ticketRows.length },
+        donations:     { gross: donGross, stripe: donStripe, platform: donPlatform, net: donNet, count: donRows.length },
+        classes:       { gross: classGross, stripe: classStripe, platform: classPlatform, net: classNet, count: classRows.length },
+        total:         { gross: totalGross, stripe: totalStripe, platform: totalPlatform, net: totalNet },
+      })
+    } catch (err) {
+      console.error('fetchEarnings error:', err)
+    }
+    setEarningsLoading(false)
   }
 
   async function markNotifRead(notifId) {
@@ -388,10 +468,18 @@ export default function CreatorApp({ session, profile, onSignOut }) {
     return () => clearInterval(interval)
   }, [])
 
+  // Load earnings when the Earnings tab is first opened
+  useEffect(() => {
+    if (tab === 'earnings' && earnings === null && !earningsLoading) {
+      fetchEarnings()
+    }
+  }, [tab])
+
   const unreadCount = notifications.filter(n => !n.read).length
 
+  // Keep the overview stat cards using subscriber count estimate (fast, no extra fetch)
   const monthlyRevenue = subscribers.length * creator.monthlyPrice
-  const netRevenue = (monthlyRevenue * 0.87).toFixed(2)   // ~90% after 10% platform fee − ~3% Stripe fee
+  const netRevenue = (monthlyRevenue * 0.87).toFixed(2)
   const platformFee = (monthlyRevenue * 0.10).toFixed(2)
 
   const TABS = [
@@ -437,6 +525,51 @@ export default function CreatorApp({ session, profile, onSignOut }) {
       <div style={{ fontFamily: "'DM Mono', monospace", fontSize: 9, color: TEXT3, letterSpacing: '0.22em', textTransform: 'uppercase', marginBottom: 14, display: 'flex', alignItems: 'center', gap: 10 }}>
         {children}
         <div style={{ flex: 1, height: 1, background: BORDER2 }} />
+      </div>
+    )
+  }
+
+  // ── Earnings channel breakdown row ────────────────────────────────────────
+  function EarningsChannelCard({ label, icon, data }) {
+    if (!data) return null
+    const gross    = data.gross.toFixed(2)
+    const platform = data.platform.toFixed(2)
+    const stripe   = data.stripe.toFixed(2)
+    const net      = data.net.toFixed(2)
+    const hasData  = data.gross > 0
+
+    return (
+      <div style={{ ...card({ padding: isMobile ? '16px' : '20px 24px', marginBottom: 12 }), opacity: hasData ? 1 : 0.55 }}>
+        <div style={{ display: 'flex', alignItems: 'center', gap: 10, marginBottom: hasData ? 14 : 0 }}>
+          <span style={{ fontSize: 16 }}>{icon}</span>
+          <span style={{ fontFamily: "'DM Mono', monospace", fontSize: 10, color: TEXT2, letterSpacing: '0.16em' }}>{label.toUpperCase()}</span>
+          {!hasData && <span style={{ fontFamily: "'DM Mono', monospace", fontSize: 9, color: TEXT3, marginLeft: 4 }}>— NO TRANSACTIONS YET</span>}
+          {hasData && (
+            <span style={{ marginLeft: 'auto', fontFamily: "'DM Mono', monospace", fontSize: 10, color: TEXT3 }}>
+              {data.count} TRANSACTION{data.count !== 1 ? 'S' : ''}
+            </span>
+          )}
+        </div>
+        {hasData && (
+          <div style={{ display: 'grid', gridTemplateColumns: isMobile ? '1fr 1fr' : '1fr 1fr 1fr 1fr', gap: 1 }}>
+            {[
+              { label: 'Gross', value: `$${gross}`, color: TEXT1 },
+              { label: 'Platform Fee (10%)', value: `-$${platform}`, color: '#e84545' },
+              { label: 'Stripe Fee (~3%)', value: `-$${stripe}`, color: '#e84545' },
+              { label: 'Net to You', value: `$${net}`, color: ac },
+            ].map((col, i) => (
+              <div key={i} style={{
+                padding: '10px 14px',
+                background: i === 3 ? ac + '0e' : 'rgba(255,255,255,0.02)',
+                borderRadius: 8,
+                border: i === 3 ? `1px solid ${ac}25` : `1px solid ${BORDER2}`,
+              }}>
+                <div style={{ fontFamily: "'DM Mono', monospace", fontSize: 8, color: TEXT3, letterSpacing: '0.16em', marginBottom: 6 }}>{col.label.toUpperCase()}</div>
+                <div style={{ fontFamily: "'DM Mono', monospace", fontSize: isMobile ? 13 : 15, color: col.color, fontWeight: i === 3 ? 700 : 400 }}>{col.value}</div>
+              </div>
+            ))}
+          </div>
+        )}
       </div>
     )
   }
@@ -1099,50 +1232,64 @@ export default function CreatorApp({ session, profile, onSignOut }) {
           {/* ── EARNINGS ── */}
           {tab === 'earnings' && (
             <div style={{ padding: p }}>
-              <div style={{ fontFamily: "'DM Serif Display', Georgia, serif", fontSize: isMobile ? 24 : 34, color: TEXT1, marginBottom: 24 }}>Earnings</div>
-              <div style={{ display: 'grid', gridTemplateColumns: 'repeat(3, 1fr)', gap: 12, marginBottom: 28 }}>
-                <StatCard label="Gross (Monthly)" value={`$${monthlyRevenue}`} accent={ac} />
-                <StatCard label="Net (Monthly)" value={`$${netRevenue}`} sub="After platform + Stripe fees" />
-                <StatCard label="Active Subs" value={subscribers.length} />
+              <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: 24, gap: 12, flexWrap: 'wrap' }}>
+                <div style={{ fontFamily: "'DM Serif Display', Georgia, serif", fontSize: isMobile ? 24 : 34, color: TEXT1 }}>Earnings</div>
+                <button
+                  onClick={fetchEarnings}
+                  disabled={earningsLoading}
+                  style={{
+                    background: 'transparent', border: `1px solid ${BORDER}`,
+                    borderRadius: 7, padding: '7px 16px', color: TEXT2,
+                    fontFamily: "'DM Mono', monospace", fontSize: 10,
+                    letterSpacing: '0.1em', cursor: earningsLoading ? 'not-allowed' : 'pointer',
+                    opacity: earningsLoading ? 0.5 : 1,
+                  }}
+                >{earningsLoading ? 'LOADING...' : '↻ REFRESH'}</button>
               </div>
-              <SectionLabel>Subscription Breakdown</SectionLabel>
-              <div style={{ ...card({ padding: isMobile ? '16px' : '24px 28px', marginBottom: 20 }) }}>
-                {[
-                  { label: 'Subscribers', value: subscribers.length },
-                  { label: 'Price per subscriber', value: `$${creator.monthlyPrice}/mo` },
-                  { label: 'Gross revenue', value: `$${monthlyRevenue}` },
-                ].map((row, i) => (
-                  <div key={i} style={{ display: 'flex', justifyContent: 'space-between', padding: '10px 0', borderBottom: `1px solid ${BORDER2}` }}>
-                    <span style={{ fontSize: 13, color: TEXT2 }}>{row.label}</span>
-                    <span style={{ fontFamily: "'DM Mono', monospace", fontSize: 13, color: TEXT1 }}>{row.value}</span>
+
+              {earningsLoading && !earnings ? (
+                <div style={{ ...card({ padding: '48px', textAlign: 'center' }) }}>
+                  <div style={{ fontFamily: "'DM Mono', monospace", fontSize: 11, color: TEXT3, letterSpacing: '0.18em' }}>LOADING EARNINGS...</div>
+                </div>
+              ) : earnings ? (
+                <>
+                  {/* ── Total summary stat cards ── */}
+                  <div style={{ display: 'grid', gridTemplateColumns: isMobile ? 'repeat(2, 1fr)' : 'repeat(4, 1fr)', gap: 12, marginBottom: 28 }}>
+                    <StatCard label="Total Gross" value={`$${earnings.total.gross.toFixed(2)}`} accent={ac} />
+                    <StatCard label="Platform Fees (10%)" value={`$${earnings.total.platform.toFixed(2)}`} sub="Retained by Coveted Stage" />
+                    <StatCard label="Stripe Fees (~3%)" value={`$${earnings.total.stripe.toFixed(2)}`} sub="Charged by Stripe" />
+                    <StatCard label="Net to You" value={`$${earnings.total.net.toFixed(2)}`} sub="After all fees" />
                   </div>
-                ))}
-                <div style={{ display: 'flex', justifyContent: 'space-between', padding: '10px 0', borderBottom: `1px solid ${BORDER2}` }}>
-                  <span style={{ fontSize: 13, color: TEXT2 }}>Platform fee (10%)</span>
-                  <span style={{ fontFamily: "'DM Mono', monospace", fontSize: 13, color: '#e84545' }}>-${platformFee}</span>
+
+                  {/* ── Fee explanation note ── */}
+                  <div style={{
+                    ...card({ padding: '12px 18px', marginBottom: 24 }),
+                    display: 'flex', gap: 10, alignItems: 'flex-start',
+                    background: `${ac}0a`, border: `1px solid ${ac}22`,
+                  }}>
+                    <span style={{ fontSize: 14, marginTop: 1 }}>ℹ</span>
+                    <div style={{ fontSize: 12, color: TEXT2, lineHeight: 1.65 }}>
+                      Coveted Stage retains <strong style={{ color: TEXT1 }}>10%</strong> of gross revenue as a platform fee across all channels. Stripe deducts its own processing fee (~2.9% + $0.30 per transaction) directly from your balance. The <strong style={{ color: TEXT1 }}>Net to You</strong> figure reflects what remains after both deductions. Stripe deposits the full collected amount into your platform balance; the platform fee is tracked here and settled periodically.
+                    </div>
+                  </div>
+
+                  {/* ── Per-channel breakdowns ── */}
+                  <SectionLabel>Revenue by Channel</SectionLabel>
+                  <EarningsChannelCard label="Subscriptions" icon="◎" data={earnings.subscriptions} />
+                  <EarningsChannelCard label="Ticket Sales" icon="🎟" data={earnings.tickets} />
+                  <EarningsChannelCard label="Donations" icon="💛" data={earnings.donations} />
+                  <EarningsChannelCard label="Class Registrations" icon="🎓" data={earnings.classes} />
+                </>
+              ) : (
+                <div style={{ ...card({ padding: '48px', textAlign: 'center' }), border: `1px dashed ${BORDER}` }}>
+                  <div style={{ fontSize: 13, color: TEXT3 }}>Could not load earnings. Please try refreshing.</div>
+                  <button onClick={fetchEarnings} style={{
+                    marginTop: 16, background: ac, color: '#080808', border: 'none',
+                    borderRadius: 7, padding: '9px 20px', fontFamily: "'DM Mono', monospace",
+                    fontSize: 10, fontWeight: 700, cursor: 'pointer', letterSpacing: '0.12em',
+                  }}>RETRY</button>
                 </div>
-                <div style={{ display: 'flex', justifyContent: 'space-between', padding: '10px 0', borderBottom: `1px solid ${BORDER2}` }}>
-                  <span style={{ fontSize: 13, color: TEXT2 }}>Payment processing (~3%)</span>
-                  <span style={{ fontFamily: "'DM Mono', monospace", fontSize: 13, color: '#e84545' }}>-${(monthlyRevenue * 0.03).toFixed(2)}</span>
-                </div>
-                <div style={{ display: 'flex', justifyContent: 'space-between', padding: '14px 0 0' }}>
-                  <span style={{ fontSize: 14, color: TEXT1, fontWeight: 600 }}>Net revenue</span>
-                  <span style={{ fontFamily: "'DM Mono', monospace", fontSize: 17, color: ac, fontWeight: 700 }}>${netRevenue}</span>
-                </div>
-              </div>
-              <div style={{
-                ...card({ padding: '16px 20px' }),
-                display: 'flex', gap: 14, alignItems: 'center',
-                border: `1px solid ${ac}22`,
-                background: `linear-gradient(135deg, rgba(17,17,20,0.75) 0%, rgba(17,17,20,0.6) 100%)`,
-              }}>
-                <span style={{ fontSize: 22 }}>💳</span>
-                <div>
-                  <div style={{ fontSize: 13, color: TEXT1, marginBottom: 2 }}>Stripe payouts</div>
-                  <div style={{ fontSize: 12, color: TEXT3 }}>Connect your Stripe account to receive payouts directly to your bank.</div>
-                </div>
-                <button style={{ marginLeft: 'auto', background: ac, color: '#080808', border: 'none', borderRadius: 7, padding: '8px 16px', fontFamily: "'DM Mono', monospace", fontSize: 10, fontWeight: 700, cursor: 'pointer', flexShrink: 0, letterSpacing: '0.12em', boxShadow: `0 4px 14px ${ac}40` }}>CONNECT</button>
-              </div>
+              )}
             </div>
           )}
 
