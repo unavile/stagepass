@@ -234,25 +234,35 @@ export default function CreatorApp({ session, profile, onSignOut }) {
     const headers = { 'apikey': sbKey, 'Authorization': `Bearer ${session.access_token}` }
 
     function sumRows(rows, field) {
-      return (rows || []).reduce((s, r) => s + (parseFloat(r[field]) || 0), 0)
+      if (!Array.isArray(rows)) return 0
+      return rows.reduce((s, r) => s + (parseFloat(r[field]) || 0), 0)
     }
+
+    // Safe fetch: always returns an array — returns [] if table missing or RLS blocks
+    async function safeFetch(url) {
+      try {
+        const res = await fetch(url, { headers })
+        const data = await res.json()
+        return Array.isArray(data) ? data : []
+      } catch {
+        return []
+      }
+    }
+
+    const zeroChannel = { gross: 0, stripe: 0, platform: 0, net: 0, count: 0 }
 
     try {
       // ── subscriptions: sum from subscription_payments (recurring charges)
       // plus any initial checkout amounts from subscriptions table
-      const [subPayRes, subInitRes, ticketRes, donationRes, classRes] = await Promise.all([
-        fetch(`${sbUrl}/rest/v1/subscription_payments?creator_id=eq.${creatorId}&status=eq.paid&select=gross_amount,stripe_fee,platform_fee,net_amount`, { headers }),
-        fetch(`${sbUrl}/rest/v1/subscriptions?creator_id=eq.${creatorId}&status=eq.active&select=net_amount,stripe_fee,platform_fee`, { headers }),
-        fetch(`${sbUrl}/rest/v1/ticket_purchases?status=eq.paid&select=amount,stripe_fee,platform_fee,net_amount,event_id,events!inner(creator_id)&events.creator_id=eq.${creatorId}`, { headers }),
-        fetch(`${sbUrl}/rest/v1/donations?creator_id=eq.${creatorId}&status=eq.paid&select=amount,stripe_fee,platform_fee,net_amount`, { headers }),
-        fetch(`${sbUrl}/rest/v1/class_registrations?status=eq.active&select=net_amount,stripe_fee,platform_fee,event_id,events!inner(creator_id)&events.creator_id=eq.${creatorId}`, { headers }),
+      const [subPayRows, , ticketRows, donRows, classRows] = await Promise.all([
+        safeFetch(`${sbUrl}/rest/v1/subscription_payments?creator_id=eq.${creatorId}&status=eq.paid&select=gross_amount,stripe_fee,platform_fee,net_amount`),
+        safeFetch(`${sbUrl}/rest/v1/subscriptions?creator_id=eq.${creatorId}&status=eq.active&select=net_amount,stripe_fee,platform_fee`),
+        // ticket_purchases: join to events to filter by creator; use PostgREST embedded filter syntax
+        safeFetch(`${sbUrl}/rest/v1/ticket_purchases?status=eq.paid&select=amount,stripe_fee,platform_fee,net_amount,events!inner(creator_id)&events.creator_id=eq.${creatorId}`),
+        safeFetch(`${sbUrl}/rest/v1/donations?creator_id=eq.${creatorId}&status=eq.paid&select=amount,stripe_fee,platform_fee,net_amount`),
+        // class_registrations: join to events to filter by creator
+        safeFetch(`${sbUrl}/rest/v1/class_registrations?status=eq.active&select=net_amount,stripe_fee,platform_fee,events!inner(creator_id)&events.creator_id=eq.${creatorId}`),
       ])
-
-      const subPayRows  = await subPayRes.json().catch(() => [])
-      const subInitRows = await subInitRes.json().catch(() => [])
-      const ticketRows  = await ticketRes.json().catch(() => [])
-      const donRows     = await donationRes.json().catch(() => [])
-      const classRows   = await classRes.json().catch(() => [])
 
       // Subscription payments: prefer subscription_payments table (has recurring records);
       // fall back to subscriptions rows that have net_amount (initial payment, pre-payment-table era)
@@ -295,6 +305,14 @@ export default function CreatorApp({ session, profile, onSignOut }) {
       })
     } catch (err) {
       console.error('fetchEarnings error:', err)
+      // Set zeroed earnings so the UI renders rather than showing the error panel
+      setEarnings({
+        subscriptions: zeroChannel,
+        tickets:       zeroChannel,
+        donations:     zeroChannel,
+        classes:       zeroChannel,
+        total:         { gross: 0, stripe: 0, platform: 0, net: 0 },
+      })
     }
     setEarningsLoading(false)
   }

@@ -667,6 +667,11 @@ export default function FanApp({ deepHandle }) {
     if (match) selectCreator(match)
   }, [deepHandle, creatorLoading, allCreators])
 
+  // ── Walled garden: lock to deepHandle creator once selected ─────────────
+  // When arriving via covetedstage.com/<handle>, we stay on that creator's
+  // page only — no platform discovery, no tab bar, no back-to-discover button.
+  const walledGarden = !!deepHandle && !!selected
+
   // ── Load subscriptions when fan logs in ─────────────────────────────────
   useEffect(() => {
     if (!fanSession) { setSubscribedIds(new Set()); return }
@@ -1525,10 +1530,14 @@ export default function FanApp({ deepHandle }) {
         zIndex: 100,
       }}>
         <div style={{ display: 'flex', alignItems: 'center', gap: 10 }}>
-          {selected && (
+          {selected && !walledGarden && (
             <button onClick={() => setSelected(null)} style={{ background: 'none', border: 'none', color: TEXT3, fontSize: 18, cursor: 'pointer', padding: '4px 8px 4px 0', lineHeight: 1 }}>←</button>
           )}
-          <span style={{ fontFamily: "'DM Serif Display', Georgia, serif", fontSize: 20, color: ACCENT }}>Coveted Stage</span>
+          {walledGarden ? (
+            <a href="https://covetedstage.com" style={{ fontFamily: "'DM Serif Display', Georgia, serif", fontSize: 20, color: ACCENT, textDecoration: 'none' }}>Coveted Stage</a>
+          ) : (
+            <span style={{ fontFamily: "'DM Serif Display', Georgia, serif", fontSize: 20, color: ACCENT }}>Coveted Stage</span>
+          )}
         </div>
 
         <div style={{ display: 'flex', gap: 8, alignItems: 'center' }}>
@@ -1550,7 +1559,7 @@ export default function FanApp({ deepHandle }) {
       </nav>
 
       {/* ── Content ── */}
-      <div style={{ position: 'relative', zIndex: 1, paddingBottom: 70 }}>
+      <div style={{ position: 'relative', zIndex: 1, paddingBottom: walledGarden ? 0 : 70 }}>
 
         {/* Creator page overlay */}
         {selected ? <CreatorPage /> : (
@@ -1898,7 +1907,8 @@ export default function FanApp({ deepHandle }) {
         )}
       </div>
 
-      {/* ── Bottom tab bar ── */}
+      {/* ── Bottom tab bar (hidden in walled garden / deepHandle mode) ── */}
+      {!walledGarden && (
       <div style={{
         position: 'fixed', bottom: 0, left: 0, right: 0,
         background: 'rgba(9,9,11,0.96)', backdropFilter: 'blur(24px)',
@@ -1920,6 +1930,7 @@ export default function FanApp({ deepHandle }) {
           </button>
         ))}
       </div>
+      )}
 
       {/* ── Login modal ── */}
       {showLoginModal && (
