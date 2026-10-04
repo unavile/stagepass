@@ -185,6 +185,8 @@ export default function AdminPortal() {
   const [isMobile, setIsMobile] = useState(window.innerWidth < 768)
   const [creators, setCreators] = useState([])
   const [loading, setLoading] = useState(true)
+  const [platformEarnings, setPlatformEarnings] = useState(null)
+  const [earningsLoading, setEarningsLoading] = useState(false)
 
   // Filters
   const [creatorSearch, setCreatorSearch] = useState('')
@@ -235,8 +237,34 @@ export default function AdminPortal() {
   }, [])
 
   useEffect(() => {
-    if (authed) loadData()
+    if (authed) { loadData(); fetchPlatformEarnings() }
   }, [authed])
+
+  async function fetchPlatformEarnings() {
+    setEarningsLoading(true)
+    async function safeFetch(path) {
+      try {
+        const data = await sbFetch(path)
+        return Array.isArray(data) ? data : []
+      } catch { return [] }
+    }
+    function sum(rows, field) {
+      return rows.reduce((s, r) => s + (parseFloat(r[field]) || 0), 0)
+    }
+    const [subPay, tickets, donations, classes] = await Promise.all([
+      safeFetch('subscription_payments?status=eq.paid&select=gross_amount,platform_fee,net_amount'),
+      safeFetch('ticket_purchases?status=eq.paid&select=gross_amount,platform_fee,net_amount'),
+      safeFetch('donations?select=gross_amount,platform_fee,net_amount'),
+      safeFetch('class_registrations?status=eq.paid&select=gross_amount,platform_fee,net_amount'),
+    ])
+    const allRows = [...subPay, ...tickets, ...donations, ...classes]
+    const gross    = sum(allRows, 'gross_amount')
+    const platform = sum(allRows, 'platform_fee')
+    const net      = sum(allRows, 'net_amount')
+    const stripe   = Math.max(0, gross - platform - net)
+    setPlatformEarnings({ gross, platform, net, stripe })
+    setEarningsLoading(false)
+  }
 
   async function loadData() {
     setLoading(true)
@@ -265,10 +293,9 @@ export default function AdminPortal() {
   }
 
   // ── Stats ──────────────────────────────────────────────────────────────
-  const totalGross = creators.reduce((s, c) => s + (c.subCount || 0) * (c.monthly_price || 0), 0)
-  const STRIPE_FEE_ESTIMATE = 0.03   // ~3% blended estimate for display
-  const platformRevenue = totalGross * PLATFORM_FEE
-  const creatorPayouts = totalGross * (1 - PLATFORM_FEE - STRIPE_FEE_ESTIMATE)
+  const totalGross     = platformEarnings ? platformEarnings.gross    : 0
+  const platformRevenue = platformEarnings ? platformEarnings.platform : 0
+  const creatorPayouts  = platformEarnings ? platformEarnings.net      : 0
   const totalSubs = creators.reduce((s, c) => s + (c.subCount || 0), 0)
   const activeCreators = creators.filter(c => !c.suspended).length
   const suspendedCount = creators.filter(c => c.suspended).length
@@ -743,9 +770,9 @@ export default function AdminPortal() {
                   <StatCard label="Total Subscribers" value={totalSubs.toLocaleString()} />
                 </div>
                 <div style={{ display: 'grid', gridTemplateColumns: isMobile ? '1fr' : 'repeat(3, 1fr)', gap: 12, marginBottom: 28 }}>
-                  <StatCard label="Platform Gross (Monthly)" value={`$${totalGross.toLocaleString()}`} sub="All creator subscriptions" accent={ACCENT} />
-                  <StatCard label="Coveted Stage Revenue (10%)" value={`$${platformRevenue.toFixed(2)}`} sub="Platform net" accent={GREEN} />
-                  <StatCard label="Creator Payouts (~87%)" value={`$${creatorPayouts.toFixed(2)}`} sub="After platform + Stripe fees" />
+                  <StatCard label="Platform Gross (All Time)" value={earningsLoading ? '…' : `$${totalGross.toLocaleString('en-US', {minimumFractionDigits:2,maximumFractionDigits:2})}`} sub="Subscriptions, tickets, donations, classes" accent={ACCENT} />
+                  <StatCard label="Coveted Stage Revenue (10%)" value={earningsLoading ? '…' : `$${platformRevenue.toFixed(2)}`} sub="Platform net" accent={GREEN} />
+                  <StatCard label="Creator Payouts" value={earningsLoading ? '…' : `$${creatorPayouts.toFixed(2)}`} sub="After platform + Stripe fees" />
                 </div>
 
                 <div style={{ fontFamily: "'DM Mono', monospace", fontSize: 9, color: TEXT3, letterSpacing: '0.2em', marginBottom: 12 }}>TOP CREATORS BY REVENUE</div>
@@ -929,9 +956,9 @@ export default function AdminPortal() {
               </div>
 
               <div style={{ display: 'grid', gridTemplateColumns: isMobile ? '1fr 1fr' : 'repeat(3, 1fr)', gap: 12, marginBottom: 28 }}>
-                <StatCard label="Total Gross" value={`$${totalGross.toLocaleString()}`} sub="All subscriptions" accent={ACCENT} />
-                <StatCard label="Coveted Stage (10%)" value={`$${platformRevenue.toFixed(2)}`} accent={GREEN} />
-                <StatCard label="Creator Payouts (~87%)" value={`$${creatorPayouts.toFixed(2)}`} sub="After platform + Stripe fees" />
+                <StatCard label="Total Gross" value={earningsLoading ? '…' : `$${totalGross.toLocaleString('en-US', {minimumFractionDigits:2,maximumFractionDigits:2})}`} sub="Subscriptions, tickets, donations, classes" accent={ACCENT} />
+                <StatCard label="Coveted Stage (10%)" value={earningsLoading ? '…' : `$${platformRevenue.toFixed(2)}`} accent={GREEN} />
+                <StatCard label="Creator Payouts" value={earningsLoading ? '…' : `$${creatorPayouts.toFixed(2)}`} sub="After platform + Stripe fees" />
               </div>
 
               {/* Search */}
