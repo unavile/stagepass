@@ -237,83 +237,94 @@ export default function AdminPortal() {
   }, [])
 
   useEffect(() => {
-    if (authed) { loadData(); fetchPlatformEarnings() }
+    if (authed) loadAll()
   }, [authed])
 
-  async function fetchPlatformEarnings() {
+  async function loadAll() {
+    setLoading(true)
     setEarningsLoading(true)
+
     async function safeFetch(path) {
       try {
         const data = await sbFetch(path)
         return Array.isArray(data) ? data : []
       } catch { return [] }
     }
-    function sum(rows, field) {
+    function sumField(rows, field) {
       return rows.reduce((s, r) => s + (parseFloat(r[field]) || 0), 0)
     }
-    const [subPay, tickets, donations, classes] = await Promise.all([
-      // subscription_payments: gross_amount column, no stripe_fee column
-      safeFetch('subscription_payments?status=eq.paid&select=gross_amount,platform_fee,net_amount'),
-      // ticket_purchases: uses 'amount' for gross, has stripe_fee
-      safeFetch('ticket_purchases?status=eq.paid&select=amount,stripe_fee,platform_fee,net_amount'),
-      // donations: uses 'amount' for gross, has stripe_fee
-      safeFetch('donations?status=eq.paid&select=amount,stripe_fee,platform_fee,net_amount'),
-      // class_registrations: uses net_amount+platform_fee+stripe_fee to derive gross
-      safeFetch('class_registrations?status=eq.active&select=net_amount,stripe_fee,platform_fee'),
-    ])
-    const subGross   = sum(subPay,    'gross_amount')
-    const subPlat    = sum(subPay,    'platform_fee')
-    const subNet     = sum(subPay,    'net_amount')
-    const subStripe  = Math.max(0, subGross - subPlat - subNet)
 
-    const tickGross  = sum(tickets,   'amount')
-    const tickPlat   = sum(tickets,   'platform_fee')
-    const tickNet    = sum(tickets,   'net_amount')
-    const tickStripe = sum(tickets,   'stripe_fee')
-
-    const donGross   = sum(donations, 'amount')
-    const donPlat    = sum(donations, 'platform_fee')
-    const donNet     = sum(donations, 'net_amount')
-    const donStripe  = sum(donations, 'stripe_fee')
-
-    const clsStripe  = sum(classes,   'stripe_fee')
-    const clsPlat    = sum(classes,   'platform_fee')
-    const clsNet     = sum(classes,   'net_amount')
-    const clsGross   = clsNet + clsPlat + clsStripe
-
-    const gross    = subGross  + tickGross  + donGross  + clsGross
-    const platform = subPlat   + tickPlat   + donPlat   + clsPlat
-    const net      = subNet    + tickNet    + donNet     + clsNet
-    const stripe   = subStripe + tickStripe + donStripe  + clsStripe
-    setPlatformEarnings({ gross, platform, net, stripe })
-    setEarningsLoading(false)
-  }
-
-  async function loadData() {
-    setLoading(true)
-    const [creatorsData, subsData] = await Promise.all([
+    const [creatorsData, subsData, subPay, tickets, donations, classes] = await Promise.all([
       sbFetch('creators?select=*,profiles(display_name,handle,bio,avatar_url)&order=created_at.desc'),
       sbFetch('subscriptions?select=creator_id&status=eq.active'),
+      safeFetch('subscription_payments?status=eq.paid&select=creator_id,gross_amount,platform_fee,net_amount'),
+      safeFetch('ticket_purchases?status=eq.paid&select=creator_id,amount,stripe_fee,platform_fee,net_amount'),
+      safeFetch('donations?status=eq.paid&select=creator_id,amount,stripe_fee,platform_fee,net_amount'),
+      safeFetch('class_registrations?status=eq.active&select=creator_id,net_amount,stripe_fee,platform_fee'),
     ])
 
-    const creators = Array.isArray(creatorsData) ? creatorsData : []
-    const subs = Array.isArray(subsData) ? subsData : []
+    // ── Platform-wide totals ───────────────────────────────────────────────
+    const subGross   = sumField(subPay,    'gross_amount')
+    const subPlat    = sumField(subPay,    'platform_fee')
+    const subNet     = sumField(subPay,    'net_amount')
+    const subStripe  = Math.max(0, subGross - subPlat - subNet)
 
-    // Count active subscriptions per creator
-    const subCounts = {}
-    subs.forEach(s => {
-      subCounts[s.creator_id] = (subCounts[s.creator_id] || 0) + 1
+    const tickGross  = sumField(tickets,   'amount')
+    const tickPlat   = sumField(tickets,   'platform_fee')
+    const tickNet    = sumField(tickets,   'net_amount')
+    const tickStripe = sumField(tickets,   'stripe_fee')
+
+    const donGross   = sumField(donations, 'amount')
+    const donPlat    = sumField(donations, 'platform_fee')
+    const donNet     = sumField(donations, 'net_amount')
+    const donStripe  = sumField(donations, 'stripe_fee')
+
+    const clsStripe  = sumField(classes,   'stripe_fee')
+    const clsPlat    = sumField(classes,   'platform_fee')
+    const clsNet     = sumField(classes,   'net_amount')
+    const clsGross   = clsNet + clsPlat + clsStripe
+
+    setPlatformEarnings({
+      gross:    subGross  + tickGross  + donGross  + clsGross,
+      platform: subPlat   + tickPlat   + donPlat   + clsPlat,
+      net:      subNet    + tickNet    + donNet     + clsNet,
+      stripe:   subStripe + tickStripe + donStripe  + clsStripe,
+    })
+    setEarningsLoading(false)
+
+    // ── Per-creator earnings map ───────────────────────────────────────────
+    const byCreator = {}
+    function add(cid, gross, plat, net) {
+      if (!cid) return
+      if (!byCreator[cid]) byCreator[cid] = { gross: 0, platform: 0, net: 0 }
+      byCreator[cid].gross    += gross
+      byCreator[cid].platform += plat
+      byCreator[cid].net      += net
+    }
+    subPay.forEach(r => add(r.creator_id, parseFloat(r.gross_amount)||0, parseFloat(r.platform_fee)||0, parseFloat(r.net_amount)||0))
+    tickets.forEach(r => add(r.creator_id, parseFloat(r.amount)||0, parseFloat(r.platform_fee)||0, parseFloat(r.net_amount)||0))
+    donations.forEach(r => add(r.creator_id, parseFloat(r.amount)||0, parseFloat(r.platform_fee)||0, parseFloat(r.net_amount)||0))
+    classes.forEach(r => {
+      const s = parseFloat(r.stripe_fee)||0, p = parseFloat(r.platform_fee)||0, n = parseFloat(r.net_amount)||0
+      add(r.creator_id, n + p + s, p, n)
     })
 
-    // Attach count to each creator
-    const enriched = creators.map(c => ({
-      ...c,
-      subCount: subCounts[c.id] || 0,
-    }))
+    // ── Creators + subscriber counts ──────────────────────────────────────
+    const creators = Array.isArray(creatorsData) ? creatorsData : []
+    const subs = Array.isArray(subsData) ? subsData : []
+    const subCounts = {}
+    subs.forEach(s => { subCounts[s.creator_id] = (subCounts[s.creator_id] || 0) + 1 })
 
-    setCreators(enriched)
+    setCreators(creators.map(c => ({
+      ...c,
+      subCount:   subCounts[c.id] || 0,
+      earnGross:  byCreator[c.id]?.gross    || 0,
+      earnPlat:   byCreator[c.id]?.platform || 0,
+      earnNet:    byCreator[c.id]?.net      || 0,
+    })))
     setLoading(false)
   }
+
 
   // ── Stats ──────────────────────────────────────────────────────────────
   const totalGross     = platformEarnings ? platformEarnings.gross    : 0
@@ -330,7 +341,7 @@ export default function AdminPortal() {
   })
 
   const filteredStats = {
-    gross: filteredCreators.reduce((s, c) => s + (c.subCount || 0) * (c.monthly_price || 0), 0),
+    gross: filteredCreators.reduce((s, c) => s + (c.earnGross || 0), 0),
   }
 
   // ── Actions ────────────────────────────────────────────────────────────
@@ -720,10 +731,7 @@ export default function AdminPortal() {
     fontSize: 12, outline: 'none', boxSizing: 'border-box',
   }
 
-  const sortedByRevenue = [...filteredCreators].sort((a, b) => {
-    return ((b.subscriptions?.[0]?.count || 0) * (b.monthly_price || 0)) -
-           ((a.subscriptions?.[0]?.count || 0) * (a.monthly_price || 0))
-  })
+  const sortedByRevenue = [...filteredCreators].sort((a, b) => (b.earnGross || 0) - (a.earnGross || 0))
 
   return (
     <div style={{ minHeight: '100vh', background: BG, color: TEXT1, display: 'flex', flexDirection: 'column' }}>
@@ -806,17 +814,17 @@ export default function AdminPortal() {
                     ))}
                   </div>
                   {sortedByRevenue.slice(0, 8).map((c, i) => {
-                    const subs = c.subCount || 0
-                    const gross = subs * (c.monthly_price || 0)
+                    const gross = c.earnGross || 0
+                    const plat  = c.earnPlat  || 0
                     return (
                       <div key={c.id} style={{ display: 'grid', gridTemplateColumns: isMobile ? '2fr 1fr 1fr' : '2fr 1fr 1fr 1fr', padding: '12px 16px', borderBottom: i < 7 ? `1px solid ${BORDER2}` : 'none', alignItems: 'center' }}>
                         <div>
                           <div style={{ fontSize: 13, color: TEXT1 }}>{c.profiles?.display_name || 'Unknown'}</div>
                           <div style={{ fontFamily: "'DM Mono', monospace", fontSize: 10, color: TEXT3 }}>@{c.profiles?.handle}</div>
                         </div>
-                        <div style={{ fontFamily: "'DM Mono', monospace", fontSize: 13, color: TEXT2 }}>{subs}</div>
-                        <div style={{ fontFamily: "'DM Mono', monospace", fontSize: 13, color: TEXT1 }}>${gross}</div>
-                        {!isMobile && <div style={{ fontFamily: "'DM Mono', monospace", fontSize: 13, color: ACCENT }}>${(gross * PLATFORM_FEE).toFixed(2)}</div>}
+                        <div style={{ fontFamily: "'DM Mono', monospace", fontSize: 13, color: TEXT2 }}>{c.subCount || 0}</div>
+                        <div style={{ fontFamily: "'DM Mono', monospace", fontSize: 13, color: TEXT1 }}>${gross.toFixed(2)}</div>
+                        {!isMobile && <div style={{ fontFamily: "'DM Mono', monospace", fontSize: 13, color: ACCENT }}>${plat.toFixed(2)}</div>}
                       </div>
                     )
                   })}
@@ -837,7 +845,7 @@ export default function AdminPortal() {
                 <div style={{ display: 'flex', flexDirection: 'column', gap: 10 }}>
                   {filteredCreators.map(c => {
                     const subs = c.subCount || 0
-                    const gross = subs * (c.monthly_price || 0)
+                    const gross = c.earnGross || 0
                     const isSuspended = c.suspended
                     return (
                       <div key={c.id} style={{ background: BG2, border: `1px solid ${isSuspended ? RED + '30' : BORDER}`, borderRadius: 12, padding: '16px' }}>
@@ -856,8 +864,8 @@ export default function AdminPortal() {
                             <div style={{ fontFamily: "'DM Mono', monospace", fontSize: 16, color: TEXT1, marginTop: 2 }}>{subs}</div>
                           </div>
                           <div>
-                            <div style={{ fontFamily: "'DM Mono', monospace", fontSize: 9, color: TEXT3, letterSpacing: '0.14em' }}>GROSS/MO</div>
-                            <div style={{ fontFamily: "'DM Mono', monospace", fontSize: 16, color: ACCENT, marginTop: 2 }}>${gross}</div>
+                            <div style={{ fontFamily: "'DM Mono', monospace", fontSize: 9, color: TEXT3, letterSpacing: '0.14em' }}>GROSS (ALL TIME)</div>
+                            <div style={{ fontFamily: "'DM Mono', monospace", fontSize: 16, color: ACCENT, marginTop: 2 }}>${gross.toFixed(2)}</div>
                           </div>
                           <div>
                             <div style={{ fontFamily: "'DM Mono', monospace", fontSize: 9, color: TEXT3, letterSpacing: '0.14em' }}>PLATFORM CUT</div>
@@ -995,9 +1003,9 @@ export default function AdminPortal() {
                   ))}
                 </div>
                 {sortedByRevenue.map((c, i) => {
-                  const subs = c.subCount || 0
-                  const gross = subs * (c.monthly_price || 0)
-                  const cut = gross * PLATFORM_FEE
+                  const subs  = c.subCount  || 0
+                  const gross = c.earnGross || 0
+                  const cut   = c.earnPlat  || 0
                   return (
                     <div key={c.id} style={{ display: 'grid', gridTemplateColumns: isMobile ? '2fr 1fr 1fr' : '2fr 1fr 1fr 1fr 1fr', padding: '12px 16px', borderBottom: i < sortedByRevenue.length - 1 ? `1px solid ${BORDER2}` : 'none', alignItems: 'center' }}>
                       <div>
@@ -1006,7 +1014,7 @@ export default function AdminPortal() {
                       </div>
                       {!isMobile && <div style={{ fontFamily: "'DM Mono', monospace", fontSize: 11, color: TEXT3 }}>{c.category || '—'}</div>}
                       <div style={{ fontFamily: "'DM Mono', monospace", fontSize: 13, color: TEXT2 }}>{subs}</div>
-                      <div style={{ fontFamily: "'DM Mono', monospace", fontSize: 13, color: TEXT1 }}>${gross}</div>
+                      <div style={{ fontFamily: "'DM Mono', monospace", fontSize: 13, color: TEXT1 }}>${gross.toFixed(2)}</div>
                       {!isMobile && <div style={{ fontFamily: "'DM Mono', monospace", fontSize: 13, color: ACCENT }}>${cut.toFixed(2)}</div>}
                     </div>
                   )
@@ -1016,7 +1024,7 @@ export default function AdminPortal() {
                   <div style={{ fontFamily: "'DM Mono', monospace", fontSize: 11, color: TEXT1, fontWeight: 700 }}>TOTAL</div>
                   {!isMobile && <div />}
                   <div style={{ fontFamily: "'DM Mono', monospace", fontSize: 13, color: TEXT1, fontWeight: 700 }}>{totalSubs}</div>
-                  <div style={{ fontFamily: "'DM Mono', monospace", fontSize: 13, color: TEXT1, fontWeight: 700 }}>${totalGross}</div>
+                  <div style={{ fontFamily: "'DM Mono', monospace", fontSize: 13, color: TEXT1, fontWeight: 700 }}>${totalGross.toFixed(2)}</div>
                   {!isMobile && <div style={{ fontFamily: "'DM Mono', monospace", fontSize: 13, color: ACCENT, fontWeight: 700 }}>${platformRevenue.toFixed(2)}</div>}
                 </div>
               </div>
