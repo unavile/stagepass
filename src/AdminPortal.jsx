@@ -252,16 +252,39 @@ export default function AdminPortal() {
       return rows.reduce((s, r) => s + (parseFloat(r[field]) || 0), 0)
     }
     const [subPay, tickets, donations, classes] = await Promise.all([
+      // subscription_payments: gross_amount column, no stripe_fee column
       safeFetch('subscription_payments?status=eq.paid&select=gross_amount,platform_fee,net_amount'),
-      safeFetch('ticket_purchases?status=eq.paid&select=gross_amount,platform_fee,net_amount'),
-      safeFetch('donations?select=gross_amount,platform_fee,net_amount'),
-      safeFetch('class_registrations?status=eq.paid&select=gross_amount,platform_fee,net_amount'),
+      // ticket_purchases: uses 'amount' for gross, has stripe_fee
+      safeFetch('ticket_purchases?status=eq.paid&select=amount,stripe_fee,platform_fee,net_amount'),
+      // donations: uses 'amount' for gross, has stripe_fee
+      safeFetch('donations?status=eq.paid&select=amount,stripe_fee,platform_fee,net_amount'),
+      // class_registrations: uses net_amount+platform_fee+stripe_fee to derive gross
+      safeFetch('class_registrations?status=eq.active&select=net_amount,stripe_fee,platform_fee'),
     ])
-    const allRows = [...subPay, ...tickets, ...donations, ...classes]
-    const gross    = sum(allRows, 'gross_amount')
-    const platform = sum(allRows, 'platform_fee')
-    const net      = sum(allRows, 'net_amount')
-    const stripe   = Math.max(0, gross - platform - net)
+    const subGross   = sum(subPay,    'gross_amount')
+    const subPlat    = sum(subPay,    'platform_fee')
+    const subNet     = sum(subPay,    'net_amount')
+    const subStripe  = Math.max(0, subGross - subPlat - subNet)
+
+    const tickGross  = sum(tickets,   'amount')
+    const tickPlat   = sum(tickets,   'platform_fee')
+    const tickNet    = sum(tickets,   'net_amount')
+    const tickStripe = sum(tickets,   'stripe_fee')
+
+    const donGross   = sum(donations, 'amount')
+    const donPlat    = sum(donations, 'platform_fee')
+    const donNet     = sum(donations, 'net_amount')
+    const donStripe  = sum(donations, 'stripe_fee')
+
+    const clsStripe  = sum(classes,   'stripe_fee')
+    const clsPlat    = sum(classes,   'platform_fee')
+    const clsNet     = sum(classes,   'net_amount')
+    const clsGross   = clsNet + clsPlat + clsStripe
+
+    const gross    = subGross  + tickGross  + donGross  + clsGross
+    const platform = subPlat   + tickPlat   + donPlat   + clsPlat
+    const net      = subNet    + tickNet    + donNet     + clsNet
+    const stripe   = subStripe + tickStripe + donStripe  + clsStripe
     setPlatformEarnings({ gross, platform, net, stripe })
     setEarningsLoading(false)
   }
