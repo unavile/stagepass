@@ -257,10 +257,13 @@ export default function AdminPortal() {
     const [creatorsData, subsData, subPay, tickets, donations, classes] = await Promise.all([
       sbFetch('creators?select=*,profiles(display_name,handle,bio,avatar_url)&order=created_at.desc'),
       sbFetch('subscriptions?select=creator_id&status=eq.active'),
+      // subscription_payments and donations have creator_id directly
       safeFetch('subscription_payments?status=eq.paid&select=creator_id,gross_amount,platform_fee,net_amount'),
-      safeFetch('ticket_purchases?status=eq.paid&select=creator_id,amount,stripe_fee,platform_fee,net_amount'),
+      // ticket_purchases links to creator via events join
+      safeFetch('ticket_purchases?status=eq.paid&select=amount,stripe_fee,platform_fee,net_amount,events!inner(creator_id)'),
       safeFetch('donations?status=eq.paid&select=creator_id,amount,stripe_fee,platform_fee,net_amount'),
-      safeFetch('class_registrations?status=eq.active&select=creator_id,net_amount,stripe_fee,platform_fee'),
+      // class_registrations links to creator via events join
+      safeFetch('class_registrations?status=eq.active&select=net_amount,stripe_fee,platform_fee,events!inner(creator_id)'),
     ])
 
     // ── Platform-wide totals ───────────────────────────────────────────────
@@ -302,11 +305,12 @@ export default function AdminPortal() {
       byCreator[cid].net      += net
     }
     subPay.forEach(r => add(r.creator_id, parseFloat(r.gross_amount)||0, parseFloat(r.platform_fee)||0, parseFloat(r.net_amount)||0))
-    tickets.forEach(r => add(r.creator_id, parseFloat(r.amount)||0, parseFloat(r.platform_fee)||0, parseFloat(r.net_amount)||0))
+    // tickets/classes: creator_id is nested under events join
+    tickets.forEach(r => add(r.events?.creator_id, parseFloat(r.amount)||0, parseFloat(r.platform_fee)||0, parseFloat(r.net_amount)||0))
     donations.forEach(r => add(r.creator_id, parseFloat(r.amount)||0, parseFloat(r.platform_fee)||0, parseFloat(r.net_amount)||0))
     classes.forEach(r => {
       const s = parseFloat(r.stripe_fee)||0, p = parseFloat(r.platform_fee)||0, n = parseFloat(r.net_amount)||0
-      add(r.creator_id, n + p + s, p, n)
+      add(r.events?.creator_id, n + p + s, p, n)
     })
 
     // ── Creators + subscriber counts ──────────────────────────────────────
