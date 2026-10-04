@@ -254,9 +254,10 @@ export default function CreatorApp({ session, profile, onSignOut }) {
     try {
       // ── subscriptions: sum from subscription_payments (recurring charges)
       // plus any initial checkout amounts from subscriptions table
-      const [subPayRows, , ticketRows, donRows, classRows] = await Promise.all([
-        safeFetch(`${sbUrl}/rest/v1/subscription_payments?creator_id=eq.${creatorId}&status=eq.paid&select=gross_amount,stripe_fee,platform_fee,net_amount`),
-        safeFetch(`${sbUrl}/rest/v1/subscriptions?creator_id=eq.${creatorId}&status=eq.active&select=net_amount,stripe_fee,platform_fee`),
+      const [subPayRows, subRows, ticketRows, donRows, classRows] = await Promise.all([
+        // subscription_payments has no stripe_fee column — derive it as gross - platform - net
+        safeFetch(`${sbUrl}/rest/v1/subscription_payments?creator_id=eq.${creatorId}&status=eq.paid&select=gross_amount,platform_fee,net_amount`),
+        safeFetch(`${sbUrl}/rest/v1/subscriptions?creator_id=eq.${creatorId}&status=eq.active&select=net_amount,platform_fee,monthly_price`),
         // ticket_purchases: join to events to filter by creator; use PostgREST embedded filter syntax
         safeFetch(`${sbUrl}/rest/v1/ticket_purchases?status=eq.paid&select=amount,stripe_fee,platform_fee,net_amount,events!inner(creator_id)&events.creator_id=eq.${creatorId}`),
         safeFetch(`${sbUrl}/rest/v1/donations?creator_id=eq.${creatorId}&status=eq.paid&select=amount,stripe_fee,platform_fee,net_amount`),
@@ -264,12 +265,21 @@ export default function CreatorApp({ session, profile, onSignOut }) {
         safeFetch(`${sbUrl}/rest/v1/class_registrations?status=eq.active&select=net_amount,stripe_fee,platform_fee,events!inner(creator_id)&events.creator_id=eq.${creatorId}`),
       ])
 
-      // Subscription payments: prefer subscription_payments table (has recurring records);
-      // fall back to subscriptions rows that have net_amount (initial payment, pre-payment-table era)
-      const subGross    = sumRows(subPayRows, 'gross_amount')
-      const subStripe   = sumRows(subPayRows, 'stripe_fee')
-      const subPlatform = sumRows(subPayRows, 'platform_fee')
-      const subNet      = sumRows(subPayRows, 'net_amount')
+      // Subscription payments: prefer subscription_payments table (has recurring records).
+      // Fall back to subscriptions rows when subscription_payments is empty (pre-webhook era
+      // or table not yet created) — derive gross from monthly_price, estimate fees at 10%+3%.
+      const useSubFallback = subPayRows.length === 0 && subRows.length > 0
+      const subGross    = useSubFallback
+        ? sumRows(subRows, 'monthly_price') || sumRows(subRows, 'net_amount')
+        : sumRows(subPayRows, 'gross_amount')
+      const subPlatform = useSubFallback
+        ? sumRows(subRows, 'platform_fee') || Math.round(subGross * 0.10 * 100) / 100
+        : sumRows(subPayRows, 'platform_fee')
+      const subNet      = useSubFallback
+        ? sumRows(subRows, 'net_amount')
+        : sumRows(subPayRows, 'net_amount')
+      // stripe_fee not stored — derive as gross minus platform minus net
+      const subStripe   = Math.max(0, subGross - subPlatform - subNet)
 
       // Ticket purchases: filter rows that actually belong to this creator
       // (the join ensures event belongs to creator)
@@ -297,7 +307,7 @@ export default function CreatorApp({ session, profile, onSignOut }) {
       const totalNet      = subNet + ticketNet + donNet + classNet
 
       setEarnings({
-        subscriptions: { gross: subGross, stripe: subStripe, platform: subPlatform, net: subNet, count: subPayRows.length },
+        subscriptions: { gross: subGross, stripe: subStripe, platform: subPlatform, net: subNet, count: useSubFallback ? subRows.length : subPayRows.length },
         tickets:       { gross: ticketGross, stripe: ticketStripe, platform: ticketPlatform, net: ticketNet, count: ticketRows.length },
         donations:     { gross: donGross, stripe: donStripe, platform: donPlatform, net: donNet, count: donRows.length },
         classes:       { gross: classGross, stripe: classStripe, platform: classPlatform, net: classNet, count: classRows.length },
@@ -486,19 +496,21 @@ export default function CreatorApp({ session, profile, onSignOut }) {
     return () => clearInterval(interval)
   }, [])
 
-  // Load earnings when the Earnings tab is first opened
+  // Load earnings on mount so Overview shows real totals immediately;
+  // also re-fetch if the Earnings tab is opened and data is stale.
   useEffect(() => {
-    if (tab === 'earnings' && earnings === null && !earningsLoading) {
-      fetchEarnings()
-    }
+    if (earnings === null && !earningsLoading) fetchEarnings()
+  }, [])
+  useEffect(() => {
+    if (tab === 'earnings' && earnings === null && !earningsLoading) fetchEarnings()
   }, [tab])
 
   const unreadCount = notifications.filter(n => !n.read).length
 
-  // Keep the overview stat cards using subscriber count estimate (fast, no extra fetch)
-  const monthlyRevenue = subscribers.length * creator.monthlyPrice
-  const netRevenue = (monthlyRevenue * 0.87).toFixed(2)
-  const platformFee = (monthlyRevenue * 0.10).toFixed(2)
+  // Overview stat cards — use real earnings totals when available, fall back to
+  // subscriber-count estimate while earnings are still loading.
+  const overviewGross = earnings ? earnings.total.gross : subscribers.length * creator.monthlyPrice
+  const overviewNet   = earnings ? earnings.total.net   : (subscribers.length * creator.monthlyPrice * 0.87)
 
   const TABS = [
     { id: 'overview',    label: 'Overview',    icon: '⬡' },
@@ -754,9 +766,9 @@ export default function CreatorApp({ session, profile, onSignOut }) {
 
               <div style={{ display: 'grid', gridTemplateColumns: 'repeat(2, 1fr)', gap: 12, marginBottom: 32 }}>
                 <StatCard label="Subscribers" value={subscribers.length} sub="Active" accent={ac} />
-                <StatCard label="Monthly Revenue" value={`$${monthlyRevenue}`} sub="Gross" />
+                <StatCard label="Total Revenue" value={`$${overviewGross.toFixed(2)}`} sub={earningsLoading ? 'Loading…' : 'Gross · All Channels'} />
                 <StatCard label="Posts" value={posts.length} sub="Published" />
-                <StatCard label="Net Revenue" value={`$${netRevenue}`} sub="After platform + Stripe fees" />
+                <StatCard label="Net Revenue" value={`$${overviewNet.toFixed(2)}`} sub={earningsLoading ? 'Loading…' : 'After platform + Stripe fees'} />
               </div>
 
               <SectionLabel>Recent Posts</SectionLabel>
