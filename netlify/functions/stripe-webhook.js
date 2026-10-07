@@ -378,6 +378,38 @@ exports.handler = async (event) => {
                   ${eventDate ? `<p style="color: #9a9690; line-height: 1.7;">📅 ${eventDate}</p>` : ''}
                   ${eventVenue ? `<p style="color: #9a9690; line-height: 1.7;">📍 ${eventVenue}</p>` : ''}
 
+                  // After line 379, before the ORDER SUMMARY div:
+                  ${evData[0].event_date ? (() => {
+                    const rawDate = evData[0].event_date.replace(/-/g, '')
+                    const rawTime = (evData[0].start_time || '000000').replace(/:/g, '').slice(0, 6)
+                    const startHr = parseInt(rawTime.slice(0, 2))
+                    const endTime = String((startHr + 2) % 24).padStart(2, '0') + rawTime.slice(2)
+                    const gcal = `https://calendar.google.com/calendar/render?action=TEMPLATE&text=${encodeURIComponent(evData[0].name || eventName)}&dates=${rawDate}T${rawTime}/${rawDate}T${endTime}&location=${encodeURIComponent(evData[0].venue || '')}&details=${encodeURIComponent('Your ticket to ' + (evData[0].name || eventName) + ' on Coveted Stage')}`
+                    const ics = encodeURIComponent([
+                      'BEGIN:VCALENDAR', 'VERSION:2.0', 'PRODID:-//Coveted Stage//EN',
+                      'BEGIN:VEVENT',
+                      `UID:${session.id}@covetedstage.com`,
+                      `DTSTART:${rawDate}T${rawTime}`,
+                      `DTEND:${rawDate}T${endTime}`,
+                      `SUMMARY:${evData[0].name || eventName}`,
+                      `LOCATION:${evData[0].venue || ''}`,
+                      `DESCRIPTION:Your ticket to ${evData[0].name || eventName} on Coveted Stage`,
+                      'END:VEVENT', 'END:VCALENDAR'
+                    ].join('\r\n'))
+                    return `
+                    <div style="text-align: center; margin: 20px 0;">
+                      <p style="color: #555; font-size: 12px; margin: 0 0 10px; font-family: monospace; letter-spacing: 0.1em; text-transform: uppercase;">Add to Calendar</p>
+                      <a href="${gcal}" target="_blank"
+                        style="display: inline-block; margin: 0 5px; padding: 9px 18px; background: #4285F4; color: #fff; font-size: 12px; font-weight: 700; text-decoration: none; border-radius: 6px; font-family: monospace;">
+                        📅 Google Calendar
+                      </a>
+                      <a href="data:text/calendar;charset=utf-8,${ics}"
+                        style="display: inline-block; margin: 0 5px; padding: 9px 18px; background: #333; color: #fff; font-size: 12px; font-weight: 700; text-decoration: none; border-radius: 6px; font-family: monospace;">
+                        📥 Apple / Outlook
+                      </a>
+                    </div>`
+                  })() : ''}
+
                   <!-- Itemized ticket breakdown -->
                   <div style="margin: 24px 0; padding: 20px 24px; background: rgba(201,168,76,0.08); border: 1px solid rgba(201,168,76,0.25); border-radius: 10px;">
                     <div style="font-family: monospace; font-size: 10px; letter-spacing: 0.18em; color: #c9a84c; margin-bottom: 12px;">ORDER SUMMARY</div>
