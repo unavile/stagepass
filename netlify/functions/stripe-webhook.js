@@ -42,13 +42,10 @@ async function sbUpdate(table, data, filterCol, filterVal) {
   return res
 }
 
-// ── Fee helper — fetches the exact Stripe processing fee for a charge ────────
-// Returns { stripeFee, platformFee, netAmount } all in dollars.
-// gross        = amount the fan paid (dollars)
-// paymentIntent or chargeId from the session — used to look up balance_transaction
+// ── Fee helper ────────────────────────────────────────────────────────────────
 async function calcFees(stripe, gross, paymentIntentId) {
   const PLATFORM_RATE = 0.10
-  let stripeFee = parseFloat((gross * 0.029 + 0.30).toFixed(2))  // fallback estimate
+  let stripeFee = parseFloat((gross * 0.029 + 0.30).toFixed(2))
 
   if (paymentIntentId) {
     try {
@@ -69,11 +66,57 @@ async function calcFees(stripe, gross, paymentIntentId) {
   return { stripeFee, platformFee, netAmount }
 }
 
+// ── Add-to-calendar HTML block ────────────────────────────────────────────────
+function calendarBlock(eventDate, startTime, eventName, venue, sessionId) {
+  if (!eventDate) return ''
+  const rawDate  = eventDate.replace(/-/g, '')
+  const rawTime  = (startTime || '00:00:00').replace(/:/g, '').slice(0, 6)
+  const startHr  = parseInt(rawTime.slice(0, 2), 10)
+  const endHr    = String((startHr + 2) % 24).padStart(2, '0')
+  const endTime  = endHr + rawTime.slice(2)
+
+  const gcal = 'https://calendar.google.com/calendar/render?' + new URLSearchParams({
+    action:   'TEMPLATE',
+    text:     eventName,
+    dates:    `${rawDate}T${rawTime}/${rawDate}T${endTime}`,
+    location: venue || '',
+    details:  `Your ticket to ${eventName} on Coveted Stage`,
+  }).toString()
+
+  const icsLines = [
+    'BEGIN:VCALENDAR',
+    'VERSION:2.0',
+    'PRODID:-//Coveted Stage//EN',
+    'BEGIN:VEVENT',
+    `UID:${sessionId}@covetedstage.com`,
+    `DTSTART:${rawDate}T${rawTime}`,
+    `DTEND:${rawDate}T${endTime}`,
+    `SUMMARY:${eventName}`,
+    `LOCATION:${venue || ''}`,
+    `DESCRIPTION:Your ticket to ${eventName} on Coveted Stage`,
+    'END:VEVENT',
+    'END:VCALENDAR',
+  ].join('\r\n')
+  const ics = encodeURIComponent(icsLines)
+
+  return `
+    <div style="text-align: center; margin: 20px 0 28px;">
+      <p style="color: #555; font-size: 12px; margin: 0 0 10px; font-family: monospace; letter-spacing: 0.1em; text-transform: uppercase;">Add to Calendar</p>
+      <a href="${gcal}" target="_blank"
+         style="display: inline-block; margin: 0 5px; padding: 9px 18px; background: #4285F4; color: #fff; font-size: 12px; font-weight: 700; text-decoration: none; border-radius: 6px; font-family: monospace;">
+        📅 Google Calendar
+      </a>
+      <a href="data:text/calendar;charset=utf-8,${ics}"
+         style="display: inline-block; margin: 0 5px; padding: 9px 18px; background: #444; color: #fff; font-size: 12px; font-weight: 700; text-decoration: none; border-radius: 6px; font-family: monospace;">
+        📥 Apple / Outlook
+      </a>
+    </div>`
+}
+
 // ── Handler ───────────────────────────────────────────────────────────────────
 exports.handler = async (event) => {
   const stripe = new Stripe(process.env.STRIPE_SECRET_KEY)
 
-  // Verify Stripe signature
   let stripeEvent
   try {
     stripeEvent = stripe.webhooks.constructEvent(
@@ -100,7 +143,6 @@ exports.handler = async (event) => {
       const amountDollars = grossAmount.toFixed(2)
       const { stripeFee, platformFee, netAmount } = await calcFees(stripe, grossAmount, session.payment_intent)
 
-      // Record donation with fee breakdown in Supabase
       try {
         await sbUpsert('donations', {
           creator_id,
@@ -117,11 +159,9 @@ exports.handler = async (event) => {
         console.log(`Donation recorded — gross: $${grossAmount}, stripe: $${stripeFee}, platform: $${platformFee}, net: $${netAmount}`)
       } catch (donErr) {
         console.error('Donation upsert error:', donErr.message)
-        // Don't block email on DB error
       }
       console.log('Donation received — creator:', creator_id, 'amount: $' + amountDollars)
 
-      // Send thank-you email to fan via Resend
       try {
         const fanEmail = session.customer_details?.email
         if (fanEmail && process.env.RESEND_API_KEY) {
@@ -161,7 +201,6 @@ exports.handler = async (event) => {
         }
       } catch (emailErr) {
         console.error('Donation email error:', emailErr.message)
-        // Don't fail the webhook if email fails
       }
 
       return { statusCode: 200, body: JSON.stringify({ received: true }) }
@@ -173,7 +212,6 @@ exports.handler = async (event) => {
       console.log('Class registration — event:', event_id, 'fan:', fan_id, 'tier:', tier)
 
       try {
-        // Check for existing row (reactivate if cancelled)
         const existingRes = await fetch(
           `${SB_URL}/rest/v1/class_registrations?event_id=eq.${event_id}&fan_id=eq.${fan_id}`,
           { headers: sbHeaders() }
@@ -221,16 +259,13 @@ exports.handler = async (event) => {
     // ── Ticket purchase ────────────────────────────────────────────────────
     if (session.metadata?.type === 'ticket_purchase') {
       const { event_id, fan_id, quantity, ticket_categories: ticketCategoriesJson } = session.metadata
-      // fan_id is empty string for guests — treat as null
       const fanIdOrNull = fan_id && fan_id.trim() !== '' ? fan_id : null
       const totalQty = parseInt(quantity) || 1
 
-      // Parse multi-category metadata (new path) or build legacy single entry
       let ticketCategories = []
       try {
         ticketCategories = JSON.parse(ticketCategoriesJson || '[]')
       } catch (_) {}
-      // Legacy fallback: if no categories parsed, treat entire amount as one row
       if (!ticketCategories.length) {
         ticketCategories = [{
           name: session.metadata.ticket_category || 'General Admission',
@@ -239,33 +274,25 @@ exports.handler = async (event) => {
         }]
       }
 
-      // Capture buyer details from Stripe customer_details
       const buyerName  = session.customer_details?.name  || null
       const buyerEmail = session.customer_details?.email || null
       const buyerPhone = session.customer_details?.phone || null
 
       console.log('Ticket purchase — event:', event_id, 'fan:', fanIdOrNull || 'guest', 'total qty:', totalQty, 'categories:', ticketCategories.length)
 
-      // Total gross for proportional Stripe fee allocation
       const ticketGross = session.amount_total / 100
       const { stripeFee: totalStripeFee, platformFee: totalPlatformFee } =
         await calcFees(stripe, ticketGross, session.payment_intent)
 
       try {
-        // Insert one ticket_purchases row per category with proportional fees
         for (const cat of ticketCategories) {
           const catQty    = parseInt(cat.quantity) || 1
           const catGross  = parseFloat((parseFloat(cat.price) * catQty).toFixed(2))
-          // Allocate fees proportionally by this category's share of total gross
           const share = ticketGross > 0 ? catGross / ticketGross : 1 / ticketCategories.length
           const catStripeFee   = parseFloat((totalStripeFee   * share).toFixed(2))
           const catPlatformFee = parseFloat((totalPlatformFee * share).toFixed(2))
           const catNet         = parseFloat((catGross - catStripeFee - catPlatformFee).toFixed(2))
 
-          // Use stripe_session_id + ticket_category as composite key.
-          // For guests (no fan_id) stripe_session_id alone keeps it unique per transaction.
-          // We suffix the session_id with the category name so multiple categories
-          // can each have their own row without conflicting on the unique constraint.
           const sessionCatId = ticketCategories.length > 1
             ? `${session.id}__${cat.name.replace(/\s+/g, '_').toLowerCase()}`
             : session.id
@@ -288,11 +315,9 @@ exports.handler = async (event) => {
           console.log(`Ticket row — category: ${cat.name}, qty: ${catQty}, gross: $${catGross}, stripe: $${catStripeFee}, platform: $${catPlatformFee}, net: $${catNet}`)
         }
 
-        // Only create an RSVP row for logged-in fans (guests have no fan account)
         if (fanIdOrNull) {
           await sbUpsert('rsvps', { event_id, fan_id: fanIdOrNull }, 'event_id,fan_id')
         }
-
       } catch (err) {
         console.error('Ticket purchase error:', err.message)
         return { statusCode: 500, body: err.message }
@@ -301,11 +326,13 @@ exports.handler = async (event) => {
       // Send ticket confirmation email to buyer
       if (buyerEmail && process.env.RESEND_API_KEY) {
         try {
-          // Fetch event name and slug from Supabase for the email
-          let eventName = 'the event'
-          let eventSlug = ''
-          let eventDate = ''
+          let eventName  = 'the event'
+          let eventSlug  = ''
+          let eventDate  = ''
           let eventVenue = ''
+          let rawEventDate  = ''
+          let rawStartTime  = ''
+
           try {
             const evRes = await fetch(
               `${SB_URL}/rest/v1/events?id=eq.${event_id}&select=name,slug,event_date,start_time,venue`,
@@ -313,18 +340,20 @@ exports.handler = async (event) => {
             )
             const evData = await evRes.json()
             if (Array.isArray(evData) && evData[0]) {
-              eventName  = evData[0].name  || eventName
-              eventSlug  = evData[0].slug  || ''
-              eventVenue = evData[0].venue || ''
+              eventName     = evData[0].name  || eventName
+              eventSlug     = evData[0].slug  || ''
+              eventVenue    = evData[0].venue || ''
+              rawEventDate  = evData[0].event_date  || ''
+              rawStartTime  = evData[0].start_time  || ''
               if (evData[0].event_date) {
                 const [y, m, d] = evData[0].event_date.split('-').map(Number)
-                const dateObj = new Date(y, m - 1, d)
+                const dateObj  = new Date(y, m - 1, d)
                 const dayName  = dateObj.toLocaleDateString('en-US', { weekday: 'long' })
                 const monthDay = dateObj.toLocaleDateString('en-US', { month: 'long', day: 'numeric', year: 'numeric' })
                 if (evData[0].start_time) {
                   const [h, min] = evData[0].start_time.split(':').map(Number)
-                  const ampm = h >= 12 ? 'PM' : 'AM'
-                  const h12  = h % 12 || 12
+                  const ampm   = h >= 12 ? 'PM' : 'AM'
+                  const h12    = h % 12 || 12
                   const minStr = min === 0 ? '' : `:${String(min).padStart(2, '0')}`
                   eventDate = `${dayName}, ${monthDay} · ${h12}${minStr} ${ampm}`
                 } else {
@@ -339,10 +368,8 @@ exports.handler = async (event) => {
           const ticketUrl = eventSlug
             ? `https://covetedstage.com/${eventSlug}/ticket?session_id=${encodeURIComponent(session.id)}`
             : null
-          // White bg + dark modules — cameras read dark-on-light far more reliably
           const qrUrl = `https://api.qrserver.com/v1/create-qr-code/?size=180x180&data=${encodeURIComponent(session.id)}&bgcolor=ffffff&color=111111&margin=8`
 
-          // Build itemized ticket table rows for the email
           const ticketRowsHtml = ticketCategories.map(cat => {
             const catTotal = (parseFloat(cat.price) * parseInt(cat.quantity)).toFixed(2)
             return `
@@ -375,40 +402,10 @@ exports.handler = async (event) => {
                     Your tickets for <strong style="color: #f4f0e8;">${eventName}</strong> have been confirmed.
                   </p>
 
-                  ${eventDate ? `<p style="color: #9a9690; line-height: 1.7;">📅 ${eventDate}</p>` : ''}
+                  ${eventDate  ? `<p style="color: #9a9690; line-height: 1.7;">📅 ${eventDate}</p>`  : ''}
                   ${eventVenue ? `<p style="color: #9a9690; line-height: 1.7;">📍 ${eventVenue}</p>` : ''}
 
-                  // After line 379, before the ORDER SUMMARY div:
-                  ${evData[0].event_date ? (() => {
-                    const rawDate = evData[0].event_date.replace(/-/g, '')
-                    const rawTime = (evData[0].start_time || '000000').replace(/:/g, '').slice(0, 6)
-                    const startHr = parseInt(rawTime.slice(0, 2))
-                    const endTime = String((startHr + 2) % 24).padStart(2, '0') + rawTime.slice(2)
-                    const gcal = `https://calendar.google.com/calendar/render?action=TEMPLATE&text=${encodeURIComponent(evData[0].name || eventName)}&dates=${rawDate}T${rawTime}/${rawDate}T${endTime}&location=${encodeURIComponent(evData[0].venue || '')}&details=${encodeURIComponent('Your ticket to ' + (evData[0].name || eventName) + ' on Coveted Stage')}`
-                    const ics = encodeURIComponent([
-                      'BEGIN:VCALENDAR', 'VERSION:2.0', 'PRODID:-//Coveted Stage//EN',
-                      'BEGIN:VEVENT',
-                      `UID:${session.id}@covetedstage.com`,
-                      `DTSTART:${rawDate}T${rawTime}`,
-                      `DTEND:${rawDate}T${endTime}`,
-                      `SUMMARY:${evData[0].name || eventName}`,
-                      `LOCATION:${evData[0].venue || ''}`,
-                      `DESCRIPTION:Your ticket to ${evData[0].name || eventName} on Coveted Stage`,
-                      'END:VEVENT', 'END:VCALENDAR'
-                    ].join('\r\n'))
-                    return `
-                    <div style="text-align: center; margin: 20px 0;">
-                      <p style="color: #555; font-size: 12px; margin: 0 0 10px; font-family: monospace; letter-spacing: 0.1em; text-transform: uppercase;">Add to Calendar</p>
-                      <a href="${gcal}" target="_blank"
-                        style="display: inline-block; margin: 0 5px; padding: 9px 18px; background: #4285F4; color: #fff; font-size: 12px; font-weight: 700; text-decoration: none; border-radius: 6px; font-family: monospace;">
-                        📅 Google Calendar
-                      </a>
-                      <a href="data:text/calendar;charset=utf-8,${ics}"
-                        style="display: inline-block; margin: 0 5px; padding: 9px 18px; background: #333; color: #fff; font-size: 12px; font-weight: 700; text-decoration: none; border-radius: 6px; font-family: monospace;">
-                        📥 Apple / Outlook
-                      </a>
-                    </div>`
-                  })() : ''}
+                  ${calendarBlock(rawEventDate, rawStartTime, eventName, eventVenue, session.id)}
 
                   <!-- Itemized ticket breakdown -->
                   <div style="margin: 24px 0; padding: 20px 24px; background: rgba(201,168,76,0.08); border: 1px solid rgba(201,168,76,0.25); border-radius: 10px;">
@@ -458,7 +455,6 @@ exports.handler = async (event) => {
                     <div style="font-family: monospace; font-size: 13px; color: #f4f0e8; word-break: break-all;">${session.id}</div>
                   </div>
 
-                  <!-- View ticket CTA -->
                   ${ticketUrl ? `
                   <div style="text-align: center; margin: 28px 0;">
                     <a href="${ticketUrl}" style="display: inline-block; background: #c9a84c; color: #09090b; text-decoration: none; padding: 14px 32px; border-radius: 10px; font-family: monospace; font-size: 13px; font-weight: 700; letter-spacing: 0.12em;">
@@ -479,7 +475,6 @@ exports.handler = async (event) => {
           console.log('Ticket confirmation email sent to:', buyerEmail)
         } catch (emailErr) {
           console.error('Ticket email error:', emailErr.message)
-          // Don't fail the webhook if email fails
         }
       }
 
@@ -520,11 +515,10 @@ exports.handler = async (event) => {
     }
   }
 
-  // ── invoice.payment_succeeded — recurring monthly charge ──────────────────
+  // ── invoice.payment_succeeded ─────────────────────────────────────────────
   if (stripeEvent.type === 'invoice.payment_succeeded') {
     const invoice = stripeEvent.data.object
 
-    // Skip the initial checkout invoice — checkout.session.completed already handles it
     if (invoice.billing_reason === 'subscription_create') {
       console.log('Skipping initial invoice — handled by checkout.session.completed')
       return { statusCode: 200, body: JSON.stringify({ received: true }) }
@@ -535,17 +529,14 @@ exports.handler = async (event) => {
     const periodStart = invoice.period_start ? new Date(invoice.period_start * 1000).toISOString() : null
     const periodEnd   = invoice.period_end   ? new Date(invoice.period_end   * 1000).toISOString() : null
 
-    // Get exact Stripe fee from the invoice's charge
     const { stripeFee, platformFee, netAmount } = await calcFees(stripe, grossAmount, invoice.payment_intent)
 
     console.log(`Invoice paid — sub: ${stripeSubscriptionId}, gross: $${grossAmount}, stripe: $${stripeFee}, platform: $${platformFee}, net: $${netAmount}`)
 
-    // Look up subscription to get fan_id + creator_id
     let fan_id = null, creator_id = null, subscription_type = 'creator'
     let event_id = null
 
     try {
-      // Check subscriptions table first
       const subRes = await fetch(
         `${SB_URL}/rest/v1/subscriptions?stripe_subscription_id=eq.${stripeSubscriptionId}&select=fan_id,creator_id`,
         { headers: sbHeaders() }
@@ -557,7 +548,6 @@ exports.handler = async (event) => {
         subscription_type = 'creator'
       }
 
-      // If not found, check class_registrations
       if (!fan_id) {
         const crRes = await fetch(
           `${SB_URL}/rest/v1/class_registrations?stripe_subscription_id=eq.${stripeSubscriptionId}&select=fan_id,event_id`,
@@ -565,8 +555,8 @@ exports.handler = async (event) => {
         )
         const crs = await crRes.json()
         if (Array.isArray(crs) && crs[0]) {
-          fan_id           = crs[0].fan_id
-          event_id         = crs[0].event_id
+          fan_id            = crs[0].fan_id
+          event_id          = crs[0].event_id
           subscription_type = 'class'
         }
       }
@@ -598,7 +588,7 @@ exports.handler = async (event) => {
     }
   }
 
-  // ── customer.subscription.deleted / paused ─────────────────────────────────
+  // ── customer.subscription.deleted / paused ────────────────────────────────
   if (
     stripeEvent.type === 'customer.subscription.deleted' ||
     stripeEvent.type === 'customer.subscription.paused'
@@ -607,9 +597,7 @@ exports.handler = async (event) => {
     console.log('Cancelling subscription:', subscription.id)
 
     try {
-      // Cancel creator subscription
       await sbUpdate('subscriptions', { status: 'cancelled' }, 'stripe_subscription_id', subscription.id)
-      // Also cancel class registration if this was a class sub
       await fetch(`${SB_URL}/rest/v1/class_registrations?stripe_subscription_id=eq.${subscription.id}`, {
         method: 'PATCH',
         headers: sbHeaders(),
