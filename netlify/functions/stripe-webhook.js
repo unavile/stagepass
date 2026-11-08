@@ -481,6 +481,177 @@ exports.handler = async (event) => {
       return { statusCode: 200, body: JSON.stringify({ received: true }) }
     }
 
+    // ── Concession purchase ────────────────────────────────────────────────
+    if (session.metadata?.type === 'concession_purchase') {
+      const { event_id, event_slug, fan_id } = session.metadata
+      const orderNumber = 'C-' + session.id.replace(/[^A-Za-z0-9]/g, '').slice(-6).toUpperCase()
+      const buyerName  = session.customer_details?.name  || null
+      const buyerEmail = session.customer_details?.email || null
+      const buyerPhone = session.customer_details?.phone || null
+      const gross      = session.amount_total / 100
+
+      // Itemized lines come from Stripe (prices were set server-side at checkout)
+      let items = []
+      try {
+        const li = await stripe.checkout.sessions.listLineItems(session.id, {
+          limit: 100,
+          expand: ['data.price.product'],
+        })
+        items = li.data.map(l => ({
+          name:       l.price?.product?.metadata?.item_name || l.description,
+          category:   l.price?.product?.metadata?.category  || 'Snacks',
+          quantity:   l.quantity,
+          unit_price: (l.price?.unit_amount || 0) / 100,
+          subtotal:   (l.amount_total || 0) / 100,
+        }))
+      } catch (liErr) {
+        console.error('Concession line items error:', liErr.message)
+      }
+
+      console.log('Concession purchase — event:', event_slug, 'order:', orderNumber, 'items:', items.length, 'gross: $' + gross)
+
+      try {
+        const { stripeFee, platformFee, netAmount } = await calcFees(stripe, gross, session.payment_intent)
+        await sbUpsert('concession_orders', {
+          stripe_session_id: session.id,
+          order_number:      orderNumber,
+          event_id:          event_id   || null,
+          event_slug:        event_slug || null,
+          fan_id:            fan_id && fan_id.trim() !== '' ? fan_id : null,
+          buyer_name:        buyerName,
+          buyer_email:       buyerEmail,
+          buyer_phone:       buyerPhone,
+          items,
+          amount:            gross,
+          stripe_fee:        stripeFee,
+          platform_fee:      platformFee,
+          net_amount:        netAmount,
+          status:            'paid',
+        }, 'stripe_session_id')
+        console.log('Concession order recorded:', orderNumber)
+      } catch (err) {
+        console.error('Concession order error:', err.message)
+        return { statusCode: 500, body: err.message }
+      }
+
+      // Itemized confirmation email
+      if (buyerEmail && process.env.RESEND_API_KEY) {
+        try {
+          const esc = s => String(s ?? '').replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;').replace(/"/g, '&quot;')
+
+          let eventName = 'the event', eventVenue = ''
+          try {
+            const evRes = await fetch(
+              `${SB_URL}/rest/v1/events?id=eq.${event_id}&select=name,venue`,
+              { headers: sbHeaders() }
+            )
+            const evData = await evRes.json()
+            if (Array.isArray(evData) && evData[0]) {
+              eventName  = evData[0].name  || eventName
+              eventVenue = evData[0].venue || ''
+            }
+          } catch (evErr) {
+            console.error('Event fetch error:', evErr.message)
+          }
+
+          const qrUrl = `https://api.qrserver.com/v1/create-qr-code/?size=180x180&data=${encodeURIComponent(session.id)}&bgcolor=ffffff&color=111111&margin=8`
+
+          const rowsHtml = ['Snacks', 'Beverages'].map(cat => {
+            const rows = items.filter(i => i.category === cat)
+            if (!rows.length) return ''
+            return `
+              <tr><td colspan="4" style="padding: 12px 0 4px; color: #c9a84c; font-family: monospace; font-size: 10px; letter-spacing: 0.18em;">${cat.toUpperCase()}</td></tr>
+              ${rows.map(r => `
+              <tr>
+                <td style="padding: 8px 0; color: #9a9690; border-bottom: 1px solid #222;">${esc(r.name)}</td>
+                <td style="padding: 8px 0; color: #9a9690; text-align: center; border-bottom: 1px solid #222;">${r.quantity}</td>
+                <td style="padding: 8px 0; color: #9a9690; text-align: right; border-bottom: 1px solid #222; font-family: monospace;">$${r.unit_price.toFixed(2)}</td>
+                <td style="padding: 8px 0; color: #c9a84c; text-align: right; border-bottom: 1px solid #222; font-family: monospace; font-weight: 700;">$${r.subtotal.toFixed(2)}</td>
+              </tr>`).join('')}`
+          }).join('')
+
+          const resendRes = await fetch('https://api.resend.com/emails', {
+            method: 'POST',
+            headers: {
+              'Authorization': `Bearer ${process.env.RESEND_API_KEY}`,
+              'Content-Type': 'application/json',
+            },
+            body: JSON.stringify({
+              from: 'Coveted Stage <hello@covetedstage.com>',
+              to: buyerEmail,
+              subject: `Your concessions order ${orderNumber} for ${eventName} 🍿`,
+              html: `
+                <div style="font-family: Georgia, serif; max-width: 520px; margin: 0 auto; padding: 40px 24px; background: #09090b; color: #f4f0e8;">
+                  <div style="font-size: 28px; color: #c9a84c; margin-bottom: 8px;">Coveted Stage</div>
+                  <hr style="border: none; border-top: 1px solid #333; margin: 20px 0;" />
+                  <h2 style="font-size: 22px; color: #f4f0e8; margin-bottom: 12px;">Your order is confirmed! 🍿</h2>
+                  <p style="color: #9a9690; line-height: 1.7;">
+                    Hi ${esc(buyerName || 'there')},<br/><br/>
+                    Thanks for your concessions order at <strong style="color: #f4f0e8;">${esc(eventName)}</strong>.
+                    Show your order number or the QR code below at the concessions stand to collect your items.
+                  </p>
+                  ${eventVenue ? `<p style="color: #9a9690; line-height: 1.7;">📍 ${esc(eventVenue)}</p>` : ''}
+
+                  <!-- Order number -->
+                  <div style="margin: 24px 0; padding: 18px 24px; background: rgba(201,168,76,0.08); border: 1px solid rgba(201,168,76,0.25); border-radius: 10px; text-align: center;">
+                    <div style="font-family: monospace; font-size: 10px; letter-spacing: 0.18em; color: #c9a84c; margin-bottom: 6px;">ORDER NUMBER</div>
+                    <div style="font-family: monospace; font-size: 28px; font-weight: 700; letter-spacing: 0.12em; color: #f4f0e8;">${orderNumber}</div>
+                  </div>
+
+                  <!-- Itemized order -->
+                  <div style="margin: 24px 0; padding: 20px 24px; background: rgba(201,168,76,0.08); border: 1px solid rgba(201,168,76,0.25); border-radius: 10px;">
+                    <div style="font-family: monospace; font-size: 10px; letter-spacing: 0.18em; color: #c9a84c; margin-bottom: 6px;">ORDER SUMMARY</div>
+                    <table style="width: 100%; border-collapse: collapse; font-size: 14px;">
+                      <thead>
+                        <tr>
+                          <th style="text-align: left; color: #555; font-size: 11px; font-weight: 400; padding: 6px 0; border-bottom: 1px solid #333; font-family: monospace; letter-spacing: 0.1em;">ITEM</th>
+                          <th style="text-align: center; color: #555; font-size: 11px; font-weight: 400; padding: 6px 0; border-bottom: 1px solid #333; font-family: monospace; letter-spacing: 0.1em;">QTY</th>
+                          <th style="text-align: right; color: #555; font-size: 11px; font-weight: 400; padding: 6px 0; border-bottom: 1px solid #333; font-family: monospace; letter-spacing: 0.1em;">PRICE</th>
+                          <th style="text-align: right; color: #555; font-size: 11px; font-weight: 400; padding: 6px 0; border-bottom: 1px solid #333; font-family: monospace; letter-spacing: 0.1em;">SUBTOTAL</th>
+                        </tr>
+                      </thead>
+                      <tbody>${rowsHtml}</tbody>
+                      <tfoot>
+                        <tr>
+                          <td colspan="3" style="padding: 12px 0 0; color: #c9a84c; font-family: monospace; font-size: 11px; letter-spacing: 0.1em;">TOTAL PAID</td>
+                          <td style="padding: 12px 0 0; text-align: right; color: #c9a84c; font-family: monospace; font-weight: 700; font-size: 16px;">$${gross.toFixed(2)}</td>
+                        </tr>
+                      </tfoot>
+                    </table>
+                  </div>
+
+                  <!-- QR code -->
+                  <div style="margin: 28px 0; text-align: center;">
+                    <div style="display: inline-block; padding: 16px; background: #111; border: 1px solid rgba(201,168,76,0.3); border-radius: 12px;">
+                      <img src="${qrUrl}" width="180" height="180" alt="Order QR Code" style="display: block; border-radius: 8px;" />
+                      <div style="font-family: monospace; font-size: 10px; letter-spacing: 0.15em; color: #c9a84c; margin-top: 10px;">ORDER QR CODE</div>
+                    </div>
+                    <p style="color: #555; font-size: 12px; margin-top: 12px; line-height: 1.6;">
+                      Show this at the concessions stand to collect your order.
+                    </p>
+                  </div>
+
+                  <hr style="border: none; border-top: 1px solid #333; margin: 28px 0;" />
+                  <div style="font-size: 11px; color: #555; font-family: monospace; letter-spacing: 0.1em;">
+                    COVETED STAGE · THE STAGE IS YOURS
+                  </div>
+                </div>
+              `,
+            }),
+          })
+          if (resendRes.ok) {
+            console.log('Concession confirmation email sent to:', buyerEmail)
+          } else {
+            console.error('Concession email FAILED:', resendRes.status, await resendRes.text())
+          }
+        } catch (emailErr) {
+          console.error('Concession email error:', emailErr.message)
+        }
+      }
+
+      return { statusCode: 200, body: JSON.stringify({ received: true }) }
+    }
+
     // ── Subscription purchase ──────────────────────────────────────────────
     const { fan_id, creator_id } = session.metadata || {}
 
