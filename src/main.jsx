@@ -11,6 +11,7 @@ import EventLanding from './EventLanding'
 import ValidateTicket from './ValidateTicket'
 import TicketPage from './TicketPage'
 import ConcessionsPage from './ConcessionsPage'
+import CompTickets from './CompTickets'
 
 const path = window.location.pathname.toLowerCase()
 const hash = window.location.hash
@@ -48,6 +49,9 @@ if (segment === 'reset-password-fan') {
 } else if (segment && !RESERVED.includes(segment) && subSegment === 'concessions') {
   // /<event-slug>/concessions → in-venue concessions ordering page
   Root = <ConcessionsPage eventSlug={segment} />
+} else if (segment && !RESERVED.includes(segment) && subSegment === 'comp') {
+  // /<event-slug>/comp → staff page for issuing complimentary tickets
+  Root = <CompTickets eventSlug={segment} />
 } else if (segment && !RESERVED.includes(segment)) {
   // Unknown segment — could be a creator handle (fan portal) OR an event slug (landing page)
   // EventLanding will fetch by slug; if not found it falls back gracefully showing "Not Found"

@@ -18,6 +18,41 @@ exports.handler = async (event) => {
       return { statusCode: 400, headers, body: JSON.stringify({ valid: false, error: 'No session ID provided' }) }
     }
 
+    // ── Complimentary ticket (code starts with comp_) ────────────────────────
+    if (sessionId.startsWith('comp_')) {
+      if (!/^comp_[A-Za-z0-9]{10,40}$/.test(sessionId)) {
+        return { statusCode: 200, headers, body: JSON.stringify({ valid: false, reason: 'Invalid ticket — not found' }) }
+      }
+      const res = await fetch(
+        `${process.env.SUPABASE_URL}/rest/v1/comp_tickets?code=eq.${encodeURIComponent(sessionId)}&select=*`,
+        { headers: { 'apikey': process.env.SUPABASE_SERVICE_ROLE_KEY, 'Authorization': `Bearer ${process.env.SUPABASE_SERVICE_ROLE_KEY}` } }
+      )
+      if (!res.ok) throw new Error(`Comp ticket lookup failed: ${await res.text()}`)
+      const comp = (await res.json())[0]
+      const deny = reason => ({ statusCode: 200, headers, body: JSON.stringify({ valid: false, reason }) })
+
+      if (!comp) return deny('Invalid ticket — not found')
+      if (comp.revoked) return deny('This complimentary ticket has been revoked')
+      if (eventId && String(comp.event_id) !== String(eventId)) return deny('Ticket is for a different event')
+
+      return {
+        statusCode: 200,
+        headers,
+        body: JSON.stringify({
+          valid: true,
+          customerEmail: comp.guest_email || 'N/A',
+          customerName: comp.guest_name || 'N/A',
+          quantity: String(comp.quantity),
+          ticketCategory: comp.ticket_category || 'Complimentary',
+          amountTotal: '0.00',
+          currency: 'USD',
+          purchasedAt: new Date(comp.created_at).toLocaleString('en-US', {
+            dateStyle: 'medium', timeStyle: 'short', timeZone: 'America/New_York',
+          }),
+        }),
+      }
+    }
+
     // Retrieve the Stripe checkout session
     const session = await stripe.checkout.sessions.retrieve(sessionId, {
       expand: ['line_items'],
