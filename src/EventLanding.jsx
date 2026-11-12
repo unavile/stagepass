@@ -11,7 +11,7 @@ function formatEventDate(dateStr, timeStr) {
   const ampm = h >= 12 ? 'PM' : 'AM'
   const h12 = h % 12 || 12
   const minStr = min === 0 ? '' : `:${String(min).padStart(2, '0')}`
-  return `${dayName}, ${monthDay} · ${h12}${minStr} ${ampm} · Seating starts at 3PM`
+  return `${dayName}, ${monthDay} · ${h12}${minStr} ${ampm} · Seating starts at 3:30PM`
 }
 
 function Spinner() {
