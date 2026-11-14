@@ -31,6 +31,31 @@ exports.handler = async (event) => {
       return { statusCode: 400, headers, body: JSON.stringify({ error: 'Missing required field: eventId' }) }
     }
 
+    // ── House Full switch (events.sold_out) ─────────────────────────────────
+    // Checked here so a page that was opened before the switch was flipped
+    // still can't start a purchase. If the lookup itself fails, sales stay open.
+    try {
+      const sbKey = process.env.SUPABASE_SERVICE_ROLE_KEY
+      const evRes = await fetch(
+        `${process.env.SUPABASE_URL}/rest/v1/events?id=eq.${encodeURIComponent(eventId)}&select=sold_out`,
+        { headers: { 'apikey': sbKey, 'Authorization': `Bearer ${sbKey}` } }
+      )
+      if (evRes.ok) {
+        const [ev] = await evRes.json()
+        if (ev?.sold_out) {
+          return {
+            statusCode: 409,
+            headers,
+            body: JSON.stringify({ error: 'Sorry, this event is sold out.', soldOut: true }),
+          }
+        }
+      } else {
+        console.error('Sold-out check failed:', evRes.status, await evRes.text())
+      }
+    } catch (e) {
+      console.error('Sold-out check error:', e.message)
+    }
+
     // ── Build line items ────────────────────────────────────────────────────
     // New multi-category path: lineItems array
     // Legacy path: single categoryName/categoryPrice/quantity
@@ -104,6 +129,9 @@ exports.handler = async (event) => {
       // {CHECKOUT_SESSION_ID} is replaced by Stripe at redirect time
       success_url: (successUrl || `${process.env.URL || 'https://covetedstage.com'}/success?ticket=1&event=${eventId}`) + '&session_id={CHECKOUT_SESSION_ID}',
       cancel_url: cancelUrl || `${process.env.URL || 'https://covetedstage.com'}`,
+      // Close unfinished checkouts after ~30 min (Stripe's minimum; default is 24 h),
+      // so few people can still pay after the House Full switch is turned on.
+      expires_at: Math.floor(Date.now() / 1000) + 31 * 60,
     }
 
     // Pre-fill email only when we have it (logged-in fans)

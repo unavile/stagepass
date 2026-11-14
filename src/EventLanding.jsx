@@ -55,6 +55,7 @@ export default function EventLanding({ slug, fallback = null }) {
   const [quantities, setQuantities] = useState({})
   const [buying, setBuying] = useState(false)
   const [buyError, setBuyError] = useState('')
+  const [soldOutNow, setSoldOutNow] = useState(false)   // set if checkout reports sold out
 
   // Email send state
   const [emailSent, setEmailSent] = useState(false)
@@ -137,6 +138,8 @@ export default function EventLanding({ slug, fallback = null }) {
       const data = await res.json()
       if (data.url) {
         window.location.href = data.url
+      } else if (data.soldOut) {
+        setSoldOutNow(true)
       } else {
         setBuyError(data.error || 'Something went wrong. Please try again.')
       }
@@ -202,6 +205,7 @@ export default function EventLanding({ slug, fallback = null }) {
   const accentBg = accent + '18'
   const accentBorder = accent + '55'
   const ticketPageUrl = `/${slug}/ticket?session_id=${encodeURIComponent(sessionId || '')}`
+  const soldOut = !!event.sold_out || soldOutNow   // House Full switch: Supabase → events.sold_out
 
   return (
     <div style={{ minHeight: '100vh', background: '#faf8f4', fontFamily: "'DM Mono', monospace", color: '#111' }}>
@@ -380,6 +384,16 @@ export default function EventLanding({ slug, fallback = null }) {
             </a>
           </div>
         )}
+
+        {soldOut && (
+          <div style={{
+            display: 'inline-block', marginTop: 10, background: accent, color: '#fff',
+            borderRadius: 999, padding: '5px 16px', fontSize: 12, fontWeight: 700,
+            letterSpacing: '0.18em', fontFamily: "'DM Mono', monospace",
+          }}>
+            HOUSE FULL · ALL TICKETS SOLD
+          </div>
+        )}
       </div>
 
       {/* ── Three-column body: brochure | description | tickets ── */}
@@ -456,6 +470,28 @@ export default function EventLanding({ slug, fallback = null }) {
             overflowY: 'auto',
           }}
         >
+          {soldOut ? (
+            /* ── House Full ── */
+            <div style={{
+              flex: 1, display: 'flex', flexDirection: 'column', alignItems: 'center', justifyContent: 'center',
+              textAlign: 'center', gap: 12, padding: '28px 8px',
+            }}>
+              <div style={{ fontSize: 40 }}>🎭</div>
+              <div style={{
+                border: `2px solid ${accent}`, color: accent, borderRadius: 10,
+                padding: '10px 22px', fontSize: 22, fontWeight: 700, letterSpacing: '0.22em',
+                fontFamily: "'DM Mono', monospace", transform: 'rotate(-3deg)',
+              }}>
+                HOUSE FULL
+              </div>
+              <div style={{ color: '#555', fontSize: 15, fontFamily: 'Georgia, serif', lineHeight: 1.6, marginTop: 6 }}>
+                All tickets for this performance have been sold.
+              </div>
+              <div style={{ color: '#999', fontSize: 13, fontFamily: 'Georgia, serif', fontStyle: 'italic', lineHeight: 1.6 }}>
+                Thank you for your overwhelming support!
+              </div>
+            </div>
+          ) : (<>
           <div style={{ fontSize: 11, color: accent, letterSpacing: '0.18em', marginBottom: 2 }}>
             SELECT TICKETS
           </div>
@@ -590,6 +626,7 @@ export default function EventLanding({ slug, fallback = null }) {
           }}>
             Secure checkout via Stripe. No account required.
           </div>
+          </>)}
         </div>
       </div>
 
