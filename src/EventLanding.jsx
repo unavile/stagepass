@@ -391,7 +391,7 @@ export default function EventLanding({ slug, fallback = null }) {
             borderRadius: 999, padding: '5px 16px', fontSize: 12, fontWeight: 700,
             letterSpacing: '0.18em', fontFamily: "'DM Mono', monospace",
           }}>
-            HOUSE FULL · ALL TICKETS SOLD
+            HOUSE FULL · NO TICKET SALE AT VENUE
           </div>
         )}
       </div>
@@ -485,7 +485,7 @@ export default function EventLanding({ slug, fallback = null }) {
                 HOUSE FULL
               </div>
               <div style={{ color: '#555', fontSize: 15, fontFamily: 'Georgia, serif', lineHeight: 1.6, marginTop: 6 }}>
-                All tickets for this performance have been sold.
+                All tickets for this performance have been sold. No ticket sale at Venue.
               </div>
               <div style={{ color: '#999', fontSize: 13, fontFamily: 'Georgia, serif', fontStyle: 'italic', lineHeight: 1.6 }}>
                 Thank you for your overwhelming support!
